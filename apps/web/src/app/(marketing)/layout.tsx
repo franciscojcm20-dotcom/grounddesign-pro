@@ -41,6 +41,8 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
           <Link href="/pricing" style={{ fontSize: 10, color: 'var(--faint)', textDecoration: 'none' }}>Precios</Link>
           <Link href="/login"   style={{ fontSize: 10, color: 'var(--faint)', textDecoration: 'none' }}>Acceso</Link>
           <Link href="/dashboard" style={{ fontSize: 10, color: 'var(--faint)', textDecoration: 'none' }}>App</Link>
+          <Link href="/terms"   style={{ fontSize: 10, color: 'var(--faint)', textDecoration: 'none' }}>Términos</Link>
+          <Link href="/privacy" style={{ fontSize: 10, color: 'var(--faint)', textDecoration: 'none' }}>Privacidad</Link>
         </div>
       </footer>
     </div>
