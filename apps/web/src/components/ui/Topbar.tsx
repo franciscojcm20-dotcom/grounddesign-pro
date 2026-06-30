@@ -81,6 +81,19 @@ export function Topbar() {
       {/* Spacer */}
       <div style={{ marginLeft: 'auto' }} />
 
+      {/* Command palette trigger */}
+      <button
+        onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true }))}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          background: 'none', border: '1px solid var(--line)', borderRadius: 3,
+          color: 'var(--faint)', fontSize: 10, padding: '4px 10px', cursor: 'pointer',
+        }}
+        title="Paleta de comandos (⌘K)"
+      >
+        <span style={{ fontFamily: 'var(--font-mono)' }}>⌘K</span>
+      </button>
+
       {/* Auth area */}
       {user ? (
         <div ref={dropRef} style={{ position: 'relative' }}>
