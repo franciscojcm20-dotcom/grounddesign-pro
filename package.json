@@ -1,0 +1,11 @@
+{
+  "name": "grounddesing-pro",
+  "version": "0.1.0",
+  "description": "Motor de cálculo de sistemas de puesta a tierra eléctrica (prototipo)",
+  "scripts": {
+    "test": "node --test tests/motors.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
