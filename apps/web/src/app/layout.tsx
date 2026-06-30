@@ -1,7 +1,5 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { Topbar }      from '@/components/ui/Topbar';
-import { Sidebar }     from '@/components/ui/Sidebar';
 import { AuthProvider } from '@/context/AuthContext';
 
 export const metadata: Metadata = {
@@ -14,13 +12,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="es">
       <body>
         <AuthProvider>
-          <Topbar />
-          <div style={{ display: 'flex', height: 'calc(100vh - 44px)' }}>
-            <Sidebar />
-            <main style={{ flex: 1, overflow: 'auto' }}>
-              {children}
-            </main>
-          </div>
+          {children}
         </AuthProvider>
       </body>
     </html>
