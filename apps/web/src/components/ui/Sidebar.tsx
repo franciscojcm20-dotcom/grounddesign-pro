@@ -2,9 +2,9 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-const MODULES = [
+const NAV = [
   {
-    label: 'Medición de suelo',
+    group: 'Medición de suelo',
     items: [
       { href: '/soil/wenner',       label: 'Resistividad — Wenner' },
       { href: '/soil/schlumberger', label: 'Resistividad — Schlumberger' },
@@ -12,7 +12,7 @@ const MODULES = [
     ],
   },
   {
-    label: 'Diseño de malla',
+    group: 'Diseño de malla',
     items: [
       { href: '/grid/resistance', label: 'Resistencia de malla' },
       { href: '/grid/gel',        label: 'Aditivo gel químico' },
@@ -20,7 +20,7 @@ const MODULES = [
     ],
   },
   {
-    label: 'Verificación',
+    group: 'Verificación',
     items: [
       { href: '/voltages', label: 'Tensiones paso/contacto' },
     ],
@@ -29,44 +29,61 @@ const MODULES = [
 
 export function Sidebar() {
   const path = usePathname();
+
   return (
-    <aside style={{
-      width: 210, flexShrink: 0, borderRight: '1px solid var(--line)',
-      background: 'var(--panel)', display: 'flex', flexDirection: 'column',
+    <nav style={{
+      width: 236, flexShrink: 0,
+      borderRight: '1px solid var(--line)',
+      background: 'var(--panel)',
       overflowY: 'auto',
+      padding: '16px 0 40px',
+      display: 'flex', flexDirection: 'column',
     }}>
-      <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--line)' }}>
-        <div style={{ fontSize: 10.5, fontWeight: 700 }}>S/E Cerro Navia 110 kV</div>
-        <div style={{ fontSize: 9, color: 'var(--faint)', marginTop: 2 }}>Distribuidora Andes · CL</div>
+      {/* Project info */}
+      <div style={{ padding: '0 14px 16px', borderBottom: '1px solid var(--line)', marginBottom: 12 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 2 }}>S/E Cerro Navia 110 kV</div>
+        <div style={{ fontSize: 9, color: 'var(--faint)' }}>Distribuidora Andes · CL</div>
+        <Link href="/projects" style={{
+          display: 'inline-block', marginTop: 8, fontSize: 8.5,
+          color: 'var(--copper)', fontFamily: 'var(--font-mono)', textDecoration: 'none',
+        }}>
+          Ver proyectos →
+        </Link>
       </div>
 
-      {MODULES.map(group => (
-        <div key={group.label} style={{ padding: '10px 0' }}>
+      {NAV.map(section => (
+        <div key={section.group} style={{ marginBottom: 18 }}>
           <div style={{
-            fontSize: 8.5, color: 'var(--faint)', letterSpacing: '.1em',
-            textTransform: 'uppercase', padding: '0 12px 6px',
-          }}>{group.label}</div>
-
-          {group.items.map(item => {
+            fontSize: 8.5, color: 'var(--faint)',
+            textTransform: 'uppercase', letterSpacing: '.08em',
+            padding: '0 14px', marginBottom: 4,
+          }}>
+            {section.group}
+          </div>
+          {section.items.map(item => {
             const active = path === item.href;
             return (
               <Link key={item.href} href={item.href} style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '6px 12px', fontSize: 10, textDecoration: 'none',
+                display: 'block', padding: '7px 14px', fontSize: 11,
                 color: active ? 'var(--copper)' : 'var(--dim)',
-                borderLeft: `2px solid ${active ? 'var(--copper)' : 'transparent'}`,
                 background: active ? 'var(--copper-soft)' : 'transparent',
+                borderLeft: `2px solid ${active ? 'var(--copper)' : 'transparent'}`,
+                textDecoration: 'none',
               }}>
-                <span style={{
-                  width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-                  background: active ? 'var(--copper)' : 'var(--line)',
-                }} />
+                <span style={{ marginRight: 6, fontSize: 9, opacity: 0.5 }}>●</span>
                 {item.label}
               </Link>
             );
           })}
         </div>
       ))}
-    </aside>
+
+      <div style={{ marginTop: 'auto', padding: '14px', borderTop: '1px solid var(--line)' }}>
+        <div style={{ fontSize: 8.5, color: 'var(--faint)', marginBottom: 6 }}>Norma activa</div>
+        <div style={{ fontSize: 9, color: 'var(--copper)', fontFamily: 'var(--font-mono)', lineHeight: 1.6 }}>
+          IEEE Std 80-2013<br />IEEE Std 81-2012
+        </div>
+      </div>
+    </nav>
   );
 }

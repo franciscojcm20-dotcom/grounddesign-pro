@@ -4,6 +4,7 @@ import {
   SectionLabel, StatCard, CompBanner, ExpertItem, FundBtn,
   Field, calcLayout, inputStyle, panelStyle, Th, TdMono,
 } from '@/components/ui/CalcShared';
+import { ExportBar } from '@/components/ui/ExportBar';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -102,6 +103,7 @@ export function GelClient() {
 
             <CompBanner pass={result.mejoraPct > 0} norm={result.norm}
               msg={`Reducción de ${result.mejoraPct.toFixed(1)}% — de ${result.Rsin.toFixed(2)} Ω a ${result.Rtotal.toFixed(2)} Ω`} />
+            <ExportBar module="gel" inputs={form as unknown as Record<string,unknown>} outputs={result as unknown as Record<string,unknown>} norm={result.norm} />
 
             <SectionLabel purple>Sistema Experto</SectionLabel>
             <ExpertItem type="info">

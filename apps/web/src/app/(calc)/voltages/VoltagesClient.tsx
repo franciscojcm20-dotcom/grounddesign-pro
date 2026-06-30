@@ -5,6 +5,7 @@ import {
   Field, SectionLabel, StatCard, CompBanner, ExpertItem,
   FundBtn, calcLayout, inputStyle, panelStyle, Th, TdMono,
 } from '@/components/ui/CalcShared';
+import { ExportBar } from '@/components/ui/ExportBar';
 
 // Defaults: malla 40×30 m, conductor 4/0 AWG (d equivalente), ρ=110, ρs=2500
 const DEFAULTS = {
@@ -118,6 +119,7 @@ export function VoltagesClient() {
                   ].filter(Boolean).join(' · ')
               }
             />
+            <ExportBar module="voltages" inputs={form as unknown as Record<string,unknown>} outputs={result as unknown as Record<string,unknown>} norm={result.norm} />
 
             {/* Tabla de compliance */}
             <div style={{ ...panelStyle, marginBottom: 16 }}>

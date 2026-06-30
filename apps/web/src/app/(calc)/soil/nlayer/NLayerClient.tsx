@@ -4,6 +4,7 @@ import {
   SectionLabel, StatCard, ExpertItem, FundBtn,
   calcLayout, inputStyle, panelStyle, Th, TdMono, Field,
 } from '@/components/ui/CalcShared';
+import { ExportBar } from '@/components/ui/ExportBar';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -146,6 +147,13 @@ export function NLayerClient() {
                 </tbody>
               </table>
             </div>
+
+            <ExportBar
+              module="nlayer"
+              inputs={{ rhos: parseNums(rhoStr), hs: parseNums(hsStr), spacings: parseNums(spacings) }}
+              outputs={{ curve: result.curve, rhos: result.rhos, hs: result.hs }}
+              norm={result.norm}
+            />
 
             <FundBtn show={showFund} onToggle={() => setShowFund(f => !f)} label="Kernel de Wait (1954)">
               <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--copper)', marginBottom: 10, fontSize: 11 }}>
