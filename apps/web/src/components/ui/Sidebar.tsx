@@ -89,6 +89,15 @@ export function Sidebar() {
         }}>
           <span style={{ fontSize: 11 }}>⚙</span> Configuración
         </Link>
+        <Link href="/admin" style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 14px', fontSize: 11,
+          color: path === '/admin' ? 'var(--copper)' : 'var(--faint)',
+          background: path === '/admin' ? 'var(--copper-soft)' : 'transparent',
+          textDecoration: 'none',
+        }}>
+          <span style={{ fontSize: 11 }}>🛡</span> Admin
+        </Link>
       </div>
 
       <div style={{ marginTop: 'auto', padding: '14px', borderTop: '1px solid var(--line)' }}>

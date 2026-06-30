@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
 import cookie from '@fastify/cookie';
+import rateLimit from '@fastify/rate-limit';
 
 import { routesSoil }      from './routes/soil.ts';
 import { routesGrid }      from './routes/grid.ts';
@@ -11,6 +12,7 @@ import { routesGpr }       from './routes/gpr.ts';
 import { authRoutes }      from './routes/auth.ts';
 import { projectRoutes }   from './routes/projects.ts';
 import { reportRoutes }    from './routes/report.ts';
+import { adminRoutes }     from './routes/admin.ts';
 
 const PORT       = Number(process.env.PORT ?? 3001);
 const HOST       = process.env.HOST ?? '0.0.0.0';
@@ -23,6 +25,13 @@ await app.register(cors, {
   credentials: true,
 });
 await app.register(cookie);
+await app.register(rateLimit, {
+  global: true,
+  max: 100,
+  timeWindow: '1 minute',
+  // Auth endpoints: stricter
+  keyGenerator: (req) => req.ip,
+});
 await app.register(jwt, {
   secret: JWT_SECRET,
   cookie: { cookieName: 'token', signed: false },
@@ -57,6 +66,9 @@ await app.register(projectRoutes, { prefix: '/api/v1/projects' });
 
 // ─── Reporte PDF ──────────────────────────────────────────────────────────────
 await app.register(reportRoutes, { prefix: '/api/v1/report' });
+
+// ─── Admin ────────────────────────────────────────────────────────────────────
+await app.register(adminRoutes, { prefix: '/api/v1/admin' });
 
 try {
   await app.listen({ port: PORT, host: HOST });
