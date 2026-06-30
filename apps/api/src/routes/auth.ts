@@ -49,6 +49,15 @@ export async function authRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  // POST /api/v1/auth/forgot-password
+  app.post('/forgot-password', async (req, reply) => {
+    const { email } = req.body as { email?: string };
+    if (!email) return reply.code(400).send({ error: 'email es requerido' });
+    // Always return 200 to avoid email enumeration — email sending is a future integration
+    await sql`SELECT id FROM users WHERE email = ${email.toLowerCase()} LIMIT 1`;
+    return { ok: true, message: 'Si la cuenta existe, recibirás un correo con instrucciones.' };
+  });
+
   // GET /api/v1/auth/me
   app.get('/me', { preHandler: [app.authenticate] }, async (req) => {
     const { sub } = req.user as { sub: string };

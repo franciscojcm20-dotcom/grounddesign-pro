@@ -6,6 +6,7 @@ import {
   calcLayout, inputStyle, panelStyle, Th, TdMono,
 } from '@/components/ui/CalcShared';
 import { ExportBar } from '@/components/ui/ExportBar';
+import { ChartRho } from '@/components/ui/ChartRho';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -104,6 +105,14 @@ export function SchlumbergerClient() {
               <StatCard label="ρ promedio" value={result.rhoAvg.toFixed(0)} unit="Ω·m" primary />
               <StatCard label="Lecturas" value={String(result.points.length)} unit="válidas" />
               <StatCard label="L máximo" value={String(Math.max(...result.points.map(p => p.L)))} unit="m" />
+            </div>
+
+            <div style={{ ...panelStyle, marginBottom: 16 }}>
+              <div style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 8 }}>ρa vs. semidistancia L (m)</div>
+              <ChartRho
+                points={result.points.map(p => ({ a: p.L, rhoA: p.rhoA }))}
+                xLabel="L (m)"
+              />
             </div>
 
             <CompBanner pass={true} norm={result.norm}

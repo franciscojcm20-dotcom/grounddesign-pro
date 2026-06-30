@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { api, type WennerResult } from '@/lib/api';
 import { ExportBar } from '@/components/ui/ExportBar';
+import { ChartRho } from '@/components/ui/ChartRho';
 import {
   SectionLabel, StatCard, CompBanner, ExpertItem, FundBtn,
   calcLayout, inputStyle, panelStyle, Th, TdMono,
@@ -100,6 +101,16 @@ export function WennerClient() {
               <StatCard label="Lecturas" value={String(result.points.length)} unit="válidas" />
               <StatCard label="ρ1 (sup.)" value={result.twoLayer.rho1.toFixed(0)} unit="Ω·m" />
               <StatCard label="ρ2 (inf.)" value={result.twoLayer.rho2.toFixed(0)} unit="Ω·m" />
+            </div>
+
+            <div style={{ ...panelStyle, marginBottom: 16 }}>
+              <div style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 8 }}>ρa vs. espaciamiento a (m)</div>
+              <ChartRho
+                points={result.points.map(p => ({ a: p.a, rhoA: p.rhoA }))}
+                rho1={result.twoLayer.rho1}
+                rho2={result.twoLayer.rho2}
+                h={result.twoLayer.h}
+              />
             </div>
 
             <CompBanner pass={true} norm="IEEE 81-2012 · Cl. 8.3"

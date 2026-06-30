@@ -59,6 +59,12 @@ export function LoginClient() {
           {loading ? 'Ingresando…' : 'Entrar'}
         </button>
 
+        <div style={{ textAlign: 'center', marginBottom: 12 }}>
+          <Link href="/forgot-password" style={{ fontSize: 10, color: 'var(--faint)', textDecoration: 'none' }}>
+            ¿Olvidaste tu contraseña?
+          </Link>
+        </div>
+
         <p style={{ fontSize: 10, color: 'var(--faint)', textAlign: 'center' }}>
           ¿No tienes cuenta?{' '}
           <Link href="/register" style={{ color: 'var(--copper)', textDecoration: 'none' }}>Regístrate</Link>
