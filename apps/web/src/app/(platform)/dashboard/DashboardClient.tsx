@@ -1,4 +1,6 @@
 'use client';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { AuthGuard } from '@/components/ui/AuthGuard';
 
@@ -13,9 +15,20 @@ const MODULES = [
   { href: '/gpr',               icon: '⚡', label: 'GPR — Potencial de tierra', norm: 'IEEE 80-2013 · Cl. 15' },
 ];
 
+function DashboardContent() {
+  const router = useRouter();
+  useEffect(() => {
+    if (!localStorage.getItem('gdp_onboarding_done')) {
+      router.replace('/onboarding');
+    }
+  }, [router]);
+  return null;
+}
+
 export function DashboardClient() {
   return (
     <AuthGuard>
+    <DashboardContent />
     <div style={{ padding: '32px 40px', maxWidth: 960 }}>
       <div style={{ marginBottom: 28 }}>
         <div style={{ fontSize: 9, color: 'var(--copper)', fontFamily: 'var(--font-mono)', letterSpacing: '.12em', textTransform: 'uppercase', marginBottom: 6 }}>
