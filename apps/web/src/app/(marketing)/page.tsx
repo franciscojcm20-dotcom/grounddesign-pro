@@ -1,4 +1,11 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
+
+export const metadata: Metadata = {
+  title: 'GroundDesing Pro — Diseño de sistemas de puesta a tierra IEEE 80/81',
+  description: 'Plataforma SaaS para ingenieros eléctricos. 7 módulos IEEE normados, reportes PDF profesionales, gestión de proyectos. Motor matemático propio.',
+  keywords: 'puesta a tierra, earthing system, grounding design, IEEE 80, IEEE 81, resistividad suelo, Wenner, Schlumberger',
+};
 
 const FEATURES = [
   {

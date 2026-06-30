@@ -27,7 +27,7 @@ export function RegisterClient() {
     setLoading(true); setError(null);
     try {
       await register(email, name, password);
-      router.push('/');
+      router.push('/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al crear cuenta');
     } finally { setLoading(false); }

@@ -18,7 +18,7 @@ export function LoginClient() {
     setLoading(true); setError(null);
     try {
       await login(email, password);
-      router.push('/');
+      router.push('/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al iniciar sesión');
     } finally { setLoading(false); }
