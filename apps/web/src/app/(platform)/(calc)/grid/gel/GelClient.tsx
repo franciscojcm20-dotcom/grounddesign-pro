@@ -8,6 +8,53 @@ import { ExportBar } from '@/components/ui/ExportBar';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
+function GelSensitivity({ result, rhoGel, radioVarilla, longVarilla, currentR2 }: {
+  result: GelResult; rhoGel: number; radioVarilla: number; longVarilla: number; currentR2: number;
+}) {
+  const L   = longVarilla, r1 = radioVarilla;
+  const rhoS = result.rhoSuelo;
+  const steps = 20;
+  const r2Max = Math.max(currentR2 * 2.5, 0.3);
+  const pts: { r2: number; R: number }[] = [];
+  for (let i = 1; i <= steps; i++) {
+    const r2 = r1 * 1.5 + (r2Max - r1 * 1.5) * (i / steps);
+    const Rf = (rhoGel / (2 * Math.PI * L)) * Math.log(r2 / r1);
+    const Rs = (rhoS  / (2 * Math.PI * L)) * (Math.log((8 * L) / (2 * r2)) - 1);
+    pts.push({ r2: +r2.toFixed(3), R: +(Rf + Rs).toFixed(3) });
+  }
+
+  const W = 460, H = 140, PL = 44, PR = 12, PT = 8, PB = 28;
+  const CW = W - PL - PR, CH = H - PT - PB;
+  const xs  = pts.map(p => p.r2), ys = pts.map(p => p.R);
+  const xMin = Math.min(...xs), xMax = Math.max(...xs);
+  const yMin = Math.min(...ys) * 0.9, yMax = Math.max(...ys) * 1.08;
+  const scX = (v: number) => PL + ((v - xMin) / (xMax - xMin || 1)) * CW;
+  const scY = (v: number) => PT + CH - ((v - yMin) / (yMax - yMin || 1)) * CH;
+  const pathD = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${scX(p.r2).toFixed(1)} ${scY(p.R).toFixed(1)}`).join(' ');
+  const cx = scX(currentR2), cy = scY(result.Rtotal);
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: H, display: 'block' }}>
+      <line x1={PL} y1={PT} x2={PL} y2={H - PB} stroke="var(--faint)" strokeWidth="1" />
+      <line x1={PL} y1={H - PB} x2={W - PR} y2={H - PB} stroke="var(--faint)" strokeWidth="1" />
+      {[yMin, (yMin + yMax) / 2, yMax].map(v => (
+        <g key={v}>
+          <line x1={PL} y1={scY(v)} x2={W - PR} y2={scY(v)} stroke="var(--line)" strokeWidth="1" strokeDasharray="2,3" />
+          <text x={PL - 4} y={scY(v) + 3.5} fill="var(--faint)" fontSize="7.5" textAnchor="end">{v.toFixed(1)}</text>
+        </g>
+      ))}
+      {pts.filter((_, i) => i % 5 === 0).map(p => (
+        <text key={p.r2} x={scX(p.r2)} y={H - PB + 11} fill="var(--faint)" fontSize="7.5" textAnchor="middle">{p.r2}</text>
+      ))}
+      <text x={W / 2} y={H - 1} fill="var(--faint)" fontSize="8" textAnchor="middle">radio gel r₂ (m)</text>
+      <text x={9} y={PT + CH / 2} fill="var(--faint)" fontSize="8" textAnchor="middle" transform={`rotate(-90, 9, ${PT + CH / 2})`}>R (Ω)</text>
+      <path d={pathD} fill="none" stroke="var(--safe)" strokeWidth="1.8" strokeLinejoin="round" />
+      <circle cx={cx} cy={cy} r="4" fill="var(--copper)" stroke="var(--bg)" strokeWidth="1.5" />
+      <text x={cx + 6} y={cy - 4} fill="var(--copper)" fontSize="7.5">{result.Rtotal.toFixed(2)} Ω</text>
+    </svg>
+  );
+}
+
 interface GelResult {
   Rsin: number; Rfunda: number; Rsuelo: number; Rtotal: number;
   rhoEff: number; mejoraPct: number; rhoSuelo: number;
@@ -136,17 +183,27 @@ export function GelClient() {
               </table>
             </div>
 
-            {/* Visual de mejora */}
+            {/* Visual de mejora + sensitivity chart */}
             <div style={{ ...panelStyle, marginBottom: 16 }}>
-              <div style={{ fontSize: 10, color: 'var(--dim)', marginBottom: 8 }}>Comparación visual de resistencia</div>
-              <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 9, color: 'var(--faint)', marginBottom: 4 }}>Sin gel — {result.Rsin.toFixed(2)} Ω</div>
-                <div style={{ height: 14, background: 'var(--danger)', borderRadius: 2, width: '100%', opacity: 0.7 }} />
+              <div style={{ fontSize: 10, color: 'var(--dim)', marginBottom: 8 }}>Comparación de resistencia</div>
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontSize: 9, color: 'var(--faint)' }}>Sin gel</span>
+                  <span style={{ fontSize: 9, color: 'var(--danger)', fontFamily: 'var(--font-mono)' }}>{result.Rsin.toFixed(2)} Ω</span>
+                </div>
+                <div style={{ height: 12, background: 'var(--danger)', borderRadius: 2, width: '100%', opacity: 0.6 }} />
               </div>
-              <div>
-                <div style={{ fontSize: 9, color: 'var(--faint)', marginBottom: 4 }}>Con gel — {result.Rtotal.toFixed(2)} Ω</div>
-                <div style={{ height: 14, background: 'var(--safe)', borderRadius: 2, width: `${(result.Rtotal / result.Rsin) * 100}%`, minWidth: 4 }} />
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontSize: 9, color: 'var(--faint)' }}>Con gel</span>
+                  <span style={{ fontSize: 9, color: 'var(--safe)', fontFamily: 'var(--font-mono)' }}>{result.Rtotal.toFixed(2)} Ω</span>
+                </div>
+                <div style={{ height: 12, background: 'var(--safe)', borderRadius: 2, width: `${Math.max(5, (result.Rtotal / result.Rsin) * 100)}%` }} />
               </div>
+
+              {/* Sensitivity: R vs r2 */}
+              <div style={{ fontSize: 10, color: 'var(--dim)', marginBottom: 8 }}>Sensibilidad: R total vs radio de gel (m)</div>
+              <GelSensitivity result={result} rhoGel={form.rhoGel} radioVarilla={form.radioVarilla} longVarilla={form.longVarillaGel} currentR2={form.radioConGel} />
             </div>
 
             <FundBtn show={showFund} onToggle={() => setShowFund(f => !f)} label="Dwight / Sunde — Cilindros concéntricos">

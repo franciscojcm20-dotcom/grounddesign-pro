@@ -121,6 +121,32 @@ export function VoltagesClient() {
             />
             <ExportBar module="voltages" inputs={form as unknown as Record<string,unknown>} outputs={result as unknown as Record<string,unknown>} norm={result.norm} />
 
+            {/* Voltage bar chart */}
+            <div style={{ ...panelStyle, marginBottom: 16 }}>
+              <div style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 12 }}>Comparación real vs admisible (V)</div>
+              {[
+                { label: 'Contacto (touch)', real: result.compliance.touch.real_V, adm: result.compliance.touch.adm_V, pass: result.compliance.touch.pass },
+                { label: 'Paso (step)',      real: result.compliance.step.real_V,  adm: result.compliance.step.adm_V,  pass: result.compliance.step.pass  },
+              ].map(row => {
+                const max = Math.max(row.real, row.adm) * 1.1;
+                return (
+                  <div key={row.label} style={{ marginBottom: 14 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                      <span style={{ fontSize: 9.5, color: 'var(--dim)' }}>{row.label}</span>
+                      <span style={{ fontSize: 9, color: row.pass ? 'var(--safe)' : 'var(--danger)', fontFamily: 'var(--font-mono)' }}>
+                        {row.real.toFixed(0)} V / {row.adm.toFixed(0)} V adm.
+                      </span>
+                    </div>
+                    <div style={{ position: 'relative', height: 18, background: 'var(--bg)', borderRadius: 2, overflow: 'hidden' }}>
+                      <div style={{ position: 'absolute', height: '100%', width: `${(row.real / max * 100).toFixed(1)}%`, background: row.pass ? 'var(--safe)' : 'var(--danger)', opacity: 0.8, borderRadius: 2 }} />
+                      <div style={{ position: 'absolute', top: 2, bottom: 2, width: 2, background: 'var(--copper)', left: `${(row.adm / max * 100).toFixed(1)}%`, borderRadius: 1 }} />
+                    </div>
+                    <div style={{ fontSize: 8, color: 'var(--faint)', marginTop: 2 }}>│ límite adm.</div>
+                  </div>
+                );
+              })}
+            </div>
+
             {/* Tabla de compliance */}
             <div style={{ ...panelStyle, marginBottom: 16 }}>
               <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 10 }}>Resumen de cumplimiento — IEEE 80-2013 Cl. 16</div>
