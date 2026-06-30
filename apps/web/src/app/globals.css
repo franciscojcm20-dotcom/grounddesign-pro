@@ -1,0 +1,47 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Montserrat:wght@400;600;700&display=swap');
+
+:root {
+  --bg:        #0f1117;
+  --panel:     #181c24;
+  --panel2:    #1e2230;
+  --line:      #2a2f3e;
+  --copper:    #E07A23;
+  --copper-soft: #E07A2318;
+  --text:      #f2f4f7;
+  --dim:       #9aa3b0;
+  --faint:     #4b5563;
+  --safe:      #22c55e;
+  --danger:    #ef4444;
+  --warn:      #f59e0b;
+  --blue:      #3b82f6;
+  --purple:    #8b5cf6;
+  --radius:    4px;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --font-sans: 'Montserrat', system-ui, sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 14px; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Scrollbars ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--faint); }
+
+/* ── Utility ── */
+.mono { font-family: var(--font-mono); }
+.copper { color: var(--copper); }
+.dim { color: var(--dim); }
+.faint { color: var(--faint); }
+.safe { color: var(--safe); }
+.danger { color: var(--danger); }
