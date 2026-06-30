@@ -31,6 +31,15 @@ CREATE TABLE IF NOT EXISTS calc_results (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '1 hour'),
+  used_at    TIMESTAMPTZ
+);
+
 CREATE INDEX IF NOT EXISTS idx_projects_user   ON projects(user_id);
 CREATE INDEX IF NOT EXISTS idx_results_project ON calc_results(project_id);
 CREATE INDEX IF NOT EXISTS idx_results_module  ON calc_results(module);
+CREATE INDEX IF NOT EXISTS idx_prt_token       ON password_reset_tokens(token_hash);

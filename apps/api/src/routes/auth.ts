@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import bcrypt from 'bcryptjs';
+import crypto from 'node:crypto';
 import { sql } from '../db/client.ts';
 import type { User } from '../db/client.ts';
 
@@ -53,9 +54,46 @@ export async function authRoutes(app: FastifyInstance) {
   app.post('/forgot-password', async (req, reply) => {
     const { email } = req.body as { email?: string };
     if (!email) return reply.code(400).send({ error: 'email es requerido' });
-    // Always return 200 to avoid email enumeration — email sending is a future integration
-    await sql`SELECT id FROM users WHERE email = ${email.toLowerCase()} LIMIT 1`;
+
+    const [user] = await sql<User[]>`SELECT id FROM users WHERE email = ${email.toLowerCase()} LIMIT 1`;
+    if (user) {
+      // Generate a secure random token, store its hash (avoid token leakage in DB breach)
+      const rawToken  = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+      await sql`
+        INSERT INTO password_reset_tokens (user_id, token_hash)
+        VALUES (${user.id}, ${tokenHash})
+      `;
+
+      // In production this would send an email. Log for dev:
+      app.log.info({ resetUrl: `${process.env.WEB_URL ?? 'http://localhost:3000'}/reset-password?token=${rawToken}` }, 'Password reset link');
+    }
+
+    // Always 200 — prevent email enumeration
     return { ok: true, message: 'Si la cuenta existe, recibirás un correo con instrucciones.' };
+  });
+
+  // POST /api/v1/auth/reset-password
+  app.post('/reset-password', async (req, reply) => {
+    const { token, password } = req.body as { token?: string; password?: string };
+    if (!token || !password) return reply.code(400).send({ error: 'token y password son requeridos' });
+    if (password.length < 8) return reply.code(400).send({ error: 'La contraseña debe tener al menos 8 caracteres' });
+
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const [record] = await sql<{ id: string; user_id: string; expires_at: Date; used_at: Date | null }[]>`
+      SELECT id, user_id, expires_at, used_at FROM password_reset_tokens WHERE token_hash = ${tokenHash}
+    `;
+
+    if (!record) return reply.code(400).send({ error: 'Token inválido o expirado' });
+    if (record.used_at) return reply.code(400).send({ error: 'Este enlace ya fue utilizado' });
+    if (new Date(record.expires_at) < new Date()) return reply.code(400).send({ error: 'El enlace ha expirado' });
+
+    const password_hash = await bcrypt.hash(password, 12);
+    await sql`UPDATE users SET password_hash = ${password_hash} WHERE id = ${record.user_id}`;
+    await sql`UPDATE password_reset_tokens SET used_at = now() WHERE id = ${record.id}`;
+
+    return { ok: true, message: 'Contraseña actualizada correctamente' };
   });
 
   // GET /api/v1/auth/me
