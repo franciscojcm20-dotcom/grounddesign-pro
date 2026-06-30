@@ -98,8 +98,11 @@ export interface OnderdonkResult {
 
 export interface ConductorEntry { calibre: string; mm2: number }
 
-export interface ConductorInput extends OnderdonkInput {
+export interface ConductorInput {
   iFalla:              number;
+  tFalla:              number;
+  tempAmbiente:        number;
+  tempMaxFusion:       number;
   calibreSeleccionado?: string;
 }
 
