@@ -1,0 +1,3351 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GroundDesing Pro — Motor de Cálculo de Puesta a Tierra</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #1E1E24;
+    --panel: #262630;
+    --panel-2: #2D2D3A;
+    --line: #3a3a48;
+    --line-soft: #303040;
+    --text: #F2F4F7;
+    --text-dim: #aab0bc;
+    --text-faint: #767c8a;
+    --copper: #E07A23;
+    --copper-soft: #E07A2333;
+    --copper-dark: #B8611A;
+    --safe: #2E7D32;
+    --safe-soft: #2E7D3222;
+    --danger: #C62828;
+    --danger-soft: #C6282822;
+    --warn: #C77700;
+    --warn-soft: #C7770022;
+    --info: #1976D2;
+    --info-soft: #1976D222;
+    --mono: 'IBM Plex Mono', monospace;
+    --cond: 'Montserrat', sans-serif;
+    --sans: 'Montserrat', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--sans);}
+  body{font-size:14px;line-height:1.5;}
+  ::selection{background:var(--copper-soft);}
+  :focus-visible{outline:2px solid var(--copper); outline-offset:2px;}
+
+  .app{display:flex; flex-direction:column; min-height:100vh;}
+
+  /* ---------- TOP BAR ---------- */
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 28px; border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg, #1c2128, #181c22);
+  }
+  .brand{display:flex; align-items:center; gap:12px;}
+  .brand-mark{width:30px;height:30px; flex-shrink:0;}
+  .brand-text{display:flex; flex-direction:column; line-height:1.1;}
+  .brand-name{font-family:var(--cond); font-weight:700; font-size:18px; letter-spacing:0.02em; color:var(--text);}
+  .brand-sub{font-family:var(--mono); font-size:10px; color:var(--text-faint); letter-spacing:0.08em; text-transform:uppercase;}
+  .topbar-right{display:flex; align-items:center; gap:18px;}
+  .norm-pill{
+    font-family:var(--mono); font-size:11px; color:var(--text-dim);
+    border:1px solid var(--line); border-radius:3px; padding:4px 9px;
+    letter-spacing:0.03em;
+  }
+  .norm-pill b{color:var(--copper); font-weight:600;}
+
+  /* ---------- TABS (módulos) ---------- */
+  .tabs{
+    display:flex; gap:2px; padding:0 28px; border-bottom:1px solid var(--line);
+    background:var(--bg); overflow-x:auto;
+  }
+  .tab{
+    font-family:var(--cond); font-weight:600; font-size:13px;
+    color:var(--text-faint); padding:13px 16px 11px; cursor:pointer;
+    border-bottom:2px solid transparent; white-space:nowrap;
+    letter-spacing:0.02em; user-select:none;
+  }
+  .tab:hover{color:var(--text-dim);}
+  .tab.active{color:var(--copper); border-bottom-color:var(--copper);}
+  .tab .tag{
+    font-family:var(--mono); font-size:9px; margin-left:6px; padding:1px 5px;
+    border-radius:2px; background:var(--line-soft); color:var(--text-faint);
+    letter-spacing:0.04em;
+  }
+  .tab .tag.locked{background:#3a3024; color:#a3884f;}
+
+  /* ---------- MAIN LAYOUT ---------- */
+  .main{flex:1; display:grid; grid-template-columns: 380px 1fr; min-height:0;}
+  @media (max-width: 980px){ .main{grid-template-columns: 1fr;} }
+
+  /* ---------- INPUT PANEL ---------- */
+  .inputs{
+    border-right:1px solid var(--line); padding:22px 22px 40px;
+    overflow-y:auto; background:var(--panel);
+  }
+  .panel-title{
+    font-family:var(--cond); font-weight:700; font-size:15px; color:var(--text);
+    margin:0 0 3px;
+  }
+  .panel-desc{font-size:12px; color:var(--text-faint); margin:0 0 22px; line-height:1.5;}
+
+  .field-group{margin-bottom:22px;}
+  .field-group-label{
+    font-family:var(--mono); font-size:10.5px; color:var(--copper);
+    letter-spacing:0.09em; text-transform:uppercase; margin-bottom:10px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .field-group-label::after{content:""; flex:1; height:1px; background:var(--line-soft);}
+
+  .field{margin-bottom:14px;}
+  .field label{
+    display:flex; justify-content:space-between; align-items:baseline;
+    font-size:12.5px; color:var(--text-dim); margin-bottom:5px;
+  }
+  .field label .unit{font-family:var(--mono); font-size:10.5px; color:var(--text-faint);}
+  .field input[type=number], .field select{
+    width:100%; background:var(--bg); border:1px solid var(--line);
+    color:var(--text); font-family:var(--mono); font-size:13.5px;
+    padding:9px 10px; border-radius:4px; transition:border-color .15s;
+  }
+  .field input[type=number]:focus, .field select:focus{border-color:var(--copper);}
+  .field-row{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+
+  .seg{display:flex; border:1px solid var(--line); border-radius:4px; overflow:hidden;}
+  .seg button{
+    flex:1; background:var(--bg); border:none; color:var(--text-dim);
+    font-family:var(--sans); font-size:12px; font-weight:500; padding:8px 6px;
+    cursor:pointer; border-right:1px solid var(--line);
+  }
+  .seg button:last-child{border-right:none;}
+  .seg button.active{background:var(--copper-soft); color:var(--copper); font-weight:600;}
+
+  .readings-table{width:100%; border-collapse:collapse; margin-top:4px;}
+  .readings-table th{
+    font-family:var(--mono); font-size:9.5px; color:var(--text-faint);
+    text-align:left; padding:4px 6px; letter-spacing:0.04em; text-transform:uppercase;
+    border-bottom:1px solid var(--line-soft);
+  }
+  .readings-table td{padding:3px 4px;}
+  .readings-table input{
+    width:100%; background:var(--bg); border:1px solid var(--line-soft);
+    color:var(--text); font-family:var(--mono); font-size:12px;
+    padding:5px 6px; border-radius:3px;
+  }
+  .readings-table input:focus{border-color:var(--copper);}
+  .row-del{background:none; border:none; color:var(--text-faint); cursor:pointer; font-size:14px; padding:2px 6px;}
+  .row-del:hover{color:var(--danger);}
+  .add-row-btn{
+    margin-top:8px; background:none; border:1px dashed var(--line); color:var(--text-dim);
+    font-family:var(--sans); font-size:11.5px; padding:6px 10px; border-radius:4px;
+    cursor:pointer; width:100%;
+  }
+  .add-row-btn:hover{border-color:var(--copper); color:var(--copper);}
+
+  .hint{font-size:11px; color:var(--text-faint); line-height:1.5; margin-top:6px;}
+  .hint b{color:var(--text-dim);}
+
+  /* ---------- RESULTS PANEL ---------- */
+  .results{padding:26px 32px 60px; overflow-y:auto;}
+
+  .diagram-card{
+    background:var(--panel); border:1px solid var(--line); border-radius:6px;
+    padding:18px 22px; margin-bottom:22px;
+  }
+  .diagram-card svg{width:100%; height:auto; display:block;}
+
+  .result-hero{
+    display:flex; flex-wrap:wrap; gap:14px; margin-bottom:24px;
+  }
+  .stat-card{
+    flex:1; min-width:190px; background:var(--panel); border:1px solid var(--line);
+    border-radius:6px; padding:16px 18px; position:relative; overflow:hidden;
+  }
+  .stat-card.primary{border-color:var(--copper); background:linear-gradient(160deg, #221c16, var(--panel) 60%);}
+  .stat-card .stat-label{
+    font-family:var(--mono); font-size:10px; color:var(--text-faint);
+    letter-spacing:0.07em; text-transform:uppercase; margin-bottom:8px;
+  }
+  .stat-card .stat-value{
+    font-family:var(--mono); font-weight:600; font-size:26px; color:var(--text);
+    line-height:1;
+  }
+  .stat-card.primary .stat-value{color:var(--copper);}
+  .stat-card .stat-unit{font-size:13px; color:var(--text-faint); margin-left:4px; font-weight:400;}
+  .stat-card .stat-note{font-size:11px; color:var(--text-faint); margin-top:7px; line-height:1.4;}
+
+  .verdict-banner{
+    display:flex; align-items:center; gap:12px; padding:13px 16px; border-radius:6px;
+    margin-bottom:24px; font-size:13px;
+  }
+  .verdict-banner.ok{background:var(--safe-soft); border:1px solid #2E7D3255; color:#8fc991;}
+  .verdict-banner.warn{background:var(--danger-soft); border:1px solid #C6282855; color:#e6a7a4;}
+  .verdict-banner .v-icon{font-family:var(--mono); font-weight:700; font-size:14px;}
+
+  .section-title{
+    font-family:var(--cond); font-weight:700; font-size:14px; color:var(--text);
+    margin:0 0 4px; display:flex; align-items:center; gap:10px;
+  }
+  .section-title .norm-tag{
+    font-family:var(--mono); font-size:10px; color:var(--copper); font-weight:500;
+    border:1px solid var(--copper-soft); padding:2px 7px; border-radius:3px; letter-spacing:0.03em;
+  }
+  .section-sub{font-size:11.5px; color:var(--text-faint); margin:0 0 14px;}
+
+  .calc-block{
+    background:var(--panel); border:1px solid var(--line); border-radius:6px;
+    padding:18px 20px; margin-bottom:18px;
+  }
+  .calc-row{
+    display:grid; grid-template-columns: 130px 1fr; gap:14px; padding:9px 0;
+    border-bottom:1px solid var(--line-soft); align-items:baseline;
+  }
+  .calc-row:last-child{border-bottom:none;}
+  .calc-row .ck{font-size:12px; color:var(--text-dim);}
+  .calc-row .cv{font-family:var(--mono); font-size:13px; color:var(--text);}
+  .calc-row .cv .ghost{color:var(--text-faint);}
+  .calc-row.final .cv{color:var(--copper); font-weight:600; font-size:15px;}
+
+  .eq{
+    font-family:var(--mono); font-size:14px; color:var(--text); background:var(--bg);
+    border:1px solid var(--line-soft); border-radius:4px; padding:10px 14px; margin:10px 0;
+    overflow-x:auto; white-space:nowrap;
+  }
+  .eq .op{color:var(--text-faint);}
+  .eq .val{color:var(--copper);}
+
+  table.data-table{width:100%; border-collapse:collapse; margin:8px 0;}
+  table.data-table th{
+    text-align:left; font-family:var(--mono); font-size:10px; color:var(--text-faint);
+    text-transform:uppercase; letter-spacing:0.05em; padding:6px 10px;
+    border-bottom:1px solid var(--line);
+  }
+  table.data-table td{
+    font-family:var(--mono); font-size:12.5px; color:var(--text-dim);
+    padding:7px 10px; border-bottom:1px solid var(--line-soft);
+  }
+  table.data-table td.hl{color:var(--copper); font-weight:600;}
+
+  .ref-list{font-size:11.5px; color:var(--text-faint); line-height:1.7; margin:0; padding-left:0; list-style:none;}
+  .ref-list li{padding-left:18px; position:relative; margin-bottom:4px;}
+  .ref-list li::before{content:"§"; position:absolute; left:0; color:var(--copper); font-family:var(--mono);}
+
+  .footer-note{
+    margin-top:32px; padding-top:18px; border-top:1px solid var(--line);
+    font-size:11px; color:var(--text-faint); line-height:1.6;
+  }
+
+  /* ---------- PANEL "VER FUNDAMENTO TÉCNICO" ---------- */
+  .fundamento-wrap{ margin:14px 0 22px; }
+  .fundamento-btn{
+    display:flex; align-items:center; gap:7px; background:var(--panel-2);
+    border:1px solid var(--copper-soft); color:var(--copper); font-family:var(--sans);
+    font-weight:600; font-size:12.5px; padding:9px 14px; border-radius:6px; cursor:pointer;
+    width:100%; text-align:left;
+  }
+  .fundamento-btn:hover{ background:var(--copper-soft); }
+  .fundamento-icon{ font-family:var(--mono); font-size:13px; }
+  .fundamento-chevron{ margin-left:auto; font-size:10px; transition:transform .15s; }
+  .fundamento-chevron.open{ transform:rotate(180deg); }
+  .fundamento-panel{
+    background:var(--panel); border:1px solid var(--line); border-top:none;
+    border-radius:0 0 6px 6px; padding:18px 20px; margin-top:-1px;
+  }
+  .fundamento-header{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:10px; flex-wrap:wrap; }
+  .fundamento-title{ font-family:var(--cond); font-weight:700; font-size:14px; color:var(--text); }
+  .fundamento-eq{
+    font-family:var(--mono); font-size:13px; color:var(--copper); background:var(--bg);
+    border:1px solid var(--line-soft); border-radius:4px; padding:10px 14px; margin-bottom:14px;
+    overflow-x:auto; white-space:nowrap;
+  }
+  .fundamento-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
+  @media (max-width:760px){ .fundamento-grid{ grid-template-columns:1fr; } }
+  .fundamento-item{ background:var(--panel-2); border-radius:5px; padding:10px 12px; }
+  .fi-label{ font-family:var(--mono); font-size:9.5px; color:var(--copper); text-transform:uppercase; letter-spacing:.05em; margin-bottom:5px; }
+  .fi-text{ font-size:11.5px; color:var(--text-dim); line-height:1.5; }
+  .fundamento-biblio{ font-size:10.5px; color:var(--text-faint); line-height:1.5; border-top:1px solid var(--line-soft); padding-top:10px; }
+
+  .locked-pane{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    height:100%; min-height:340px; text-align:center; padding:40px;
+  }
+  .locked-pane .lock-icon{font-size:28px; margin-bottom:14px; opacity:0.5;}
+  .locked-pane h3{font-family:var(--cond); color:var(--text); font-size:16px; margin:0 0 8px;}
+  .locked-pane p{font-size:12.5px; color:var(--text-faint); max-width:360px; margin:0;}
+
+  /* ---------- MOCKUP BANNER ---------- */
+  .mockup-banner{
+    display:flex; align-items:flex-start; gap:12px; padding:14px 18px; border-radius:6px;
+    margin-bottom:24px; background:#3a302122; border:1px solid #a3884f55;
+  }
+  .mockup-banner .mb-icon{font-family:var(--mono); font-size:13px; color:#c9a35e; font-weight:700; flex-shrink:0; margin-top:1px;}
+  .mockup-banner .mb-text{font-size:12px; color:#c9a35e; line-height:1.55;}
+  .mockup-banner .mb-text b{color:#e0bf80;}
+
+  /* ---------- DASHBOARD ---------- */
+  .dash-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:22px;}
+  @media (max-width:900px){ .dash-grid{grid-template-columns:repeat(2,1fr);} }
+  .dash-kpi{background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:16px 18px;}
+  .dash-kpi .k-label{font-family:var(--mono); font-size:10px; color:var(--text-faint); letter-spacing:.06em; text-transform:uppercase; margin-bottom:8px;}
+  .dash-kpi .k-value{font-family:var(--mono); font-weight:600; font-size:24px; color:var(--text);}
+  .dash-kpi .k-delta{font-size:11px; margin-top:6px;}
+  .dash-kpi .k-delta.up{color:var(--safe);}
+  .dash-kpi .k-delta.flat{color:var(--text-faint);}
+
+  .project-table{width:100%; border-collapse:collapse;}
+  .project-table th{
+    text-align:left; font-family:var(--mono); font-size:10px; color:var(--text-faint);
+    text-transform:uppercase; letter-spacing:.05em; padding:9px 12px; border-bottom:1px solid var(--line);
+  }
+  .project-table td{padding:11px 12px; font-size:12.5px; color:var(--text-dim); border-bottom:1px solid var(--line-soft);}
+  .project-table tr:hover td{background:#252b3450;}
+  .status-chip{font-family:var(--mono); font-size:10px; padding:3px 9px; border-radius:10px; letter-spacing:.03em;}
+  .status-chip.active{background:var(--safe-soft); color:#8fc991;}
+  .status-chip.review{background:#E07A2322; color:#f0b87a;}
+  .status-chip.draft{background:var(--line-soft); color:var(--text-faint);}
+  .proj-name{color:var(--text); font-weight:500;}
+
+  .new-project-btn, .primary-btn{
+    background:var(--copper); border:none; color:#1a1208; font-family:var(--sans);
+    font-weight:600; font-size:12.5px; padding:9px 16px; border-radius:5px; cursor:pointer;
+  }
+  .new-project-btn:hover, .primary-btn:hover{background:#e68d52;}
+  .secondary-btn{
+    background:none; border:1px solid var(--line); color:var(--text-dim); font-family:var(--sans);
+    font-weight:500; font-size:12.5px; padding:8px 15px; border-radius:5px; cursor:pointer;
+  }
+  .secondary-btn:hover{border-color:var(--text-faint); color:var(--text);}
+  .danger-link-btn{
+    background:none; border:none; color:var(--danger); font-family:var(--sans);
+    font-weight:500; font-size:12px; cursor:pointer; padding:0; text-decoration:underline;
+  }
+
+  /* ---------- USER SWITCHER (topbar) ---------- */
+  .user-switcher{display:flex; align-items:center; gap:10px; position:relative;}
+  .user-select{
+    background:var(--bg); border:1px solid var(--line); color:var(--text-dim);
+    font-family:var(--sans); font-size:11.5px; padding:6px 9px; border-radius:5px;
+    cursor:pointer; max-width:190px;
+  }
+  .user-select:focus{border-color:var(--copper);}
+  .user-avatar{
+    width:30px; height:30px; border-radius:50%; background:var(--copper-soft);
+    color:var(--copper); display:flex; align-items:center; justify-content:center;
+    font-family:var(--mono); font-weight:700; font-size:11.5px; cursor:pointer;
+    border:1px solid var(--copper-soft); flex-shrink:0;
+  }
+  .user-avatar:hover{background:var(--copper); color:#1a1208;}
+
+  /* ---------- AUTH SCREENS (login/registro) ---------- */
+  .auth-wrap{
+    min-height:100vh; display:flex; align-items:center; justify-content:center;
+    padding:40px 20px; background:radial-gradient(circle at 50% 0%, #1d222a, var(--bg) 60%);
+  }
+  .auth-card{
+    width:100%; max-width:380px; background:var(--panel); border:1px solid var(--line);
+    border-radius:10px; padding:34px 32px;
+  }
+  .auth-brand{display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:26px;}
+  .auth-title{font-family:var(--cond); font-weight:700; font-size:20px; text-align:center; margin:0 0 6px;}
+  .auth-sub{font-size:12.5px; color:var(--text-faint); text-align:center; margin:0 0 26px;}
+  .auth-field{margin-bottom:16px;}
+  .auth-field label{display:block; font-size:12px; color:var(--text-dim); margin-bottom:6px;}
+  .auth-field input{
+    width:100%; background:var(--bg); border:1px solid var(--line); color:var(--text);
+    font-family:var(--sans); font-size:13px; padding:10px 12px; border-radius:5px;
+  }
+  .auth-field input:focus{border-color:var(--copper);}
+  .auth-submit{
+    width:100%; background:var(--copper); border:none; color:#1a1208; font-weight:600;
+    font-size:13.5px; padding:11px; border-radius:6px; cursor:pointer; margin-top:6px;
+  }
+  .auth-submit:hover{background:#e68d52;}
+  .auth-switch{text-align:center; font-size:12px; color:var(--text-faint); margin-top:20px;}
+  .auth-switch a{color:var(--copper); cursor:pointer; text-decoration:none;}
+  .auth-switch a:hover{text-decoration:underline;}
+  .auth-divider{display:flex; align-items:center; gap:10px; margin:20px 0; font-size:10px; color:var(--text-faint); text-transform:uppercase; letter-spacing:.05em;}
+  .auth-divider::before, .auth-divider::after{content:""; flex:1; height:1px; background:var(--line);}
+
+  /* ---------- PERFIL / EQUIPO ---------- */
+  .profile-header{display:flex; align-items:center; gap:18px; margin-bottom:26px;}
+  .profile-avatar-lg{
+    width:60px; height:60px; border-radius:50%; background:var(--copper-soft); color:var(--copper);
+    display:flex; align-items:center; justify-content:center; font-family:var(--mono);
+    font-weight:700; font-size:20px; flex-shrink:0;
+  }
+  .profile-name{font-family:var(--cond); font-weight:700; font-size:19px; color:var(--text); margin:0 0 3px;}
+  .profile-meta{font-size:12px; color:var(--text-faint);}
+  .role-badge{
+    font-family:var(--mono); font-size:10px; padding:3px 10px; border-radius:10px;
+    letter-spacing:.03em; display:inline-block; margin-top:6px;
+  }
+  .role-badge.admin{background:var(--copper-soft); color:var(--copper);}
+  .role-badge.ingeniero{background:var(--safe-soft); color:#8fc991;}
+  .role-badge.revisor{background:#4a6fa522; color:#8db3e0;}
+  .role-badge.invitado{background:var(--line-soft); color:var(--text-faint);}
+
+  .perm-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .perm-item{
+    display:flex; align-items:center; gap:9px; padding:10px 14px; background:var(--bg);
+    border:1px solid var(--line-soft); border-radius:5px; font-size:12.5px; color:var(--text-dim);
+  }
+  .perm-item .pi-icon{font-family:var(--mono); font-weight:700; font-size:13px; flex-shrink:0;}
+  .perm-item.granted .pi-icon{color:var(--safe);}
+  .perm-item.denied .pi-icon{color:var(--text-faint);}
+  .perm-item.denied{color:var(--text-faint);}
+
+  .team-table{width:100%; border-collapse:collapse;}
+  .team-table th{
+    text-align:left; font-family:var(--mono); font-size:10px; color:var(--text-faint);
+    text-transform:uppercase; letter-spacing:.05em; padding:9px 12px; border-bottom:1px solid var(--line);
+  }
+  .team-table td{padding:11px 12px; font-size:12.5px; color:var(--text-dim); border-bottom:1px solid var(--line-soft); vertical-align:middle;}
+  .team-user-cell{display:flex; align-items:center; gap:10px;}
+  .team-avatar{
+    width:30px; height:30px; border-radius:50%; background:var(--line-soft); color:var(--text-dim);
+    display:flex; align-items:center; justify-content:center; font-family:var(--mono);
+    font-weight:600; font-size:11px; flex-shrink:0;
+  }
+  .role-select{
+    background:var(--bg); border:1px solid var(--line); color:var(--text-dim); font-family:var(--sans);
+    font-size:11.5px; padding:5px 8px; border-radius:5px; cursor:pointer;
+  }
+  .role-select:focus{border-color:var(--copper);}
+
+  ::-webkit-scrollbar{width:9px; height:9px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:var(--line); border-radius:5px;}
+  ::-webkit-scrollbar-thumb:hover{background:var(--text-faint);}
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+
+<script>
+/* =========================================================================
+   GROUNDDESING PRO — PROTOTIPO DE MOTOR DE CÁLCULO
+   Módulos con cálculo real: Resistividad del suelo (Wenner), Resistencia
+   de malla (IEEE 80), Tensiones de paso/contacto (IEEE 80 Cl.16)
+   Módulos de maqueta (sin backend): Dashboard, Proyectos, Login/Registro,
+   Perfil, Administración de equipo (roles y permisos)
+   Normas de referencia: IEEE Std 80-2013, IEEE Std 81-2012
+
+   NOTA DE ALCANCE: este es un prototipo funcional, no el software
+   comercial completo (SaaS, base de datos, autenticación real, pagos)
+   descrito en el brief original. Las pantallas de "maqueta" están
+   claramente marcadas y no ejecutan lógica de servidor; los tres
+   módulos de cálculo sí ejecutan algoritmos reales y trazables a la
+   norma citada en cada sección.
+   ========================================================================= */
+
+// ---------------------------------------------------------------------
+// ESTADO
+// ---------------------------------------------------------------------
+const USERS = [
+  { id: 'u1', nombre: 'Camila Reyes', email: 'camila.reyes@andes-ing.cl', rol: 'admin',     iniciales: 'CR', activoDesde: '2025-11-02' },
+  { id: 'u2', nombre: 'Tomás Vidal',   email: 'tomas.vidal@andes-ing.cl',  rol: 'ingeniero', iniciales: 'TV', activoDesde: '2026-01-14' },
+  { id: 'u3', nombre: 'Valentina Soto', email: 'valentina.soto@andes-ing.cl', rol: 'revisor', iniciales: 'VS', activoDesde: '2026-03-30' },
+  { id: 'u4', nombre: 'Diego Fuentes', email: 'diego.fuentes@andes-ing.cl', rol: 'invitado', iniciales: 'DF', activoDesde: '2026-06-10' },
+];
+
+const ROL_PERMISOS = {
+  admin:     { label: 'Administrador', puedeEditarCalculos: true,  puedeGestionarUsuarios: true,  puedeVerFacturacion: true,  puedeExportar: true  },
+  ingeniero: { label: 'Ingeniero',     puedeEditarCalculos: true,  puedeGestionarUsuarios: false, puedeVerFacturacion: false, puedeExportar: true  },
+  revisor:   { label: 'Revisor',       puedeEditarCalculos: false, puedeGestionarUsuarios: false, puedeVerFacturacion: false, puedeExportar: true  },
+  invitado:  { label: 'Invitado',      puedeEditarCalculos: false, puedeGestionarUsuarios: false, puedeVerFacturacion: false, puedeExportar: false },
+};
+
+const state = {
+  tab: 'dashboard', // 'dashboard'|'proyectos'|'wenner'|'malla'|'tensiones'|'login'|'registro'|'perfil'|'equipo'
+  soilModel: 'homog', // 'homog' | 'estrat'
+  metodoMedicion: 'wenner', // 'wenner' | 'schlumberger' — para vista comparativa
+  currentUserId: 'u1', // simula sesión activa — cambia desde el selector de la topbar
+  authView: 'login', // 'login' | 'registro' — para el módulo sin sesión
+  wennerReadings: [
+    { a: 1, r: 196.99 },
+    { a: 1.5, r: 133.27 },
+    { a: 2, r: 101.37 },
+    { a: 3, r: 69.34 },
+    { a: 4, r: 53.18 },
+    { a: 6, r: 36.72 },
+    { a: 8, r: 28.22 },
+    { a: 12, r: 19.36 },
+    { a: 16, r: 14.74 },
+    { a: 24, r: 9.96 },
+  ],
+  schlumbergerReadings: [
+    { L: 1, l: 0.5, r: 525.30 },
+    { L: 1.5, l: 0.5, r: 199.91 },
+    { L: 2, l: 0.5, r: 108.12 },
+    { L: 3, l: 0.5, r: 47.55 },
+    { L: 4, l: 0.5, r: 27.01 },
+    { L: 6, l: 0.5, r: 12.33 },
+    { L: 8, l: 0.5, r: 7.08 },
+    { L: 12, l: 0.5, r: 3.23 },
+    { L: 16, l: 0.5, r: 1.84 },
+    { L: 24, l: 0.5, r: 0.83 },
+  ],
+  curvaPatron: {
+    razonManual: 5,   // ρ2/ρ1 seleccionada manualmente para explorar curvas tipo Orellana-Mooney
+    modoAjuste: 'auto', // 'auto' | 'manual'
+    nCapas: 2,        // 2 | 3 | 4 — número de capas para el modelo de N estratos
+    // Resistividades de capas adicionales (Ω·m) y espesores (m)
+    rhos: [1214, 1537, 3200, 800], // rho por capa (última es semi-infinita)
+    hs: [4, 8, 15],                 // espesores de las primeras N-1 capas
+  },
+  materiales: {
+    // Precios de referencia en CLP (editables por el usuario)
+    calibreCu: '4/0 AWG',
+    precioConductorM: 4800,    // $/m de conductor Cu desnudo 4/0 AWG
+    precioVarilla: 28500,       // $/varilla copperweld 5/8" × 3m
+    precioConector: 3200,       // $/conector exotérmico CADWELD o similar
+    precioExcavacionM: 8500,    // $/m lineal de excavación (zanja 0.6m prof × 0.3m)
+    precioGelL: 12000,          // $/litro de gel conductivo
+  },
+  gel: {
+    activo: false,
+    rhoGel: 0.3,          // Ω·m, resistividad típica de gel/bentonita conductiva comercial
+    radioVarilla: 0.0079, // m (5/8" ≈ 15.9mm diámetro → 0.0079 m radio)
+    radioConGel: 0.075,   // m, radio efectivo de la perforación tratada con gel (~7.5 cm típico)
+    longVarillaGel: 3,    // m
+  },
+  malla: {
+    largo: 40,
+    ancho: 30,
+    profundidad: 0.6,
+    nConductoresL: 7,
+    nConductoresW: 5,
+    nVarillas: 12,
+    longVarilla: 3,
+    rho: 110,         // ohm-m — valor activo, recalculado desde Wenner si rhoOrigen='medido'
+    rhoOrigen: 'medido', // 'medido' (promedio de lecturas Wenner) | 'manual' (editado por el usuario)
+    iFalla: 8500,    // A
+    tFalla: 0.5,     // s
+  },
+  tensiones: {
+    rhoSuperficial: 2500,
+    hSuperficial: 0.10,
+    tFalla: 0.5,
+    pesoPersona: 70,
+  },
+  conductor: {
+    iFalla: 8500,        // A, heredado de malla por defecto
+    tFalla: 0.5,         // s
+    tempAmbiente: 40,    // °C
+    tempMaxFusion: 450,  // °C — uniones soldadas exotérmicas (conservador); fusión Cu = 1083°C
+    calibreSeleccionado: null, // null = usar el sugerido automáticamente; si no, calibre elegido manualmente por el usuario (debe cumplir la sección mínima)
+  },
+  proyectos: [
+    { nombre: 'S/E Cerro Navia 110kV', cliente: 'Distribuidora Andes', estado: 'active', avance: 72, fecha: '2026-06-12' },
+    { nombre: 'Patio GIS Subestación Norte', cliente: 'TransAndina S.A.', estado: 'review', avance: 95, fecha: '2026-06-22' },
+    { nombre: 'Malla PAT Planta Solar Atacama', cliente: 'Helios Energy', estado: 'active', avance: 40, fecha: '2026-06-25' },
+    { nombre: 'Recálculo NCh Edificio Industrial', cliente: 'Constructora Bicentenario', estado: 'draft', avance: 8, fecha: '2026-06-27' },
+  ],
+};
+
+function getCurrentUser() {
+  return USERS.find(u => u.id === state.currentUserId) || USERS[0];
+}
+function getCurrentPermisos() {
+  return ROL_PERMISOS[getCurrentUser().rol];
+}
+
+// =======================================================================
+// CATÁLOGO DE FUNDAMENTOS TÉCNICOS ("Ver fundamento técnico")
+// Cada entrada documenta de forma trazable: ecuación, norma, cláusula,
+// variables, interpretación física, supuestos, limitaciones y bibliografía.
+// Esto NO es un motor de IA ni un sistema experto separado — es metadata
+// estructurada que se muestra en un panel expandible junto al resultado.
+// =======================================================================
+const FUNDAMENTOS = {
+  wenner: {
+    nombre: "Método de Wenner — Resistividad aparente del suelo",
+    norma: "IEEE Std 81-2012", clausula: "Cláusula 8.3",
+    ecuacion: "ρₐ = 2 · π · a · R",
+    variables: "ρₐ: resistividad aparente (Ω·m) · a: espaciamiento entre electrodos (m) · R: resistencia medida (Ω)",
+    interpretacion: "Cuatro electrodos colineales y equiespaciados inyectan corriente (exteriores) y miden potencial (interiores). El volumen de suelo muestreado es proporcional al espaciamiento 'a', lo que permite estimar la resistividad a distintas profundidades efectivas.",
+    supuestos: "Suelo homogéneo en el volumen muestreado · electrodos puntuales · profundidad de los electrodos pequeña frente a 'a' · ausencia de corrientes parásitas o estructuras metálicas cercanas.",
+    limitaciones: "No diferencia capas si el contraste de resistividad es bajo · sensible a heterogeneidades laterales · requiere desplazar los 4 electrodos en cada lectura, aumentando el riesgo de error de campo.",
+    precision: "Típicamente ±5-10% en condiciones de campo controladas, según calidad del contacto electrodo-suelo.",
+    comparacion: "Frente a Schlumberger: Wenner es más simple en terreno pero más sensible a variaciones laterales superficiales, ya que los 4 electrodos completos se mueven en cada lectura.",
+    bibliografia: "Wenner, F. (1916) 'A method of measuring earth resistivity', NBS Scientific Paper 258 · IEEE Std 81-2012, Cl. 8."
+  },
+  malla: {
+    nombre: "Resistencia de la malla de puesta a tierra — Ecuación de Sverak",
+    norma: "IEEE Std 80-2013", clausula: "Cláusula 14.2",
+    ecuacion: "Rg = ρ · [ 1/L_T + (1/√(20A))·(1 + 1/(1+h√(20/A))) ]",
+    variables: "Rg: resistencia de la malla (Ω) · ρ: resistividad del suelo (Ω·m) · A: área de la malla (m²) · L_T: longitud total de conductor enterrado (m) · h: profundidad de enterramiento (m)",
+    interpretacion: "Estima la resistencia de dispersión a tierra remota de un electrodo compuesto por una malla horizontal más electrodos verticales, combinando el efecto del área superficial cubierta y la longitud total de conductor.",
+    supuestos: "Suelo de resistividad uniforme equivalente (puede usarse ρ efectiva si hay 2+ capas) · malla aproximadamente rectangular · distribución razonablemente uniforme de conductores.",
+    limitaciones: "Es una fórmula simplificada (no un modelo de elementos finitos); pierde precisión en geometrías muy irregulares o suelos con contrastes de resistividad extremos entre capas.",
+    precision: "Validada extensamente en la industria; error típico reportado menor al 10% frente a mediciones de campo en mallas convencionales.",
+    comparacion: "Alternativas más complejas (Schwarz, métodos de elementos finitos) ofrecen mayor precisión en geometrías irregulares, a costo de mayor complejidad de cálculo.",
+    bibliografia: "Sverak, J.G. (1981) 'Simplified analysis of electrical gradients above a ground grid', IEEE Trans. PAS · IEEE Std 80-2013, Cl. 14.2."
+  },
+  tensiones: {
+    nombre: "Tensiones de paso y de contacto admisibles y reales",
+    norma: "IEEE Std 80-2013", clausula: "Cláusula 16",
+    ecuacion: "E_touch = (1000+1.5·Cs·ρs)·0.157/√t  ·  E_step = (1000+6·Cs·ρs)·0.157/√t",
+    variables: "E_touch/E_step: tensiones admisibles (V) · Cs: factor de reducción por capa superficial · ρs: resistividad de la capa superficial (Ω·m) · t: duración de la falla (s)",
+    interpretacion: "Basadas en el modelo de energía de Dalziel para fibrilación ventricular: el cuerpo humano tolera mayor tensión cuanto menor sea el tiempo de exposición. La capa de grava superficial reduce la corriente que circula por el cuerpo al aumentar la resistencia de contacto.",
+    supuestos: "Persona de peso corporal estándar (50 o 70 kg) · trayecto de corriente mano-pies o pie-pie · tiempo de despeje de falla conocido y constante.",
+    limitaciones: "No considera condiciones especiales (calzado aislante, superficies húmedas atípicas, personas con condiciones médicas) · el cálculo de Em/Es real usa fórmulas simplificadas de Sverak válidas para mallas con electrodos perimetrales.",
+    precision: "Los límites admisibles son conservadores por diseño (factor de seguridad incorporado en el modelo de Dalziel).",
+    comparacion: "Algunas normativas nacionales (ej. IEC 60479) usan curvas de corriente-tiempo algo distintas; los órdenes de magnitud son comparables.",
+    bibliografia: "Dalziel, C.F. (1968) 'Reevaluation of lethal electric currents', IEEE Trans. Industry and General Applications · IEEE Std 80-2013, Cl. 16."
+  },
+  conductor: {
+    nombre: "Dimensionamiento térmico del conductor — Ecuación de Onderdonk",
+    norma: "IEEE Std 80-2013", clausula: "Cláusula 11.3",
+    ecuacion: "A[mm²] = (Ig[kA]·197.4) / √( (TCAP/(t·αr·ρr))·ln((K₀+Tm)/(K₀+Ta)) )",
+    variables: "A: sección mínima (mm²) · Ig: corriente de falla (kA) · t: duración de falla (s) · Ta: temperatura ambiente (°C) · Tm: temperatura máxima admisible (°C) · TCAP, αr, ρr, K₀: constantes del material conductor",
+    interpretacion: "Calcula la sección mínima de conductor de cobre que evita que este alcance una temperatura crítica (recocido o fusión) durante el calentamiento adiabático producido por la corriente de falla en el tiempo de despeje.",
+    supuestos: "Proceso adiabático (sin disipación de calor al entorno durante la falla, por ser un evento de corta duración) · cobre blando comercial 97% IACS · corriente de falla constante durante todo el tiempo t.",
+    limitaciones: "El criterio de Tm debe ajustarse según el tipo de unión real (soldada exotérmica vs. mecánica) · no considera el efecto piel a altas frecuencias (no aplica para corriente de falla a 50/60 Hz).",
+    precision: "Ecuación estándar de la industria, ampliamente validada para diseño de conductores de puesta a tierra.",
+    comparacion: "Para otros materiales (acero cobreado, aluminio) se requieren constantes distintas, no incluidas en este prototipo.",
+    bibliografia: "Onderdonk, I.M. (1958) referenciado en IEEE Std 80-2013 · IEEE Std 80-2013, Cl. 11.3, Tabla 7 (constantes de materiales)."
+  },
+};
+
+// Catálogo de normas de referencia — solo IEEE 80/81 tienen cálculo real
+// implementado en este prototipo. Las demás se listan como referencia
+// visual de lo que un sistema completo debería soportar, sin cálculos
+// reales detrás (marcadas explícitamente como no implementadas).
+const NORMAS_REFERENCIA = [
+  { codigo: "IEEE Std 80-2013", pais: "Internacional (ANSI/IEEE)", desc: "Guide for Safety in AC Substation Grounding", implementado: true },
+  { codigo: "IEEE Std 81-2012", pais: "Internacional (ANSI/IEEE)", desc: "Guide for Measuring Earth Resistivity, Ground Impedance", implementado: true },
+  { codigo: "IEC 60364", pais: "Internacional (IEC)", desc: "Low-voltage electrical installations", implementado: false },
+  { codigo: "NFPA 70 (NEC)", pais: "Estados Unidos", desc: "National Electrical Code", implementado: false },
+  { codigo: "SEC / RIC", pais: "Chile", desc: "Reglamento de Instalaciones Eléctricas de Consumo", implementado: false },
+  { codigo: "RETIE", pais: "Colombia", desc: "Reglamento Técnico de Instalaciones Eléctricas", implementado: false },
+  { codigo: "REBT", pais: "España", desc: "Reglamento Electrotécnico de Baja Tensión", implementado: false },
+  { codigo: "NBR 5419", pais: "Brasil (ABNT)", desc: "Proteção contra descargas atmosféricas", implementado: false },
+];
+
+// ---------------------------------------------------------------------
+// MOTOR DE CÁLCULO — WENNER (IEEE Std 81-2012, Cl. 8)
+// ---------------------------------------------------------------------
+// ρa = 2 * π * a * R   (suelo homogéneo, electrodos equiespaciados, profundidad << a)
+function wennerApparent(a, R) {
+  return 2 * Math.PI * a * R;
+}
+
+// Estimación de 2 capas a partir de la curva ρa(a):
+// Usamos el método de asíntotas: ρ1 = promedio de las lecturas con 'a' pequeño,
+// ρ2 = promedio de las lecturas con 'a' grande, y h se estima por el punto de
+// inflexión (a donde ρa cruza el promedio geométrico de ρ1 y ρ2).
+// Esto es una aproximación de ingeniería estándar para interpretación rápida
+// de curvas de Wenner (no sustituye software de inversión geofísica completo).
+function estimateTwoLayer(readings) {
+  const sorted = [...readings].sort((x,y)=>x.a-y.a);
+  const rhos = sorted.map(r => ({a: r.a, rho: wennerApparent(r.a, r.r)}));
+  const n = rhos.length;
+  const halfLow = rhos.slice(0, Math.ceil(n/2));
+  const halfHigh = rhos.slice(Math.floor(n/2));
+  const rho1 = halfLow.reduce((s,x)=>s+x.rho,0) / halfLow.length;
+  const rho2 = halfHigh.reduce((s,x)=>s+x.rho,0) / halfHigh.length;
+  const target = Math.sqrt(rho1 * rho2);
+  let hEstimate = sorted[Math.floor(n/2)].a;
+  let minDiff = Infinity;
+  for (const pt of rhos) {
+    const diff = Math.abs(pt.rho - target);
+    if (diff < minDiff) { minDiff = diff; hEstimate = pt.a; }
+  }
+  return { rho1, rho2, h: hEstimate, curve: rhos };
+}
+
+// ---------------------------------------------------------------------
+// MOTOR DE CÁLCULO — SCHLUMBERGER (IEEE Std 81-2012, Cl. 8 / método de 4 electrodos
+// con espaciamiento desigual: electrodos de potencial MN fijos y cercanos al centro,
+// electrodos de corriente AB que se separan progresivamente)
+// ---------------------------------------------------------------------
+// ρa = π · L² / ℓ · R   donde L = AB/2 (semi-distancia de corriente), ℓ = MN/2 (semi-distancia de potencial)
+// (forma equivalente: ρa = π·(L²-ℓ²)/(2ℓ) · R cuando se usa la expresión exacta; la forma
+// aproximada π·L²/ℓ·R es válida cuando L >> ℓ, condición típica de un sondeo Schlumberger bien ejecutado)
+function schlumbergerApparent(L, l, R) {
+  // Forma exacta (Telford et al.): ρa = π · (L² - l²) / (2l) · R
+  return Math.PI * ((L*L - l*l) / (2*l)) * R;
+}
+
+function compareWennerSchlumberger(wReadings, sReadings) {
+  const w = wReadings.filter(r=>r.a>0 && r.r>0).map(r => ({ a: r.a, rho: wennerApparent(r.a, r.r) }));
+  const s = sReadings.filter(r=>r.L>0 && r.l>0 && r.r>0).map(r => ({ L: r.L, rho: schlumbergerApparent(r.L, r.l, r.r) }));
+  const avgW = w.length ? w.reduce((acc,x)=>acc+x.rho,0)/w.length : 0;
+  const avgS = s.length ? s.reduce((acc,x)=>acc+x.rho,0)/s.length : 0;
+  const diffPct = avgW ? ((avgS - avgW) / avgW) * 100 : 0;
+  return { w, s, avgW, avgS, diffPct };
+}
+
+// ---------------------------------------------------------------------
+// CURVAS PATRÓN DE ORELLANA-MOONEY (SEV de 2 capas, curvas tipo H/K)
+// ---------------------------------------------------------------------
+// Las curvas de Orellana-Mooney (1966) son curvas patrón normalizadas para
+// interpretar sondeos eléctricos verticales (SEV) Schlumberger en suelos de 2 capas.
+// Se grafican como ρa/ρ1 (eje Y, log) vs AB/2/h1 (eje X, log), parametrizadas por k = ρ2/ρ1.
+// Aquí usamos la función de resistividad aparente teórica de 2 capas (Stefanescu/Wenner
+// generalizado) que es la base matemática de esas curvas, evaluada en un rango de
+// AB/2 normalizado, para generar la curva teórica y compararla con los datos de campo.
+function theoreticalTwoLayerRho(t, k, nTerms=60) {
+  // ρa(t)/ρ1 para configuración Schlumberger sobre suelo de 2 capas (Stefanescu):
+  // ρa/ρ1 = 1 + 2·Σ[ k_n · t / sqrt(t² + (2n)²) ]  con factor de reflexión k_n = ((k-1)/(k+1))^n
+  // t = AB/2 / h1 (espaciamiento normalizado), k = ρ2/ρ1
+  const Kr = (k - 1) / (k + 1);
+  let sum = 0;
+  for (let n = 1; n <= nTerms; n++) {
+    const kn = Math.pow(Kr, n);
+    sum += kn / Math.sqrt(1 + Math.pow(2*n/t, 2));
+  }
+  return 1 + 2 * sum;
+}
+
+function generateTypeCurve(k, points=40) {
+  const tMin = 0.1, tMax = 100;
+  const logMin = Math.log10(tMin), logMax = Math.log10(tMax);
+  const curve = [];
+  for (let i = 0; i <= points; i++) {
+    const logT = logMin + (i/points) * (logMax - logMin);
+    const t = Math.pow(10, logT);
+    curve.push({ t, ratio: theoreticalTwoLayerRho(t, k) });
+  }
+  return curve;
+}
+
+// Ajuste automático: encuentra la razón k=ρ2/ρ1 cuya curva teórica minimiza el
+// error contra los datos de campo normalizados (ρa/ρ1_estimado vs a/h_estimado),
+// probando un set discreto de razones típicas de las cartillas Orellana-Mooney.
+function autoFitCurve(readings, twoLayer) {
+  if (!twoLayer || readings.length < 2) return { bestK: 5, error: null };
+  const rho1 = twoLayer.rho1, h = twoLayer.h || 1;
+  const fieldPts = readings.filter(r=>r.a>0 && r.r>0).map(r => ({
+    t: r.a / h,
+    ratio: wennerApparent(r.a, r.r) / rho1,
+  }));
+  const candidateKs = [0.1, 0.2, 0.33, 0.5, 1, 2, 3, 5, 7, 10, 15, 20, 30, 50, 100];
+  let bestK = 5, bestErr = Infinity;
+  for (const k of candidateKs) {
+    let err = 0;
+    for (const pt of fieldPts) {
+      const theo = theoreticalTwoLayerRho(pt.t, k);
+      err += Math.pow(Math.log10(theo) - Math.log10(pt.ratio), 2);
+    }
+    if (err < bestErr) { bestErr = err; bestK = k; }
+  }
+  return { bestK, error: bestErr, fieldPts, rho1, h };
+}
+
+// ---------------------------------------------------------------------
+// MOTOR DE CÁLCULO — SUELO DE N CAPAS (algoritmo recursivo de Wait, 1954)
+// ---------------------------------------------------------------------
+// Generaliza la función de resistividad aparente para suelos de hasta 4 capas.
+// Referencia: Wait, J.R. (1954) "Mutual electromagnetic coupling of loops over a
+// homogeneous ground" / Telford et al., "Applied Geophysics" 2nd ed., Cl. 8.
+// También base matemática de las cartillas Orellana-Mooney para SEV multi-capa.
+//
+// Para configuración Wenner sobre N capas:
+// ρa(a) = ρ1 · [ 1 + 4 · Σ_{n=1}^{∞} T(λ_n, 0) · K0(nλ/a) ... ]
+// donde la integración se realiza numéricamente usando la transformada de Hankel
+// y el kernel de Wait T(λ) se calcula de forma recursiva desde la capa N hacia arriba.
+//
+// Implementamos la integración numérica de Abramowitz & Stegun (tabla de cuadratura
+// de Gauss-Laguerre adaptada, método estándar en geofísica aplicada):
+//
+// ρa = ρ1 · [1 + 2·a · ∫₀^∞ K(λ)·J₁(λ·a)·λ · dλ]
+// donde K(λ) = [T₁(λ)/ρ₁ - 1] es el kernel de reflectividad de Wait
+// y T₁(λ) se calcula recursivamente:
+//   T_N(λ) = ρ_N   (capa más profunda, semi-infinita)
+//   T_i(λ) = ρ_i · (T_{i+1} + ρ_i·tanh(λ·h_i)) / (ρ_i + T_{i+1}·tanh(λ·h_i))
+//
+// Abreviamos la integral con cuadratura de Gauss-Laguerre de 20 puntos
+// (exacta hasta orden 39 del polinomio; suficiente para 4 capas).
+
+function besselJ1(x) {
+  // Serie de Taylor para J1(x), suficiente para |x| < 30 (rango de la integral)
+  if (Math.abs(x) < 1e-10) return 0;
+  // Polinomial de Abramowitz & Stegun 9.4.1 (aproximación analítica de alta precisión):
+  if (Math.abs(x) <= 3) {
+    const t = x/3;
+    return x*(0.5-0.56249985*t**2+0.21093573*t**4-0.03954289*t**6+0.00443319*t**8-0.00031761*t**10+0.00001109*t**12);
+  }
+  // Para x > 3: aproximación asintótica
+  const t = 3/x;
+  const f = 0.79788456-0.00000077*t-0.00552740*t**2-0.00009512*t**3+0.00137237*t**4-0.00072805*t**5+0.00014476*t**6;
+  const g = -0.04166397*t-0.00003954*t**2+0.00262573*t**3-0.00054125*t**4-0.00029333*t**5+0.00013558*t**6;
+  return Math.sqrt(1/Math.PI/Math.max(x,1e-9)) * (f*Math.cos(x-3*Math.PI/4) - g*Math.sin(x-3*Math.PI/4));
+}
+
+// Kernel recursivo de Wait: T_i(λ) para i-ésima capa dada estructura de capas
+function waitKernel(lambda, rhos, hs) {
+  // rhos = [ρ1, ρ2, ..., ρN], hs = [h1, h2, ..., h_{N-1}] (última capa semi-infinita)
+  const N = rhos.length;
+  let T = rhos[N-1]; // capa más profunda: T_N = ρ_N
+  for (let i = N-2; i >= 0; i--) {
+    const ri = rhos[i];
+    const hi = hs[i];
+    const th = Math.tanh(lambda * hi);
+    T = ri * (T + ri * th) / (ri + T * th);
+  }
+  return T; // T_1(λ)
+}
+
+// Puntos y pesos de cuadratura de Gauss-Laguerre de 20 puntos
+// para ∫₀^∞ f(x)·e^{-x} dx ≈ Σ w_i·f(x_i)
+// (fuente: Abramowitz & Stegun, tabla 25.9)
+const GL20_X = [0.0705395897,0.3721267900,0.9165821000,1.7073065850,2.7491923600,
+                4.0489932320,5.6151705220,7.4590174560,9.5943070940,12.0388025470,
+                14.8142934430,17.9488955400,21.4787882430,25.4517027450,29.9325953890,
+                35.0134342700,41.0580432640,48.2667786110,57.5236329720,71.2441773080];
+const GL20_W = [0.1687433680,0.2912561302,0.2666229210,0.1660269342,0.0748260647,
+                0.0249644174,0.0062087456,0.0011395717,0.0001495793,0.0000143208,
+                0.0000009317,0.0000000398,0.0000000011,0.0000000000,0.0000000000,
+                0.0000000000,0.0000000000,0.0000000000,0.0000000000,0.0000000000];
+
+function wennerApparentNLayer(a, rhos, hs) {
+  // ρa = ρ1 · [1 + 2·a · ∫₀^∞ (T1(λ)/ρ1 - 1) · J1(λ·a) · λ · dλ]
+  // Cambio de variable: λ = u/a → dλ = du/a, J1(u) y T(u/a)
+  // = ρ1 · [1 + 2 · ∫₀^∞ (T1(u/a)/ρ1 - 1) · J1(u) · u · du]
+  // Para cuadratura: la integrand decae exponencialmente, así que usamos
+  // la sustitución adicional u = e^t para manejar el rango [0, ∞)
+  // con el método de Gauss-Laguerre adaptado al kernel de Wait.
+  const rho1 = rhos[0];
+  let integral = 0;
+  // Usamos un set denso de puntos de integración logarítmicamente espaciados
+  // (más robusto que Gauss-Laguerre para este kernel oscilatorio):
+  const pts = 150; // suficiente para convergencia hasta 4 capas
+  const uMin = 1e-3, uMax = 200;
+  const du = (uMax - uMin) / pts;
+  for (let i = 0; i < pts; i++) {
+    const u1 = uMin + i * du;
+    const u2 = u1 + du;
+    const um = (u1 + u2) / 2;
+    const T1 = waitKernel(um / a, rhos, hs);
+    const kern = (T1 / rho1 - 1) * besselJ1(um) * um;
+    integral += kern * du;
+  }
+  return rho1 * (1 + 2 * integral);
+}
+
+// Tabla de tipos de suelo según normas internacionales
+// (IEC 60364, IEEE 80, CIGRE, catálogos de suelos de ingeniería eléctrica)
+const SOIL_TYPES = [
+  { nombre: 'Agua marina', rhoMin: 0.1, rhoMax: 1, clase: 'A' },
+  { nombre: 'Agua de río / lago', rhoMin: 1, rhoMax: 100, clase: 'A' },
+  { nombre: 'Arcilla húmeda / pantano', rhoMin: 2, rhoMax: 30, clase: 'B' },
+  { nombre: 'Arcilla plástica / franco-arcilloso', rhoMin: 30, rhoMax: 100, clase: 'B' },
+  { nombre: 'Arena arcillosa húmeda', rhoMin: 30, rhoMax: 150, clase: 'B' },
+  { nombre: 'Franco-arenoso (húmedo)', rhoMin: 100, rhoMax: 300, clase: 'C' },
+  { nombre: 'Arena húmeda', rhoMin: 150, rhoMax: 500, clase: 'C' },
+  { nombre: 'Arena seca / grava arcillosa', rhoMin: 300, rhoMax: 1000, clase: 'D' },
+  { nombre: 'Grava / cascajo seco', rhoMin: 1000, rhoMax: 5000, clase: 'E' },
+  { nombre: 'Roca fracturada / esquisto', rhoMin: 1000, rhoMax: 10000, clase: 'E' },
+  { nombre: 'Roca sana / granito', rhoMin: 10000, rhoMax: 100000, clase: 'F' },
+  { nombre: 'Permafrost / suelo congelado', rhoMin: 100000, rhoMax: 1000000, clase: 'F' },
+];
+
+function classifySoil(rho) {
+  return SOIL_TYPES.find(s => rho >= s.rhoMin && rho < s.rhoMax) || SOIL_TYPES[SOIL_TYPES.length-1];
+}
+
+// ---------------------------------------------------------------------
+// MOTOR DE CÁLCULO — MATERIALES Y COSTOS
+// ---------------------------------------------------------------------
+function computeMateriales(malla, gel, conductor) {
+  const area = malla.largo * malla.ancho;
+  const condL = (malla.nConductoresL * malla.ancho) + (malla.nConductoresW * malla.largo);
+  const nVarillas = malla.nVarillas;
+  const longVarilla = malla.longVarilla;
+
+  // Longitud de conductor + 5% de traslapes/pérdidas
+  const condLTotal = condL * 1.05;
+  // Nº de conectores exotérmicos: en cada intersección + 2 por varilla (aprox)
+  const nIntersecciones = malla.nConductoresL * malla.nConductoresW;
+  const nConectores = nIntersecciones + nVarillas * 2;
+  // Excavación: longitud total de zanja de 0.6m de prof × 0.3m ancho
+  const mLZanja = condL;
+  // Volumen de gel (si activo): π·(r_gel²-r_var²)·longVarilla por varilla
+  const volGelLt = gel.activo
+    ? (Math.PI * (Math.pow(gel.radioConGel,2) - Math.pow(gel.radioVarilla,2)) * gel.longVarillaGel * nVarillas * 1000)
+    : 0;
+
+  // Calibre real del conductor: el efectivamente seleccionado en el módulo
+  // "Dimensionamiento Conductor" (manual si fue elegido y es válido, o el
+  // sugerido automáticamente en caso contrario). El sistema es acumulativo:
+  // si el usuario cambia el calibre, este valor cambia y se propaga aquí.
+  const rCond = computeConductor(conductor);
+  const calibreReal = rCond.seleccionado.calibre;
+  const calibreMm2 = rCond.seleccionado.mm2;
+
+  return { condLTotal, nVarillas, longVarilla, nConectores, nIntersecciones, mLZanja, volGelLt, area, calibreReal, calibreMm2 };
+}
+
+// Precio por metro de conductor escalado según sección real (referencia: 4/0 AWG
+// a 107.2mm² cuesta precioConductorM por defecto; se escala linealmente con el área).
+function precioConductorEscalado(precioBaseM, mm2Seleccionado, mm2Referencia = 107.2) {
+  return precioBaseM * (mm2Seleccionado / mm2Referencia);
+}
+
+function computeCostos(mat, precios) {
+  const precioConductorEscaladoM = precioConductorEscalado(precios.precioConductorM, mat.calibreMm2);
+  const items = [
+    { desc: `Conductor Cu desnudo ${mat.calibreReal} (${mat.condLTotal.toFixed(1)} m)`,
+      qty: mat.condLTotal, unit: 'm', unitPrice: precioConductorEscaladoM,
+      total: mat.condLTotal * precioConductorEscaladoM },
+    { desc: `Varilla copperweld 5/8" × ${mat.longVarilla}m (${mat.nVarillas} un.)`,
+      qty: mat.nVarillas, unit: 'un', unitPrice: precios.precioVarilla,
+      total: mat.nVarillas * precios.precioVarilla },
+    { desc: `Conector exotérmico (${mat.nConectores} un.)`,
+      qty: mat.nConectores, unit: 'un', unitPrice: precios.precioConector,
+      total: mat.nConectores * precios.precioConector },
+    { desc: `Excavación zanja (${mat.mLZanja.toFixed(1)} m)`,
+      qty: mat.mLZanja, unit: 'm', unitPrice: precios.precioExcavacionM,
+      total: mat.mLZanja * precios.precioExcavacionM },
+  ];
+  if (mat.volGelLt > 0) {
+    items.push({ desc: `Gel conductivo (${mat.volGelLt.toFixed(1)} L)`,
+      qty: mat.volGelLt, unit: 'L', unitPrice: precios.precioGelL,
+      total: mat.volGelLt * precios.precioGelL });
+  }
+  const subtotal = items.reduce((s,i) => s+i.total, 0);
+  const iva = subtotal * 0.19; // IVA Chile
+  const total = subtotal + iva;
+  return { items, subtotal, iva, total };
+}
+
+// ---------------------------------------------------------------------
+// MOTOR DE CÁLCULO — ADITIVO GEL QUÍMICO PARA MEJORAMIENTO DE TIERRAS
+// ---------------------------------------------------------------------
+// Modelo basado en la fórmula de resistencia de electrodo vertical (Dwight/Sunde)
+// aplicada en dos configuraciones: (1) electrodo desnudo en suelo nativo,
+// (2) electrodo envuelto en una "funda" cilíndrica de gel conductivo de baja
+// resistividad y mayor radio efectivo, que actúa como capa de transición de
+// baja resistencia entre el conductor metálico y el suelo nativo.
+// R_varilla = (ρ / (2π·L)) · [ ln(8L/d) - 1 ]   (Dwight, para varilla vertical, d=diámetro)
+function rodResistanceDwight(rho, L, radius) {
+  const d = 2 * radius;
+  return (rho / (2 * Math.PI * L)) * (Math.log(8 * L / d) - 1);
+}
+
+// Con gel: se modela como dos resistencias en serie equivalentes — la "funda" de gel
+// (radio interior = radio varilla, radio exterior = radio con gel, resistividad ρ_gel)
+// más el suelo nativo visto desde el radio exterior de la funda hacia afuera.
+// Aproximación de cilindros concéntricos (análoga a resistencia de aislamiento radial):
+// R_funda = ρ_gel / (2π·L) · ln(r_gel / r_varilla)
+// R_suelo_desde_r_gel = (ρ_suelo / (2π·L)) · [ ln(8L/(2·r_gel)) - 1 ]  (Dwight evaluado desde el radio mayor)
+function rodResistanceWithGel({ rhoSuelo, rhoGel, L, radioVarilla, radioGel }) {
+  const Rfunda = (rhoGel / (2 * Math.PI * L)) * Math.log(radioGel / radioVarilla);
+  const Rsuelo = (rhoSuelo / (2 * Math.PI * L)) * (Math.log(8 * L / (2 * radioGel)) - 1);
+  const Rtotal = Rfunda + Rsuelo;
+  // Resistividad efectiva equivalente: la que, sin gel, daría la misma R con la fórmula de Dwight estándar
+  const rhoEff = Rtotal / ((1 / (2 * Math.PI * L)) * (Math.log(8 * L / (2 * radioVarilla)) - 1));
+  return { Rfunda, Rsuelo, Rtotal, rhoEff };
+}
+
+function computeGel(g, rhoSuelo) {
+  const Rsin = rodResistanceDwight(rhoSuelo, g.longVarillaGel, g.radioVarilla);
+  const conGel = rodResistanceWithGel({
+    rhoSuelo, rhoGel: g.rhoGel, L: g.longVarillaGel,
+    radioVarilla: g.radioVarilla, radioGel: g.radioConGel,
+  });
+  const mejoraPct = ((Rsin - conGel.Rtotal) / Rsin) * 100;
+  return { Rsin, ...conGel, mejoraPct };
+}
+
+// ---------------------------------------------------------------------
+// MOTOR DE CÁLCULO — RESISTENCIA DE MALLA (IEEE Std 80-2013, Cl. 14.2, Ec. de Sverak)
+// ---------------------------------------------------------------------
+// Rg = ρ [ 1/Lt + 1/sqrt(20A) * (1 + 1/(1 + h*sqrt(20/A))) ]
+// ρ: resistividad del suelo (Ω·m) | A: área de la malla (m²)
+// Lt: longitud total de conductor enterrado (incl. varillas) (m) | h: profundidad (m)
+function sverakGridResistance({ rho, area, Ltotal, depth }) {
+  const term1 = 1 / Ltotal;
+  const term2 = (1 / Math.sqrt(20 * area)) * (1 + 1 / (1 + depth * Math.sqrt(20 / area)));
+  const Rg = rho * (term1 + term2);
+  return { Rg, term1, term2 };
+}
+
+function computeMalla(m, gelInfo) {
+  const area = m.largo * m.ancho;
+  const condL = (m.nConductoresL * m.ancho) + (m.nConductoresW * m.largo);
+  const condRods = m.nVarillas * m.longVarilla;
+  const Ltotal = condL + condRods;
+  // Si el aditivo gel está activo, se usa la resistividad efectiva equivalente
+  // (rho_eff) calculada a partir del modelo de electrodo con funda de gel,
+  // en vez de la resistividad nativa del suelo medida por Wenner.
+  const rhoUsado = (gelInfo && gelInfo.activo) ? gelInfo.rhoEff : m.rho;
+  const { Rg, term1, term2 } = sverakGridResistance({ rho: rhoUsado, area, Ltotal, depth: m.profundidad });
+  const gpr = Rg * m.iFalla;
+  return { area, condL, condRods, Ltotal, Rg, term1, term2, gpr, rhoUsado };
+}
+
+// ---------------------------------------------------------------------
+// MOTOR DE CÁLCULO — TENSIONES DE PASO Y CONTACTO (IEEE Std 80-2013, Cl. 16)
+// ---------------------------------------------------------------------
+
+// Factor de reducción por capa superficial (Sverak), Cl. 16.5, Ec. 27:
+// Cs = 1 - 0.09*(1 - ρ/ρs) / (2*hs + 0.09)
+function surfaceFactorCs(rho, rhoSuperficial, hSuperficial) {
+  return 1 - (0.09 * (1 - rho / rhoSuperficial)) / (2 * hSuperficial + 0.09);
+}
+
+// Tensión de contacto admisible (touch voltage), Cl. 16.4-16.5, Ec. 33 (70kg) / 30 (50kg)
+function permissibleTouch(Cs, rhoSuperficial, t, peso) {
+  const k = peso === 50 ? 0.116 : 0.157;
+  return (1000 + 1.5 * Cs * rhoSuperficial) * k / Math.sqrt(t);
+}
+
+// Tensión de paso admisible (step voltage), Cl. 16.4-16.5, Ec. 32 (70kg) / 29 (50kg)
+function permissibleStep(Cs, rhoSuperficial, t, peso) {
+  const k = peso === 50 ? 0.116 : 0.157;
+  return (1000 + 6 * Cs * rhoSuperficial) * k / Math.sqrt(t);
+}
+
+// Tensión de malla real (mesh voltage Em) — Cl. 16.5, forma simplificada de Sverak
+function meshVoltage({ rho, Ig, D, d, h, n, Ltotal }) {
+  const Kii = 1; // electrodos perimetrales presentes (varillas en el borde)
+  const Kh = Math.sqrt(1 + h / 1.0);
+  const Km = (1 / (2 * Math.PI)) * (
+    Math.log(
+      (D * D) / (16 * h * d) +
+      Math.pow(D + 2 * h, 2) / (8 * D * d) -
+      h / (4 * d)
+    ) + (Kii / Kh) * Math.log(8 / (Math.PI * (2 * n - 1)))
+  );
+  const Ki = 0.644 + 0.148 * n; // factor de irregularidad
+  const Em = (rho * Ki * Ig * Km) / Ltotal;
+  return { Em, Km, Ki, Kh, Kii };
+}
+
+// Tensión de paso real (step voltage Es) — Cl. 16.5
+function stepVoltageReal({ rho, Ig, D, h, n, Ltotal, Ki }) {
+  const Ks = (1 / Math.PI) * (
+    1 / (2 * h) + 1 / (D + h) + (1 / D) * (1 - Math.pow(0.5, n - 2))
+  );
+  const Es = (rho * Ks * Ki * Ig) / Ltotal;
+  return { Es, Ks };
+}
+
+function computeTensiones(t, malla, conductor) {
+  // ρ se toma de malla.rho — única fuente de verdad para la resistividad del
+  // suelo en todo el sistema (medida en vivo desde Wenner o editada manualmente
+  // en el módulo "Resistencia de Malla"). Esto evita que tensiones.rho quede
+  // desincronizado del valor realmente usado en el resto de los cálculos.
+  const rho = malla.rho;
+  const Cs = surfaceFactorCs(rho, t.rhoSuperficial, t.hSuperficial);
+  const Etouch = permissibleTouch(Cs, t.rhoSuperficial, t.tFalla, t.pesoPersona);
+  const Estep = permissibleStep(Cs, t.rhoSuperficial, t.tFalla, t.pesoPersona);
+
+  const area = malla.largo * malla.ancho;
+  const condL = (malla.nConductoresL * malla.ancho) + (malla.nConductoresW * malla.largo);
+  const condRods = malla.nVarillas * malla.longVarilla;
+  const Ltotal = condL + condRods;
+  const nL = malla.nConductoresL, nW = malla.nConductoresW;
+  const n = Math.max(2, Math.round(Math.sqrt(nL * nW)));
+  const D = (malla.largo / (nW - 1 || 1) + malla.ancho / (nL - 1 || 1)) / 2;
+  // Diámetro real del conductor: tomado del calibre efectivamente dimensionado/
+  // seleccionado en el módulo "Dimensionamiento Conductor" (área mm² → diámetro
+  // circular equivalente), en vez de un valor fijo de referencia (4/0 AWG).
+  const mm2Real = conductor ? computeConductor(conductor).seleccionado.mm2 : 107.2;
+  const d = 2 * Math.sqrt(mm2Real / Math.PI) / 1000; // m, diámetro de sección circular equivalente
+  const h = malla.profundidad;
+
+  const { Em, Km, Ki, Kh } = meshVoltage({ rho, Ig: malla.iFalla, D, d, h, n, Ltotal });
+  const { Es, Ks } = stepVoltageReal({ rho, Ig: malla.iFalla, D, h, n, Ltotal, Ki });
+
+  return {
+    rho, Cs, Etouch, Estep, Em, Es, Km, Ki, Kh, Ks, D, d, h, n, Ltotal, area, mm2Real,
+    touchOk: Em <= Etouch, stepOk: Es <= Estep,
+  };
+}
+
+// ---------------------------------------------------------------------
+// MOTOR DE DIAGNÓSTICO Y RECOMENDACIÓN — TENSIONES DE PASO/CONTACTO
+// Evalúa la sensibilidad de cada parámetro dimensionado hasta el momento
+// (resistividad/gel, geometría de malla, conductor) y recomienda acciones
+// concretas y priorizadas para alcanzar el cumplimiento, en vez de solo
+// mostrar "no cumple". Es una heurística basada en la física del problema
+// (no una búsqueda exhaustiva ni un solver), pensada para guiar al usuario.
+// ---------------------------------------------------------------------
+function diagnosticoTensiones(rT, malla, tens, gelActivo) {
+  const recomendaciones = [];
+  if (rT.touchOk && rT.stepOk) return recomendaciones;
+
+  const ratioTouch = rT.Em / rT.Etouch;
+  const ratioStep = rT.Es / rT.Estep;
+  const peorRatio = Math.max(ratioTouch, ratioStep);
+
+  // 1) Capa superficial de grava — efecto fuerte y barato sobre ambos límites admisibles
+  if (tens.rhoSuperficial < 3000 || tens.hSuperficial < 0.15) {
+    recomendaciones.push({
+      accion: 'Aumentar la capa superficial de grava',
+      detalle: `Subir ρₛ a ~3000-5000 Ω·m y/o el espesor a 0.15 m incrementa directamente E_touch y E_step admisibles (Cláusula 16). Es la acción de menor costo relativo.`,
+      prioridad: 'alta', modulo: 'tensiones',
+    });
+  }
+
+  // 2) Gel químico — si no está activo, reduce rho efectiva y por tanto Em/Es reales
+  if (!gelActivo) {
+    recomendaciones.push({
+      accion: 'Activar el aditivo gel químico en las varillas',
+      detalle: `Reduce la resistividad efectiva del terreno, lo que disminuye R_g, GPR y las tensiones reales E_m/E_s. Revísalo en el módulo "Aditivo Gel Químico".`,
+      prioridad: 'alta', modulo: 'gel',
+    });
+  }
+
+  // 3) Geometría de malla — más conductores / menor espaciamiento reduce Km y por tanto Em
+  if (peorRatio > 1.3) {
+    recomendaciones.push({
+      accion: 'Reducir el espaciamiento entre conductores',
+      detalle: `Agregar más conductores en "Resistencia de Malla" (aumentar nL/nW) reduce el espaciamiento D, lo que baja el factor geométrico Km y por tanto E_m. Actualmente D ≈ ${fmt(rT.D,1)} m.`,
+      prioridad: peorRatio > 1.8 ? 'alta' : 'media', modulo: 'malla',
+    });
+  }
+
+  // 4) Varillas adicionales — mejora Ltotal y distribución de corriente
+  if (malla.nVarillas < 16) {
+    recomendaciones.push({
+      accion: 'Agregar varillas perimetrales adicionales',
+      detalle: `Más electrodos verticales aumentan L_T (longitud total enterrada), reduciendo R_g, GPR y las tensiones reales proporcionalmente. Actualmente: ${malla.nVarillas} varillas.`,
+      prioridad: 'media', modulo: 'malla',
+    });
+  }
+
+  // 5) Profundidad de enterramiento
+  if (malla.profundidad < 0.8) {
+    recomendaciones.push({
+      accion: 'Aumentar la profundidad de enterramiento',
+      detalle: `Profundidades mayores (h) mejoran el factor Kh y reducen E_m. Actualmente h = ${fmt(malla.profundidad,2)} m; considera 0.8-1.0 m si las condiciones del terreno lo permiten.`,
+      prioridad: 'baja', modulo: 'malla',
+    });
+  }
+
+  // 6) Tiempo de despeje de falla — depende de protecciones, no solo de la malla
+  if (tens.tFalla > 0.3) {
+    recomendaciones.push({
+      accion: 'Evaluar reducir el tiempo de despeje de falla',
+      detalle: `Tiempos de despeje más rápidos (relés/protecciones más veloces) aumentan los límites admisibles (E_touch, E_step son inversamente proporcionales a √t). Actualmente t = ${fmt(tens.tFalla,2)} s — esto depende del sistema de protecciones, no solo del diseño de malla.`,
+      prioridad: 'baja', modulo: 'tensiones',
+    });
+  }
+
+  // Ordenar por prioridad: alta > media > baja
+  const orden = { alta: 0, media: 1, baja: 2 };
+  recomendaciones.sort((a,b) => orden[a.prioridad] - orden[b.prioridad]);
+  return recomendaciones;
+}
+
+
+
+// ---------------------------------------------------------------------
+// MOTOR DE CÁLCULO — DIMENSIONAMIENTO DE CONDUCTOR (IEEE 80-2013, Cl. 11, Ec. de Onderdonk)
+// ---------------------------------------------------------------------
+// Tabla de conductores de cobre comerciales: calibre AWG/kcmil → área en mm²
+const CONDUCTOR_TABLE = [
+  { calibre: '2 AWG',   mm2: 33.6  },
+  { calibre: '1/0 AWG', mm2: 53.5  },
+  { calibre: '2/0 AWG', mm2: 67.4  },
+  { calibre: '3/0 AWG', mm2: 85.0  },
+  { calibre: '4/0 AWG', mm2: 107.2 },
+  { calibre: '250 kcmil', mm2: 126.7 },
+  { calibre: '300 kcmil', mm2: 152.0 },
+  { calibre: '350 kcmil', mm2: 177.3 },
+  { calibre: '500 kcmil', mm2: 253.4 },
+  { calibre: '750 kcmil', mm2: 380.0 },
+];
+
+// Ecuación de Onderdonk (IEEE 80-2013, Ec. 37): área mínima de conductor de cobre
+// que soporta la corriente de falla sin fundirse, dado el tiempo de despeje.
+// A[mm2] = I[kA] * sqrt( t / ( (TCAP/(t_r*alfa_r*rho_r)) * ln( (Km+Tm)/(Km+Ta) ) ) )^-1 ... forma simplificada usual:
+// I = A * sqrt( (TCAP*10^-4 / (t*alfa_r*rho_r)) * ln( (Km+Tm)/(Km+Ta) ) )
+// → despejando A para cobre blando comercial (97% IACS), constantes IEEE Tabla 7:
+function onderdonkArea({ Ifalla_kA, tFalla, tempAmbiente, tempMaxFusion }) {
+  // Constantes para cobre comercial blando (97.0% conductividad), IEEE 80 Tabla 7:
+  const TCAP = 3.422;     // cal/(cm3·°C), capacidad térmica
+  const alfa_r = 0.00381; // 1/°C, coef. térmico de resistividad a 20°C
+  const rho_r = 1.78;     // µΩ·cm a 20°C
+  const Ko = 234;         // °C, constante material
+  const Km = Ko; // forma equivalente usada por IEEE 80 (Ko = -1/alfa_r + Tr)
+
+  const Ta = tempAmbiente;     // °C
+  const Tm = tempMaxFusion;    // °C, temperatura máxima admisible (ej. 450°C uniones soldadas, 1083°C fusión Cu)
+
+  // A[mm²] = I[kA] / sqrt( (TCAP / (t*alfa_r*rho_r)) * ln( (Ko+Tm)/(Ko+Ta) ) ) * 197.3 (factor unidades IEEE)
+  const lnTerm = Math.log((Ko + Tm) / (Ko + Ta));
+  const denom = Math.sqrt((TCAP / (tFalla * alfa_r * rho_r)) * lnTerm);
+  const areaMm2 = (Ifalla_kA * 197.4) / denom;
+  return { areaMm2, lnTerm, denom, TCAP, alfa_r, rho_r, Ko };
+}
+
+function computeConductor(c) {
+  const r = onderdonkArea({
+    Ifalla_kA: c.iFalla / 1000,
+    tFalla: c.tFalla,
+    tempAmbiente: c.tempAmbiente,
+    tempMaxFusion: c.tempMaxFusion,
+  });
+  // Sugerido automáticamente: el conductor comercial inmediatamente superior al área mínima calculada
+  const sugerido = CONDUCTOR_TABLE.find(c2 => c2.mm2 >= r.areaMm2) || CONDUCTOR_TABLE[CONDUCTOR_TABLE.length - 1];
+
+  // Selección efectiva: si el usuario eligió manualmente un calibre, se usa ese (siempre que cumpla
+  // la sección mínima); si no hay selección manual o la elegida está subdimensionada, se usa el sugerido.
+  let seleccionado = sugerido;
+  let esSeleccionManual = false;
+  let calibreSubdimensionado = null;
+  if (c.calibreSeleccionado) {
+    const elegido = CONDUCTOR_TABLE.find(c2 => c2.calibre === c.calibreSeleccionado);
+    if (elegido) {
+      if (elegido.mm2 >= r.areaMm2) {
+        seleccionado = elegido;
+        esSeleccionManual = true;
+      } else {
+        // El calibre elegido no cumple la sección mínima: se ignora y se reporta como subdimensionado
+        calibreSubdimensionado = elegido;
+        seleccionado = sugerido;
+      }
+    }
+  }
+
+  const margen = ((seleccionado.mm2 - r.areaMm2) / r.areaMm2) * 100;
+  return { ...r, sugerido, seleccionado, esSeleccionManual, calibreSubdimensionado, margen };
+}
+
+// ---------------------------------------------------------------------
+// PLANES DE SUSCRIPCIÓN (datos de referencia para la pantalla de maqueta)
+// ---------------------------------------------------------------------
+const PLANES = [
+  {
+    id: 'free', nombre: 'Gratuito', precioMes: 0, precioAnual: 0,
+    tagline: 'Para probar el motor de cálculo',
+    features: [
+      { label: '1 proyecto activo', ok: true },
+      { label: 'Módulos Wenner y Malla', ok: true },
+      { label: 'Módulo de Tensiones de paso/contacto', ok: false },
+      { label: 'Memoria técnica con marca de agua', ok: true },
+      { label: 'Exportación PDF/Excel sin marca de agua', ok: false },
+      { label: 'Historial de cálculos', ok: false },
+      { label: 'Soporte prioritario', ok: false },
+    ],
+  },
+  {
+    id: 'pro', nombre: 'Professional', precioMes: 29990, precioAnual: 23990,
+    tagline: 'Para ingenieros y oficinas técnicas', destacado: true,
+    features: [
+      { label: 'Proyectos ilimitados', ok: true },
+      { label: 'Todos los módulos de cálculo', ok: true },
+      { label: 'Memoria técnica sin marca de agua', ok: true },
+      { label: 'Exportación PDF y Excel', ok: true },
+      { label: 'Historial ilimitado de cálculos', ok: true },
+      { label: 'Hasta 5 usuarios en el equipo', ok: true },
+      { label: 'Soporte prioritario', ok: true },
+    ],
+  },
+  {
+    id: 'enterprise', nombre: 'Enterprise', precioMes: null, precioAnual: null,
+    tagline: 'Para empresas con múltiples equipos',
+    features: [
+      { label: 'Todo lo de Professional', ok: true },
+      { label: 'Usuarios y roles ilimitados', ok: true },
+      { label: 'Auditoría de cambios y permisos', ok: true },
+      { label: 'Gestión documental centralizada', ok: true },
+      { label: 'API de integración', ok: true },
+      { label: 'Acuerdo de nivel de servicio (SLA)', ok: true },
+      { label: 'Soporte dedicado', ok: true },
+    ],
+  },
+];
+
+// ---------------------------------------------------------------------
+// UTILIDADES DE FORMATO
+// ---------------------------------------------------------------------
+const fmt = (v, d=2) => Number(v).toLocaleString('es-CL', { minimumFractionDigits:d, maximumFractionDigits:d });
+
+// Componente: botón + panel expandible "Ver fundamento técnico"
+// Renderiza una sección colapsable con la metadata trazable del cálculo
+// (FUNDAMENTOS[key]). Es contenido estático estructurado, no un motor de IA.
+function renderFundamentoTecnico(key) {
+  const f = FUNDAMENTOS[key];
+  if (!f) return '';
+  return `
+    <div class="fundamento-wrap">
+      <button class="fundamento-btn" data-fundamento-toggle="${key}">
+        <span class="fundamento-icon">§</span> Ver fundamento técnico
+        <span class="fundamento-chevron" id="chevron-${key}">▾</span>
+      </button>
+      <div class="fundamento-panel" id="fundamento-${key}" style="display:none;">
+        <div class="fundamento-header">
+          <div class="fundamento-title">${f.nombre}</div>
+          <div class="fundamento-norma"><span class="norm-tag">${f.norma}</span> <span class="norm-tag" style="margin-left:6px;">${f.clausula}</span></div>
+        </div>
+        <div class="fundamento-eq">${f.ecuacion}</div>
+        <div class="fundamento-grid">
+          <div class="fundamento-item"><div class="fi-label">Variables y unidades</div><div class="fi-text">${f.variables}</div></div>
+          <div class="fundamento-item"><div class="fi-label">Interpretación física</div><div class="fi-text">${f.interpretacion}</div></div>
+          <div class="fundamento-item"><div class="fi-label">Supuestos</div><div class="fi-text">${f.supuestos}</div></div>
+          <div class="fundamento-item"><div class="fi-label">Limitaciones</div><div class="fi-text">${f.limitaciones}</div></div>
+          <div class="fundamento-item"><div class="fi-label">Precisión esperada</div><div class="fi-text">${f.precision}</div></div>
+          <div class="fundamento-item"><div class="fi-label">Comparación con otros métodos</div><div class="fi-text">${f.comparacion}</div></div>
+        </div>
+        <div class="fundamento-biblio"><b>Bibliografía:</b> ${f.bibliografia}</div>
+      </div>
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------
+// RENDER PRINCIPAL
+// ---------------------------------------------------------------------
+const CALC_TABS = ['wenner', 'schlumberger', 'curvaspatron', 'malla', 'gel', 'conductor', 'tensiones'];
+const FULLWIDTH_TABS = ['dashboard', 'proyectos', 'perfil', 'equipo', 'planes', 'memoria', 'materiales', 'normas'];
+const AUTH_TABS = ['login', 'registro'];
+
+function render() {
+  const app = document.getElementById('app');
+
+  if (AUTH_TABS.includes(state.tab)) {
+    app.innerHTML = renderAuthScreen();
+    attachHandlers();
+    return;
+  }
+
+  app.innerHTML = `
+    ${renderTopbar()}
+    ${renderTabs()}
+    ${FULLWIDTH_TABS.includes(state.tab)
+      ? `<div class="results" style="grid-column:1/-1; max-width:1180px; width:100%; margin:0 auto;">${renderFullWidthTab()}</div>`
+      : `<div class="main">
+          <div class="inputs">${renderInputsForTab()}</div>
+          <div class="results">${renderResultsForTab()}</div>
+        </div>`
+    }
+  `;
+  attachHandlers();
+}
+
+function renderFullWidthTab() {
+  if (state.tab === 'dashboard') return renderDashboard();
+  if (state.tab === 'proyectos') return renderProyectos();
+  if (state.tab === 'perfil') return renderPerfil();
+  if (state.tab === 'equipo') return renderEquipo();
+  if (state.tab === 'planes') return renderPlanes();
+  if (state.tab === 'memoria') return renderMemoria();
+  if (state.tab === 'materiales') return renderMateriales();
+  if (state.tab === 'normas') return renderNormas();
+  return '';
+}
+function renderInputsForTab() {
+  if (state.tab === 'wenner') return renderWennerInputs();
+  if (state.tab === 'schlumberger') return renderSchlumbergerInputs();
+  if (state.tab === 'curvaspatron') return renderCurvasPatronInputs();
+  if (state.tab === 'gel') return renderGelInputs();
+  if (state.tab === 'malla') return renderMallaInputs();
+  if (state.tab === 'tensiones') return renderTensionesInputs();
+  if (state.tab === 'conductor') return renderConductorInputs();
+  return '';
+}
+function renderResultsForTab() {
+  if (state.tab === 'wenner') return renderWennerResults();
+  if (state.tab === 'schlumberger') return renderSchlumbergerResults();
+  if (state.tab === 'curvaspatron') return renderCurvasPatronResults();
+  if (state.tab === 'gel') return renderGelResults();
+  if (state.tab === 'malla') return renderMallaResults();
+  if (state.tab === 'tensiones') return renderTensionesResults();
+  if (state.tab === 'conductor') return renderConductorResults();
+  return '';
+}
+
+
+function renderTopbar() {
+  const user = getCurrentUser();
+  const rolLabel = ROL_PERMISOS[user.rol].label;
+  return `
+  <div class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" fill="none">
+        <path d="M16 3 L16 17" stroke="#E07A23" stroke-width="2"/>
+        <path d="M7 17 L25 17" stroke="#E07A23" stroke-width="2.4"/>
+        <path d="M10 21 L22 21" stroke="#E07A23" stroke-width="1.8" opacity="0.75"/>
+        <path d="M13 25 L19 25" stroke="#E07A23" stroke-width="1.2" opacity="0.5"/>
+        <circle cx="16" cy="3" r="2" fill="#E07A23"/>
+      </svg>
+      <div class="brand-text">
+        <div class="brand-name">GroundDesing Pro</div>
+        <div class="brand-sub">Motor de Cálculo · Prototipo</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span class="norm-pill">Ref. <b>IEEE Std 80-2013</b> / <b>81-2012</b></span>
+      <div class="user-switcher">
+        <select id="user-select" class="user-select">
+          ${USERS.map(u => `<option value="${u.id}" ${u.id===user.id?'selected':''}>${u.nombre} — ${ROL_PERMISOS[u.rol].label}</option>`).join('')}
+        </select>
+        <div class="user-avatar" title="${user.nombre} (${rolLabel})" data-tab-link="perfil">${user.iniciales}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderTabs() {
+  const perms = getCurrentPermisos();
+  const calcTabs = [
+    { id: 'wenner', label: 'Resistividad — Wenner', tag: 'IEEE 81' },
+    { id: 'schlumberger', label: 'Resistividad — Schlumberger', tag: 'Comparado' },
+    { id: 'curvaspatron', label: 'Curvas Patrón SEV', tag: '2-4 estratos' },
+    { id: 'malla', label: 'Resistencia de Malla', tag: 'IEEE 80' },
+    { id: 'gel', label: 'Aditivo Gel Químico', tag: 'Mejoramiento' },
+    { id: 'conductor', label: 'Dimensionamiento Conductor', tag: 'IEEE 80 · Cl.11' },
+    { id: 'tensiones', label: 'Tensiones Paso/Contacto', tag: 'IEEE 80 · Cl.16' },
+  ];
+  const navTabs = [
+    { id: 'dashboard', label: 'Dashboard' },
+    { id: 'proyectos', label: 'Proyectos' },
+    { id: 'materiales', label: 'Materiales y Costos' },
+    { id: 'normas', label: 'Normas de Referencia' },
+  ];
+  const userTabs = [
+    { id: 'perfil', label: 'Mi perfil' },
+    ...(perms.puedeGestionarUsuarios ? [{ id: 'equipo', label: 'Equipo' }] : []),
+    { id: 'planes', label: 'Planes' },
+  ];
+  const finalTabs = [
+    { id: 'memoria', label: 'Memoria Técnica' },
+  ];
+  return `
+  <div class="tabs">
+    ${navTabs.map(t => `
+      <div class="tab ${state.tab===t.id?'active':''}" data-tab="${t.id}">
+        ${t.label} <span class="tag" style="background:#3a302122; color:#c9a35e;">Maqueta</span>
+      </div>
+    `).join('')}
+    <div style="width:1px; background:var(--line); margin:8px 4px;"></div>
+    ${calcTabs.map(t => `
+      <div class="tab ${state.tab===t.id?'active':''}" data-tab="${t.id}">
+        ${t.label} <span class="tag">${t.tag}</span>
+      </div>
+    `).join('')}
+    <div style="width:1px; background:var(--line); margin:8px 4px;"></div>
+    ${userTabs.map(t => `
+      <div class="tab ${state.tab===t.id?'active':''}" data-tab="${t.id}">
+        ${t.label} <span class="tag" style="background:#3a302122; color:#c9a35e;">Maqueta</span>
+      </div>
+    `).join('')}
+    <div style="width:1px; background:var(--line); margin:8px 4px;"></div>
+    ${finalTabs.map(t => `
+      <div class="tab ${state.tab===t.id?'active':''}" data-tab="${t.id}" style="border-left:2px solid var(--copper);">
+        ${t.label} <span class="tag" style="background:#3a302122; color:#c9a35e;">Maqueta</span>
+      </div>
+    `).join('')}
+  </div>`;
+}
+
+// ---------------------------------------------------------------------
+// MÓDULO 1: WENNER — INPUTS
+// ---------------------------------------------------------------------
+function renderWennerInputs() {
+  const validCount = state.wennerReadings.filter(r => r.a > 0 && r.r > 0).length;
+  const cumpleMinimo = validCount >= 10;
+  return `
+    <h2 class="panel-title">Lecturas de campo</h2>
+    <p class="panel-desc">Ingresa los pares espaciamiento–resistencia medidos en terreno con un telurómetro (earth tester) usando el método de los cuatro electrodos (Wenner), según IEEE Std 81-2012, Cláusula 8.</p>
+
+    <div class="field-group">
+      <div class="field-group-label">Estado de las mediciones</div>
+      <div class="mockup-banner" style="background:${cumpleMinimo?'#2E7D3214':'#C7770014'}; border-color:${cumpleMinimo?'#2E7D3255':'#C7770055'};">
+        <span class="mb-icon" style="color:${cumpleMinimo?'var(--safe)':'var(--warn)'};">${cumpleMinimo?'✓':'⚠'}</span>
+        <span class="mb-text" style="color:${cumpleMinimo?'#8fc991':'#e0a93f'};">
+          <b>${validCount} lecturas válidas</b> ${cumpleMinimo
+            ? '— cumple el mínimo recomendado de 10 mediciones para una interpretación confiable.'
+            : `— se recomienda un mínimo de <b>10 mediciones</b> en espaciamientos crecientes para una interpretación confiable de suelo estratificado. Faltan ${10-validCount} lecturas para alcanzar el mínimo.`}
+        </span>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <div class="field-group-label">Modelo de suelo</div>
+      <div class="seg">
+        <button data-soil="homog" class="${state.soilModel==='homog'?'active':''}">Homogéneo</button>
+        <button data-soil="estrat" class="${state.soilModel==='estrat'?'active':''}">Estratificado (2 capas)</button>
+      </div>
+      <div class="hint">${state.soilModel==='homog'
+        ? 'Asume resistividad constante con la profundidad. Válido si ρₐ(a) es aproximadamente constante en las lecturas.'
+        : 'Estima ρ₁ (capa superior), ρ₂ (capa inferior) y h (espesor) a partir de la curva ρₐ vs. a, por método de asíntotas.'}</div>
+    </div>
+
+    <div class="field-group">
+      <div class="field-group-label">Mediciones (a, R) — mínimo 8-10 recomendado</div>
+      <table class="readings-table">
+        <thead><tr><th>a (m)</th><th>R (Ω)</th><th></th></tr></thead>
+        <tbody id="readings-body">
+          ${state.wennerReadings.map((r, i) => `
+            <tr>
+              <td><input type="number" step="0.1" value="${r.a}" data-idx="${i}" data-field="a"></td>
+              <td><input type="number" step="0.1" value="${r.r}" data-idx="${i}" data-field="r"></td>
+              <td><button class="row-del" data-del="${i}" title="Eliminar lectura">✕</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      <button class="add-row-btn" id="add-reading">+ Agregar lectura</button>
+      <div class="hint"><b>a</b> = espaciamiento entre electrodos · <b>R</b> = resistencia medida con telurómetro. No hay límite de lecturas — agrega tantas como tengas en terreno.</div>
+    </div>
+
+    <div class="field-group">
+      <div class="field-group-label">Cómo medir en terreno — recomendaciones</div>
+      <div class="calc-block" style="font-size:11.5px; line-height:1.7; color:var(--text-dim);">
+        <p style="margin:0 0 10px;"><b style="color:var(--text);">Equipo:</b> telurómetro (earth tester) de 4 terminales (C1-P1-P2-C2), 4 electrodos auxiliares, cable de medición, martillo.</p>
+        <p style="margin:0 0 10px;"><b style="color:var(--text);">Disposición:</b> clava los 4 electrodos en línea recta y equiespaciados a una distancia 'a'. Los electrodos exteriores (C1, C2) inyectan corriente; los interiores (P1, P2) miden el potencial.</p>
+        <p style="margin:0 0 10px;"><b style="color:var(--text);">Secuencia de espaciamientos sugerida:</b> realiza lecturas en una progresión creciente, por ejemplo 1, 2, 4, 8, 16, 32 m (escala aproximadamente geométrica), agregando puntos intermedios donde la curva cambie de pendiente. Esto permite detectar estratos a distintas profundidades efectivas (la profundidad de investigación es aproximadamente igual a 'a').</p>
+        <p style="margin:0 0 10px;"><b style="color:var(--text);">Orientación:</b> repite el sondeo en 2 direcciones perpendiculares (ej. Norte-Sur y Este-Oeste) si sospechas heterogeneidad lateral del terreno; promedia o reporta ambas series.</p>
+        <p style="margin:0 0 10px;"><b style="color:var(--text);">Buenas prácticas:</b> verifica buen contacto eléctrico de los electrodos con el suelo (humedece si es necesario en suelo seco), evita medir cerca de estructuras metálicas enterradas, cercos, o líneas de alta tensión que puedan inducir corrientes parásitas, y repite cada lectura 2-3 veces para verificar consistencia.</p>
+        <p style="margin:0;"><b style="color:var(--text);">Mínimo recomendado:</b> 10 lecturas para sondeos preliminares; sondeos para mallas críticas (subestaciones de alta tensión) suelen requerir 12-15+ lecturas con mayor rango de espaciamientos.</p>
+      </div>
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------
+// MÓDULO 1: WENNER — RESULTADOS
+// ---------------------------------------------------------------------
+function renderWennerResults() {
+  const readings = state.wennerReadings.filter(r => r.a > 0 && r.r > 0);
+  if (readings.length < 2) {
+    return `<div class="locked-pane"><div class="lock-icon">⊘</div><h3>Datos insuficientes</h3><p>Ingresa al menos 2 lecturas válidas de espaciamiento y resistencia para calcular la resistividad aparente.</p></div>`;
+  }
+
+  const computed = readings.map(r => ({ ...r, rho: wennerApparent(r.a, r.r) }));
+  const avgRho = computed.reduce((s,c)=>s+c.rho,0) / computed.length;
+  const twoLayer = state.soilModel === 'estrat' ? estimateTwoLayer(readings) : null;
+
+  // Diagrama SVG de electrodos Wenner
+  const maxA = Math.max(...readings.map(r=>r.a));
+  const svgW = 560, svgH = 150, margin = 40;
+  const scale = (svgW - 2*margin) / (3 * maxA);
+  const cx = svgW/2;
+  const positions = [-1.5*maxA, -0.5*maxA, 0.5*maxA, 1.5*maxA].map(x => cx + x*scale);
+  const groundY = 95;
+
+  const diagram = `
+    <svg viewBox="0 0 ${svgW} ${svgH}" xmlns="http://www.w3.org/2000/svg">
+      <line x1="20" y1="${groundY}" x2="${svgW-20}" y2="${groundY}" stroke="#3a4250" stroke-width="1.5"/>
+      ${Array.from({length:14}).map((_,i)=> `<line x1="${30+i*40}" y1="${groundY}" x2="${20+i*40}" y2="${groundY+12}" stroke="#2a313a" stroke-width="1"/>`).join('')}
+      ${positions.map((x,i)=>`
+        <line x1="${x}" y1="${groundY}" x2="${x}" y2="${groundY+28}" stroke="${i===0||i===3?'#E07A23':'#7a8593'}" stroke-width="2.5"/>
+        <circle cx="${x}" cy="${groundY+28}" r="3" fill="${i===0||i===3?'#E07A23':'#7a8593'}"/>
+        <text x="${x}" y="${groundY-10}" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" fill="${i===0||i===3?'#E07A23':'#9aa3ad'}">${['C1','P1','P2','C2'][i]}</text>
+      `).join('')}
+      <line x1="${positions[0]}" y1="40" x2="${positions[1]}" y2="40" stroke="#5a6472" stroke-width="1"/>
+      <line x1="${positions[0]}" y1="36" x2="${positions[0]}" y2="44" stroke="#5a6472" stroke-width="1"/>
+      <line x1="${positions[1]}" y1="36" x2="${positions[1]}" y2="44" stroke="#5a6472" stroke-width="1"/>
+      <text x="${(positions[0]+positions[1])/2}" y="30" text-anchor="middle" font-family="IBM Plex Mono" font-size="11" fill="#E07A23" font-weight="600">a = ${fmt(maxA,1)} m</text>
+      <text x="${cx}" y="${svgH-8}" text-anchor="middle" font-family="IBM Plex Sans" font-size="10" fill="#6b7480">Disposición de cuatro electrodos equiespaciados — corriente inyectada en C1/C2, potencial medido en P1/P2</text>
+    </svg>
+  `;
+
+  const rowsHtml = computed.map(c => `
+    <tr><td>${fmt(c.a,1)}</td><td>${fmt(c.r,1)}</td><td class="hl">${fmt(c.rho,1)}</td></tr>
+  `).join('');
+
+  return `
+    <div class="diagram-card">${diagram}</div>
+
+    <div class="result-hero">
+      <div class="stat-card primary">
+        <div class="stat-label">Resistividad promedio</div>
+        <div class="stat-value">${fmt(avgRho,1)}<span class="stat-unit">Ω·m</span></div>
+        <div class="stat-note">Promedio aritmético de ρₐ sobre ${computed.length} lecturas</div>
+      </div>
+      ${twoLayer ? `
+        <div class="stat-card">
+          <div class="stat-label">Capa superior ρ₁</div>
+          <div class="stat-value">${fmt(twoLayer.rho1,1)}<span class="stat-unit">Ω·m</span></div>
+          <div class="stat-note">Estimado de lecturas con 'a' pequeño</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Capa inferior ρ₂</div>
+          <div class="stat-value">${fmt(twoLayer.rho2,1)}<span class="stat-unit">Ω·m</span></div>
+          <div class="stat-note">Estimado de lecturas con 'a' grande</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Espesor estimado h</div>
+          <div class="stat-value">${fmt(twoLayer.h,1)}<span class="stat-unit">m</span></div>
+          <div class="stat-note">Punto donde ρₐ ≈ √(ρ₁·ρ₂)</div>
+        </div>
+      ` : ''}
+    </div>
+
+    <div class="section-title">Cálculo de resistividad aparente <span class="norm-tag">IEEE 81-2012 · Cl. 8.3</span></div>
+    <p class="section-sub">Para cada espaciamiento, la resistividad aparente del suelo se obtiene de la lectura del telurómetro mediante la ecuación de Wenner (válida cuando la profundidad de los electrodos es pequeña respecto a 'a').</p>
+
+    <div class="calc-block">
+      <div class="eq">ρₐ <span class="op">=</span> 2 <span class="op">·</span> π <span class="op">·</span> a <span class="op">·</span> R</div>
+      <table class="data-table">
+        <thead><tr><th>a (m)</th><th>R medida (Ω)</th><th>ρₐ calculada (Ω·m)</th></tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>
+
+    ${twoLayer ? `
+    <div class="section-title">Interpretación de suelo estratificado <span class="norm-tag">Método de asíntotas</span></div>
+    <p class="section-sub">Aproximación de ingeniería: se toma el promedio de ρₐ en el tramo de 'a' pequeño como ρ₁ y en el tramo de 'a' grande como ρ₂. El espesor h se estima en el punto donde la curva cruza la media geométrica √(ρ₁·ρ₂). Para diseños críticos, valida con un software de inversión geofísica dedicado.</p>
+    <div class="calc-block">
+      <div class="calc-row"><div class="ck">ρ₁ (superior)</div><div class="cv">${fmt(twoLayer.rho1,1)} Ω·m</div></div>
+      <div class="calc-row"><div class="ck">ρ₂ (inferior)</div><div class="cv">${fmt(twoLayer.rho2,1)} Ω·m</div></div>
+      <div class="calc-row final"><div class="ck">h estimado</div><div class="cv">${fmt(twoLayer.h,1)} m</div></div>
+    </div>
+    ` : ''}
+
+    ${renderFundamentoTecnico('wenner')}
+
+    <div class="footer-note">
+      <b>Trazabilidad:</b> IEEE Std 81-2012 "IEEE Guide for Measuring Earth Resistivity, Ground Impedance, and Earth Surface Potentials of a Grounding System", Cláusula 8 (Método de Wenner). La interpretación de dos capas es una aproximación estándar de campo; no reemplaza un análisis de inversión completo para suelos altamente heterogéneos.
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------
+// MÓDULO 2: MALLA — INPUTS
+// ---------------------------------------------------------------------
+function renderMallaInputs() {
+  const m = state.malla;
+  const wReadings = state.wennerReadings.filter(r => r.a > 0 && r.r > 0);
+  const rhoMedido = wReadings.length
+    ? wReadings.reduce((s,r) => s + wennerApparent(r.a, r.r), 0) / wReadings.length
+    : null;
+  return `
+    <h2 class="panel-title">Geometría de la malla</h2>
+    <p class="panel-desc">Define la malla de puesta a tierra rectangular y los parámetros de falla, según IEEE Std 80-2013, Cláusula 14 (ecuación de Sverak).</p>
+
+    <div class="field-group">
+      <div class="field-group-label">Dimensiones</div>
+      <div class="field-row">
+        <div class="field"><label>Largo <span class="unit">m</span></label><input type="number" id="m-largo" value="${m.largo}" min="1" step="0.5"></div>
+        <div class="field"><label>Ancho <span class="unit">m</span></label><input type="number" id="m-ancho" value="${m.ancho}" min="1" step="0.5"></div>
+      </div>
+      <div class="field"><label>Profundidad de enterramiento <span class="unit">m</span></label><input type="number" id="m-profundidad" value="${m.profundidad}" min="0.1" step="0.1"></div>
+    </div>
+
+    <div class="field-group">
+      <div class="field-group-label">Conductores de la malla</div>
+      <div class="field-row">
+        <div class="field"><label>Conductores // al largo <span class="unit">#</span></label><input type="number" id="m-condL" value="${m.nConductoresL}" min="1" step="1"></div>
+        <div class="field"><label>Conductores // al ancho <span class="unit">#</span></label><input type="number" id="m-condW" value="${m.nConductoresW}" min="1" step="1"></div>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <div class="field-group-label">Electrodos verticales (varillas)</div>
+      <div class="field-row">
+        <div class="field"><label>Cantidad <span class="unit">#</span></label><input type="number" id="m-nvarillas" value="${m.nVarillas}" min="0" step="1"></div>
+        <div class="field"><label>Longitud c/u <span class="unit">m</span></label><input type="number" id="m-lvarilla" value="${m.longVarilla}" min="0" step="0.1"></div>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <div class="field-group-label">Resistividad del suelo — origen del dato</div>
+      <div class="seg">
+        <button data-rho-origen="medido" class="${m.rhoOrigen!=='manual'?'active':''}" ${!rhoMedido?'disabled':''}>Desde mediciones (Wenner)</button>
+        <button data-rho-origen="manual" class="${m.rhoOrigen==='manual'?'active':''}">Manual</button>
+      </div>
+      ${m.rhoOrigen === 'manual' ? `
+        <div class="field" style="margin-top:10px;"><label>Resistividad del suelo ρ <span class="unit">Ω·m</span></label><input type="number" id="m-rho" value="${m.rho}" min="1" step="1"></div>
+        <div class="hint">Valor ingresado manualmente. Cambia a "Desde mediciones" para usar el promedio real de tus ${wReadings.length} lecturas Wenner válidas${rhoMedido?` (${fmt(rhoMedido,1)} Ω·m)`:''}.</div>
+      ` : `
+        <div class="calc-row final" style="padding:10px 0;"><div class="ck">ρ promedio (Wenner, ${wReadings.length} lecturas)</div><div class="cv">${rhoMedido ? fmt(rhoMedido,1)+' Ω·m' : 'sin datos'}</div></div>
+        <div class="hint">Trazabilidad profesional: este valor se recalcula automáticamente cada vez que editas las lecturas de campo en "Resistividad — Wenner". Para usar un valor distinto, cambia a modo Manual.</div>
+      `}
+    </div>
+
+    <div class="field-group">
+      <div class="field-group-label">Parámetros de falla</div>
+      <div class="field-row">
+        <div class="field"><label>Corriente de falla I<sub>g</sub> <span class="unit">A</span></label><input type="number" id="m-ifalla" value="${m.iFalla}" min="1" step="100"></div>
+        <div class="field"><label>Duración falla t <span class="unit">s</span></label><input type="number" id="m-tfalla" value="${m.tFalla}" min="0.01" step="0.05"></div>
+      </div>
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------
+// MÓDULO 2: MALLA — RESULTADOS
+// ---------------------------------------------------------------------
+function renderMallaResults() {
+  const m = state.malla;
+  const gelInfo = state.gel.activo ? computeGel(state.gel, m.rho) : null;
+  const r = computeMalla(m, gelInfo);
+  const isSafe = r.gpr < 5000; // umbral ilustrativo de referencia, no normativo definitivo
+
+  // Diagrama de malla (vista en planta)
+  const svgW = 560, svgH = 280, pad = 50;
+  const drawableW = svgW - 2*pad, drawableH = svgH - 2*pad;
+  const scaleX = drawableW / m.largo;
+  const scaleY = drawableH / m.ancho;
+  const scale = Math.min(scaleX, scaleY);
+  const gW = m.largo * scale, gH = m.ancho * scale;
+  const ox = (svgW - gW)/2, oy = (svgH - gH)/2;
+
+  let gridLines = '';
+  for (let i=0;i<m.nConductoresL;i++){
+    const y = oy + (i/(m.nConductoresL-1||1))*gH;
+    gridLines += `<line x1="${ox}" y1="${y}" x2="${ox+gW}" y2="${y}" stroke="#E07A23" stroke-width="1.3" opacity="0.85"/>`;
+  }
+  for (let i=0;i<m.nConductoresW;i++){
+    const x = ox + (i/(m.nConductoresW-1||1))*gW;
+    gridLines += `<line x1="${x}" y1="${oy}" x2="${x}" y2="${oy+gH}" stroke="#E07A23" stroke-width="1.3" opacity="0.85"/>`;
+  }
+  let rods = '';
+  const rodsPerSide = Math.max(1, Math.ceil(m.nVarillas/4));
+  const perim = [];
+  for(let i=0;i<m.nVarillas;i++){
+    const t = i / m.nVarillas;
+    const peri = 2*(gW+gH);
+    let d = t*peri, x,y;
+    if (d < gW) { x = ox+d; y = oy; }
+    else if (d < gW+gH) { x = ox+gW; y = oy+(d-gW); }
+    else if (d < 2*gW+gH) { x = ox+gW-(d-gW-gH); y = oy+gH; }
+    else { x = ox; y = oy+gH-(d-2*gW-gH); }
+    rods += `<circle cx="${x}" cy="${y}" r="3.4" fill="#2E7D32" stroke="#161a20" stroke-width="1"/>`;
+  }
+
+  return `
+    <div class="diagram-card">
+      <svg viewBox="0 0 ${svgW} ${svgH}" xmlns="http://www.w3.org/2000/svg">
+        <rect x="${ox}" y="${oy}" width="${gW}" height="${gH}" fill="none" stroke="#7a8593" stroke-width="2"/>
+        ${gridLines}
+        ${rods}
+        <text x="${ox+gW/2}" y="${oy+gH+28}" text-anchor="middle" font-family="IBM Plex Mono" font-size="11" fill="#9aa3ad">${fmt(m.largo,1)} m × ${fmt(m.ancho,1)} m</text>
+        <text x="${svgW-pad+12}" y="${oy+gH/2}" font-family="IBM Plex Sans" font-size="10" fill="#6b7480" transform="rotate(90 ${svgW-pad+12} ${oy+gH/2})" text-anchor="middle"></text>
+        <g transform="translate(${ox},${oy-22})">
+          <line x1="0" y1="0" x2="14" y2="0" stroke="#E07A23" stroke-width="2"/>
+          <text x="19" y="3.5" font-family="IBM Plex Sans" font-size="10" fill="#9aa3ad">Conductor de malla</text>
+          <circle cx="130" cy="0" r="3.4" fill="#2E7D32"/>
+          <text x="138" y="3.5" font-family="IBM Plex Sans" font-size="10" fill="#9aa3ad">Electrodo vertical</text>
+        </g>
+      </svg>
+    </div>
+
+    <div class="result-hero">
+      <div class="stat-card primary">
+        <div class="stat-label">Resistencia de la malla R<sub>g</sub></div>
+        <div class="stat-value">${fmt(r.Rg,3)}<span class="stat-unit">Ω</span></div>
+        <div class="stat-note">Ecuación de Sverak — IEEE Std 80-2013, Cl. 14.2${gelInfo ? ' · con gel químico' : ''}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">GPR (Ground Potential Rise)</div>
+        <div class="stat-value">${fmt(r.gpr,0)}<span class="stat-unit">V</span></div>
+        <div class="stat-note">GPR = R<sub>g</sub> × I<sub>g</sub></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Conductor total enterrado</div>
+        <div class="stat-value">${fmt(r.Ltotal,1)}<span class="stat-unit">m</span></div>
+        <div class="stat-note">Malla + varillas verticales</div>
+      </div>
+      <div class="stat-card${gelInfo ? ' primary' : ''}">
+        <div class="stat-label">${gelInfo ? 'ρ efectiva (con gel)' : 'Área de la malla'}</div>
+        <div class="stat-value">${gelInfo ? fmt(r.rhoUsado,1) : fmt(r.area,0)}<span class="stat-unit">${gelInfo ? 'Ω·m' : 'm²'}</span></div>
+        ${gelInfo ? `<div class="stat-note">vs. ${fmt(m.rho,1)} Ω·m nativa · mejora ${fmt(gelInfo.mejoraPct,1)}%</div>` : ''}
+      </div>
+    </div>
+
+    ${gelInfo ? `
+    <div class="mockup-banner" style="background:#1e3a2d22; border-color:#2E7D3255;">
+      <span class="mb-icon" style="color:var(--safe);">⚗</span>
+      <span class="mb-text" style="color:#8fc991;"><b>Aditivo químico gel activo.</b> Este cálculo de malla usa la resistividad efectiva equivalente (${fmt(r.rhoUsado,1)} Ω·m) del módulo "Aditivo Gel", en vez de la resistividad nativa (${fmt(m.rho,1)} Ω·m). Desactívalo en ese módulo para ver el cálculo con suelo sin tratar.</span>
+    </div>
+    ` : ''}
+
+    <div class="verdict-banner ${isSafe?'ok':'warn'}">
+      <span class="v-icon">${isSafe?'✓':'!'}</span>
+      <span>${isSafe
+        ? 'El GPR calculado se encuentra dentro de un rango orientativo aceptable. Esto NO sustituye el cálculo formal de tensiones de paso y contacto admisibles (IEEE 80, Cl. 16), que debe completarse antes de aprobar el diseño.'
+        : 'El GPR calculado es elevado. Se recomienda revisar la geometría de la malla, aumentar el número de electrodos/conductores, aplicar aditivo gel químico en las varillas, o verificar la resistividad del suelo antes de continuar con el diseño.'}</span>
+    </div>
+
+    <div class="section-title">Resistencia de la malla — método de Sverak <span class="norm-tag">IEEE 80-2013 · Cl. 14.2</span></div>
+    <p class="section-sub">Fórmula simplificada de Sverak para mallas rectangulares, que considera el área cubierta, la longitud total de conductor y la profundidad de enterramiento.</p>
+    <div class="calc-block">
+      <div class="eq">R<sub>g</sub> <span class="op">=</span> ρ <span class="op">·</span> [ 1/L<sub>T</sub> <span class="op">+</span> (1/√(20A)) <span class="op">·</span> (1 + 1/(1+h√(20/A))) ]</div>
+      <div class="calc-row"><div class="ck">ρ (resistividad)</div><div class="cv">${fmt(m.rho,1)} Ω·m</div></div>
+      <div class="calc-row"><div class="ck">A (área)</div><div class="cv">${fmt(r.area,1)} m²</div></div>
+      <div class="calc-row"><div class="ck">L<sub>T</sub> (long. total)</div><div class="cv">${fmt(r.Ltotal,1)} m <span class="ghost">(malla: ${fmt(r.condL,1)} m + varillas: ${fmt(r.condRods,1)} m)</span></div></div>
+      <div class="calc-row"><div class="ck">h (profundidad)</div><div class="cv">${fmt(m.profundidad,2)} m</div></div>
+      <div class="calc-row"><div class="ck">Término 1/L<sub>T</sub></div><div class="cv">${fmt(r.term1,5)}</div></div>
+      <div class="calc-row"><div class="ck">Término geométrico</div><div class="cv">${fmt(r.term2,5)}</div></div>
+      <div class="calc-row final"><div class="ck">R<sub>g</sub> resultante</div><div class="cv">${fmt(r.Rg,3)} Ω</div></div>
+    </div>
+
+    <div class="section-title">Elevación de potencial de tierra (GPR)</div>
+    <p class="section-sub">El GPR es el voltaje máximo que puede alcanzar la malla respecto a tierra remota durante una falla. Es el punto de partida para el análisis de tensiones de paso y contacto (módulo en desarrollo).</p>
+    <div class="calc-block">
+      <div class="eq">GPR <span class="op">=</span> R<sub>g</sub> <span class="op">·</span> I<sub>g</sub></div>
+      <div class="calc-row"><div class="ck">I<sub>g</sub> (corriente de falla)</div><div class="cv">${fmt(m.iFalla,0)} A</div></div>
+      <div class="calc-row"><div class="ck">t (duración de falla)</div><div class="cv">${fmt(m.tFalla,2)} s <span class="ghost">— usado en el módulo de tensiones admisibles</span></div></div>
+      <div class="calc-row final"><div class="ck">GPR</div><div class="cv">${fmt(r.gpr,0)} V</div></div>
+    </div>
+
+    ${renderFundamentoTecnico('malla')}
+
+    <div class="footer-note">
+      <b>Trazabilidad:</b> IEEE Std 80-2013 "IEEE Guide for Safety in AC Substation Grounding", Cláusula 14.2 (ecuación de Sverak para resistencia de malla). El umbral de GPR mostrado es orientativo; la aceptación formal del diseño requiere comparar las tensiones de paso/contacto reales contra los límites de la Cláusula 16, módulo aún no incluido en este prototipo.
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------
+// MÓDULO 3: TENSIONES DE PASO/CONTACTO — INPUTS
+// ---------------------------------------------------------------------
+function renderTensionesInputs() {
+  const t = state.tensiones;
+  return `
+    <h2 class="panel-title">Parámetros de seguridad</h2>
+    <p class="panel-desc">Calcula las tensiones admisibles y reales de paso/contacto según IEEE Std 80-2013, Cláusula 16. La geometría de la malla y la resistividad del suelo se toman del módulo "Resistencia de Malla".</p>
+
+    <div class="field-group">
+      <div class="field-group-label">Resistividad superficial (capa de grava)</div>
+      <div class="field"><label>ρₛ — capa superficial (grava) <span class="unit">Ω·m</span></label><input type="number" id="tn-rhos" value="${t.rhoSuperficial}" min="1" step="50"></div>
+      <div class="field"><label>hₛ — espesor capa superficial <span class="unit">m</span></label><input type="number" id="tn-hs" value="${t.hSuperficial}" min="0" step="0.01"></div>
+      <div class="hint">La capa de grava superficial reduce la corriente que circula por el cuerpo al aumentar la resistencia de contacto con el suelo. La resistividad del suelo nativo (ρ) se hereda automáticamente del módulo "Resistencia de Malla" — ver panel de geometría heredada abajo.</div>
+    </div>
+
+    <div class="field-group">
+      <div class="field-group-label">Condiciones de falla y persona</div>
+      <div class="field"><label>t — duración de la falla <span class="unit">s</span></label><input type="number" id="tn-t" value="${t.tFalla}" min="0.01" step="0.05"></div>
+      <div class="field">
+        <label>Peso corporal de referencia</label>
+        <div class="seg">
+          <button data-peso="50" class="${t.pesoPersona===50?'active':''}">50 kg</button>
+          <button data-peso="70" class="${t.pesoPersona===70?'active':''}">70 kg</button>
+        </div>
+      </div>
+      <div class="hint">IEEE 80 define curvas separadas para 50 kg y 70 kg. 70 kg es el caso típico para personal adulto.</div>
+    </div>
+
+    <div class="field-group">
+      <div class="field-group-label">Heredado del módulo Malla (única fuente de verdad)</div>
+      <div class="hint">ρ suelo: <b>${fmt(state.malla.rho,1)} Ω·m</b> (${state.malla.rhoOrigen==='manual'?'manual':'medido — Wenner'}) · Largo: <b>${fmt(state.malla.largo,1)} m</b> · Ancho: <b>${fmt(state.malla.ancho,1)} m</b> · Profundidad: <b>${fmt(state.malla.profundidad,2)} m</b> · I<sub>g</sub>: <b>${fmt(state.malla.iFalla,0)} A</b><br><br>Edita estos valores en la pestaña "Resistencia de Malla"; este módulo los reutiliza automáticamente y se recalcula en cada cambio.</div>
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------
+// MÓDULO 3: TENSIONES DE PASO/CONTACTO — RESULTADOS
+// ---------------------------------------------------------------------
+function renderTensionesResults() {
+  const t = state.tensiones;
+  const r = computeTensiones(t, state.malla, state.conductor);
+  const touchPct = Math.min(100, (r.Em / r.Etouch) * 100);
+  const stepPct = Math.min(100, (r.Es / r.Estep) * 100);
+  const barColor = (ok) => ok ? 'var(--safe)' : 'var(--danger)';
+  const diagnostico = diagnosticoTensiones(r, state.malla, t, state.gel.activo);
+
+  return `
+    <div class="result-hero">
+      <div class="stat-card" style="border-color:${r.touchOk?'var(--line)':'var(--danger)'};">
+        <div class="stat-label">Tensión de contacto real E<sub>m</sub></div>
+        <div class="stat-value" style="color:${r.touchOk?'var(--text)':'var(--danger)'}">${fmt(r.Em,1)}<span class="stat-unit">V</span></div>
+        <div class="stat-note">Admisible: ${fmt(r.Etouch,1)} V (${t.pesoPersona} kg)</div>
+      </div>
+      <div class="stat-card" style="border-color:${r.stepOk?'var(--line)':'var(--danger)'};">
+        <div class="stat-label">Tensión de paso real E<sub>s</sub></div>
+        <div class="stat-value" style="color:${r.stepOk?'var(--text)':'var(--danger)'}">${fmt(r.Es,1)}<span class="stat-unit">V</span></div>
+        <div class="stat-note">Admisible: ${fmt(r.Estep,1)} V (${t.pesoPersona} kg)</div>
+      </div>
+      <div class="stat-card primary">
+        <div class="stat-label">Factor de reducción C<sub>s</sub></div>
+        <div class="stat-value">${fmt(r.Cs,3)}</div>
+        <div class="stat-note">Por capa superficial de grava</div>
+      </div>
+    </div>
+
+    <div class="verdict-banner ${r.touchOk && r.stepOk ? 'ok' : 'warn'}">
+      <span class="v-icon">${r.touchOk && r.stepOk ? '✓' : '!'}</span>
+      <span>${r.touchOk && r.stepOk
+        ? 'La malla cumple con los límites de tensión de contacto y de paso admisibles según IEEE 80, Cl. 16, para los parámetros ingresados.'
+        : `La malla no cumple ${!r.touchOk && !r.stepOk ? 'la tensión de contacto ni la de paso' : !r.touchOk ? 'la tensión de contacto' : 'la tensión de paso'} admisible. Revisa las recomendaciones priorizadas a continuación, generadas en función de la geometría, gel y conductor ya dimensionados.`}</span>
+    </div>
+
+    ${diagnostico.length > 0 ? `
+    <div class="section-title">Diagnóstico y recomendaciones <span class="norm-tag">Según diseño actual</span></div>
+    <p class="section-sub">Acciones ordenadas por impacto esperado sobre el cumplimiento, calculadas a partir de la resistividad, gel químico, geometría de malla y conductor ya definidos en los módulos anteriores.</p>
+    <div class="calc-block" style="padding:0; overflow:hidden;">
+      ${diagnostico.map((rec, i) => {
+        const colorPrio = rec.prioridad === 'alta' ? 'var(--danger)' : rec.prioridad === 'media' ? 'var(--warn)' : 'var(--text-faint)';
+        const labelPrio = rec.prioridad === 'alta' ? 'Prioridad alta' : rec.prioridad === 'media' ? 'Prioridad media' : 'Prioridad baja';
+        return `
+        <div style="padding:14px 18px; ${i<diagnostico.length-1?'border-bottom:1px solid var(--line-soft);':''} display:flex; gap:14px; align-items:flex-start;">
+          <div style="flex-shrink:0; width:6px; height:6px; border-radius:50%; background:${colorPrio}; margin-top:6px;"></div>
+          <div style="flex:1;">
+            <div style="display:flex; justify-content:space-between; align-items:baseline; gap:10px; margin-bottom:4px;">
+              <span style="font-weight:600; color:var(--text); font-size:13px;">${rec.accion}</span>
+              <span style="font-family:var(--mono); font-size:9.5px; color:${colorPrio}; text-transform:uppercase; letter-spacing:.04em; white-space:nowrap;">${labelPrio}</span>
+            </div>
+            <div style="font-size:11.5px; color:var(--text-dim); line-height:1.5;">${rec.detalle}</div>
+            <button class="secondary-btn" style="margin-top:8px; padding:5px 12px; font-size:11px;" data-tab-link="${rec.modulo}">Ir al módulo →</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+    ` : ''}
+
+    <div class="section-title">Tensiones admisibles (límite de seguridad) <span class="norm-tag">IEEE 80-2013 · Cl. 16.4-16.5</span></div>
+    <p class="section-sub">Voltaje máximo que el cuerpo humano puede tolerar sin fibrilación ventricular, según el modelo de energía de Dalziel, para una persona de ${t.pesoPersona} kg.</p>
+    <div class="calc-block">
+      <div class="eq">C<sub>s</sub> <span class="op">=</span> 1 <span class="op">−</span> 0.09(1 − ρ/ρₛ) / (2h<sub>s</sub> + 0.09)</div>
+      <div class="calc-row"><div class="ck">ρ (suelo nativo)</div><div class="cv">${fmt(r.rho,1)} Ω·m</div></div>
+      <div class="calc-row"><div class="ck">ρₛ (capa superficial)</div><div class="cv">${fmt(t.rhoSuperficial,1)} Ω·m</div></div>
+      <div class="calc-row"><div class="ck">h<sub>s</sub> (espesor capa)</div><div class="cv">${fmt(t.hSuperficial,2)} m</div></div>
+      <div class="calc-row final"><div class="ck">C<sub>s</sub> resultante</div><div class="cv">${fmt(r.Cs,4)}</div></div>
+    </div>
+    <div class="calc-block">
+      <div class="eq">E<sub>touch</sub> <span class="op">=</span> (1000 + 1.5·C<sub>s</sub>·ρₛ) · 0.157/√t</div>
+      <div class="calc-row final"><div class="ck">E<sub>touch</sub> admisible</div><div class="cv">${fmt(r.Etouch,1)} V</div></div>
+      <div class="eq" style="margin-top:14px;">E<sub>step</sub> <span class="op">=</span> (1000 + 6·C<sub>s</sub>·ρₛ) · 0.157/√t</div>
+      <div class="calc-row final"><div class="ck">E<sub>step</sub> admisible</div><div class="cv">${fmt(r.Estep,1)} V</div></div>
+    </div>
+
+    <div class="section-title">Tensiones reales de la malla <span class="norm-tag">IEEE 80-2013 · Cl. 16.5</span></div>
+    <p class="section-sub">Voltaje que efectivamente aparece entre la superficie y un punto a 1 m de un conductor de la malla (E<sub>m</sub>), o entre dos puntos a 1 m de distancia en superficie (E<sub>s</sub>), durante la falla.</p>
+    <div class="calc-block">
+      <div class="eq">E<sub>m</sub> <span class="op">=</span> ρ · K<sub>i</sub> · I<sub>g</sub> · K<sub>m</sub> / L<sub>T</sub></div>
+      <div class="calc-row"><div class="ck">K<sub>m</sub> (factor geométrico)</div><div class="cv">${fmt(r.Km,4)}</div></div>
+      <div class="calc-row"><div class="ck">K<sub>i</sub> (factor irregularidad)</div><div class="cv">${fmt(r.Ki,4)} <span class="ghost">(n≈${r.n})</span></div></div>
+      <div class="calc-row"><div class="ck">D (espaciamiento promedio)</div><div class="cv">${fmt(r.D,2)} m</div></div>
+      <div class="calc-row"><div class="ck">d (diámetro conductor)</div><div class="cv">${fmt(r.d*1000,1)} mm <span class="ghost">(ref. 4/0 AWG)</span></div></div>
+      <div class="calc-row final"><div class="ck">E<sub>m</sub> resultante</div><div class="cv">${fmt(r.Em,1)} V</div></div>
+    </div>
+    <div class="calc-block">
+      <div class="eq">E<sub>s</sub> <span class="op">=</span> ρ · K<sub>s</sub> · K<sub>i</sub> · I<sub>g</sub> / L<sub>T</sub></div>
+      <div class="calc-row"><div class="ck">K<sub>s</sub> (factor geométrico de paso)</div><div class="cv">${fmt(r.Ks,4)}</div></div>
+      <div class="calc-row final"><div class="ck">E<sub>s</sub> resultante</div><div class="cv">${fmt(r.Es,1)} V</div></div>
+    </div>
+
+    <div class="section-title">Comparación contra límites</div>
+    <div class="calc-block">
+      <div style="margin-bottom:16px;">
+        <div style="display:flex; justify-content:space-between; font-size:11.5px; color:var(--text-dim); margin-bottom:6px;">
+          <span>Tensión de contacto</span><span>${fmt(r.Em,1)} V / ${fmt(r.Etouch,1)} V</span>
+        </div>
+        <div style="height:8px; background:var(--bg); border-radius:4px; overflow:hidden;">
+          <div style="height:100%; width:${touchPct}%; background:${barColor(r.touchOk)};"></div>
+        </div>
+      </div>
+      <div>
+        <div style="display:flex; justify-content:space-between; font-size:11.5px; color:var(--text-dim); margin-bottom:6px;">
+          <span>Tensión de paso</span><span>${fmt(r.Es,1)} V / ${fmt(r.Estep,1)} V</span>
+        </div>
+        <div style="height:8px; background:var(--bg); border-radius:4px; overflow:hidden;">
+          <div style="height:100%; width:${stepPct}%; background:${barColor(r.stepOk)};"></div>
+        </div>
+      </div>
+    </div>
+
+    ${renderFundamentoTecnico('tensiones')}
+
+    <div class="footer-note">
+      <b>Trazabilidad:</b> IEEE Std 80-2013, Cláusula 16 completa (16.3 a 16.6). Las ecuaciones de K<sub>m</sub>, K<sub>i</sub>, K<sub>s</sub> usadas corresponden a la forma simplificada de Sverak para mallas con electrodos perimetrales (K<sub>ii</sub>=1). El diámetro de conductor (d = ${fmt(r.d*1000,1)} mm) se toma del calibre ${state.conductor.calibreSeleccionado || 'sugerido automáticamente'} dimensionado en el módulo "Dimensionamiento Conductor" — si cambias el calibre ahí, este cálculo se actualiza.
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------
+// MÓDULO 4: DIMENSIONAMIENTO DE CONDUCTOR — INPUTS
+// ---------------------------------------------------------------------
+function renderConductorInputs() {
+  const c = state.conductor;
+  const r = computeConductor(c);
+  return `
+    <h2 class="panel-title">Parámetros térmicos</h2>
+    <p class="panel-desc">Calcula la sección mínima de conductor de cobre que soporta la corriente de falla sin fundirse, según la ecuación de Onderdonk (IEEE Std 80-2013, Cláusula 11).</p>
+
+    <div class="field-group">
+      <div class="field-group-label">Corriente y tiempo de falla</div>
+      <div class="field"><label>I<sub>g</sub> — corriente de falla <span class="unit">A</span></label><input type="number" id="cd-ifalla" value="${c.iFalla}" min="1" step="100"></div>
+      <div class="field"><label>t — duración de la falla <span class="unit">s</span></label><input type="number" id="cd-tfalla" value="${c.tFalla}" min="0.01" step="0.05"></div>
+      <div class="hint">Usa los mismos valores que el módulo "Resistencia de Malla" para mantener consistencia, o edítalos aquí para un escenario distinto.</div>
+    </div>
+
+    <div class="field-group">
+      <div class="field-group-label">Temperaturas límite</div>
+      <div class="field"><label>T<sub>a</sub> — temperatura ambiente <span class="unit">°C</span></label><input type="number" id="cd-tamb" value="${c.tempAmbiente}" min="-10" step="5"></div>
+      <div class="field"><label>T<sub>m</sub> — temperatura máxima admisible <span class="unit">°C</span></label><input type="number" id="cd-tmax" value="${c.tempMaxFusion}" min="100" step="10"></div>
+      <div class="hint">450°C es conservador para uniones soldadas exotérmicas (no recocer el conductor). 1083°C es el punto de fusión del cobre puro — usar solo si las uniones son atornilladas/prensadas y no soldadas.</div>
+    </div>
+
+    <div class="field-group">
+      <div class="field-group-label">Calibre del conductor a instalar</div>
+      <select id="cd-calibre-select" class="role-select" style="width:100%; padding:9px 10px; font-size:13px;">
+        <option value="" ${!c.calibreSeleccionado?'selected':''}>Automático — usar el sugerido (${r.sugerido.calibre})</option>
+        ${CONDUCTOR_TABLE.map(row => {
+          const insuficiente = row.mm2 < r.areaMm2;
+          return `<option value="${row.calibre}" ${c.calibreSeleccionado===row.calibre?'selected':''} ${insuficiente?'disabled':''}>${row.calibre} — ${fmt(row.mm2,1)} mm²${insuficiente?' (insuficiente, no seleccionable)':''}</option>`;
+        }).join('')}
+      </select>
+      <div class="hint">El calibre afecta directamente al conductor real instalado en la malla, y se propaga a Materiales y Costos. Los calibres por debajo de la sección mínima calculada (${fmt(r.areaMm2,2)} mm²) aparecen deshabilitados — no se pueden seleccionar.</div>
+      ${r.calibreSubdimensionado ? `
+      <div class="mockup-banner" style="background:#C6282814; border-color:#C6282855; margin-top:10px;">
+        <span class="mb-icon" style="color:var(--danger);">✕</span>
+        <span class="mb-text" style="color:#e08a87;"><b>Calibre ${r.calibreSubdimensionado.calibre} subdimensionado</b> (${fmt(r.calibreSubdimensionado.mm2,1)} mm² &lt; ${fmt(r.areaMm2,2)} mm² requeridos) — no puede usarse con la corriente de falla actual. Se aplicó automáticamente el calibre sugerido ${r.sugerido.calibre}.</span>
+      </div>` : ''}
+    </div>
+
+    <div class="field-group">
+      <div class="field-group-label">Material del conductor</div>
+      <div class="hint">Este módulo asume <b>cobre blando comercial (97% IACS)</b>, el material estándar en mallas de puesta a tierra según IEEE 80, Tabla 7. Otros materiales (acero cobreado, aluminio) requerirían constantes distintas — no incluidas en este prototipo.</div>
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------
+// MÓDULO 4: DIMENSIONAMIENTO DE CONDUCTOR — RESULTADOS
+// ---------------------------------------------------------------------
+function renderConductorResults() {
+  const c = state.conductor;
+  const r = computeConductor(c);
+
+  return `
+    <div class="result-hero">
+      <div class="stat-card primary">
+        <div class="stat-label">Sección mínima requerida</div>
+        <div class="stat-value">${fmt(r.areaMm2,2)}<span class="stat-unit">mm²</span></div>
+        <div class="stat-note">Según ecuación de Onderdonk</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Conductor ${r.esSeleccionManual ? 'seleccionado (manual)' : 'sugerido (automático)'}</div>
+        <div class="stat-value" style="font-size:20px;">${r.seleccionado.calibre}</div>
+        <div class="stat-note">${fmt(r.seleccionado.mm2,1)} mm² · margen +${fmt(r.margen,1)}%</div>
+      </div>
+    </div>
+
+    <div class="verdict-banner ok">
+      <span class="v-icon">✓</span>
+      <span>El conductor ${r.seleccionado.calibre} cubre la sección mínima calculada con un margen de seguridad de ${fmt(r.margen,1)}%. ${r.esSeleccionManual
+        ? 'Este calibre fue seleccionado manualmente y cumple la sección mínima requerida.'
+        : 'Este es el calibre estándar más pequeño que cumple — en la práctica, suele preferirse el inmediatamente superior disponible en el mercado local. Puedes elegir manualmente otro calibre en el panel de entrada.'}</span>
+    </div>
+
+    <div class="section-title">Ecuación de Onderdonk <span class="norm-tag">IEEE 80-2013 · Cl. 11, Ec. 37</span></div>
+    <p class="section-sub">Relaciona la corriente de falla, el tiempo de despeje, y el calentamiento adiabático del conductor para determinar la sección mínima que evita que el cobre alcance su temperatura límite.</p>
+    <div class="calc-block">
+      <div class="eq">A [mm²] <span class="op">=</span> (I<sub>g</sub>[kA] · 197.4) / √( (TCAP / (t·α<sub>r</sub>·ρ<sub>r</sub>)) · ln((K₀+T<sub>m</sub>)/(K₀+T<sub>a</sub>)) )</div>
+      <div class="calc-row"><div class="ck">I<sub>g</sub> (corriente de falla)</div><div class="cv">${fmt(c.iFalla,0)} A <span class="ghost">(${fmt(c.iFalla/1000,3)} kA)</span></div></div>
+      <div class="calc-row"><div class="ck">t (duración de falla)</div><div class="cv">${fmt(c.tFalla,2)} s</div></div>
+      <div class="calc-row"><div class="ck">T<sub>a</sub> (ambiente)</div><div class="cv">${fmt(c.tempAmbiente,0)} °C</div></div>
+      <div class="calc-row"><div class="ck">T<sub>m</sub> (máxima admisible)</div><div class="cv">${fmt(c.tempMaxFusion,0)} °C</div></div>
+      <div class="calc-row"><div class="ck">TCAP (capacidad térmica, Cu)</div><div class="cv">${r.TCAP} cal/(cm³·°C)</div></div>
+      <div class="calc-row"><div class="ck">α<sub>r</sub> (coef. térmico)</div><div class="cv">${r.alfa_r} /°C</div></div>
+      <div class="calc-row"><div class="ck">ρ<sub>r</sub> (resistividad a 20°C)</div><div class="cv">${r.rho_r} µΩ·cm</div></div>
+      <div class="calc-row"><div class="ck">ln((K₀+Tm)/(K₀+Ta))</div><div class="cv">${fmt(r.lnTerm,4)}</div></div>
+      <div class="calc-row final"><div class="ck">A mínima resultante</div><div class="cv">${fmt(r.areaMm2,2)} mm²</div></div>
+    </div>
+
+    <div class="section-title">Tabla de conductores comerciales</div>
+    <p class="section-sub">Calibres de cobre estándar y su área de sección transversal. Los calibres insuficientes están marcados como no seleccionables; elige el calibre real a instalar desde el panel de entrada.</p>
+    <div class="calc-block" style="padding:0; overflow:hidden;">
+      <table class="data-table">
+        <thead><tr><th>Calibre</th><th>Área (mm²)</th><th>Estado</th></tr></thead>
+        <tbody>
+          ${CONDUCTOR_TABLE.map(row => {
+            const esElegido = row.calibre === r.seleccionado.calibre;
+            const insuficiente = row.mm2 < r.areaMm2;
+            return `
+            <tr style="${esElegido ? 'background:#E07A2314;' : ''} ${insuficiente ? 'opacity:0.5;' : ''}">
+              <td class="${esElegido?'hl':''}">${row.calibre}</td>
+              <td>${fmt(row.mm2,1)}</td>
+              <td>${insuficiente
+                ? '<span style="color:var(--danger);">✕ Insuficiente — no seleccionable</span>'
+                : (esElegido ? `<span style="color:var(--safe);">✓ ${r.esSeleccionManual?'Seleccionado (manual)':'Seleccionado (automático)'}</span>` : '<span style="color:var(--text-faint);">Cumple (sobredimensionado)</span>')}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    ${renderFundamentoTecnico('conductor')}
+
+    <div class="footer-note">
+      <b>Trazabilidad:</b> IEEE Std 80-2013, Cláusula 11.3 (ecuación de Onderdonk), con constantes de material de la Tabla 7 para cobre blando comercial (97% IACS). El criterio de T<sub>m</sub> debe ajustarse según el tipo de unión real del proyecto (soldada exotérmica vs. mecánica) — este prototipo usa 450°C como valor conservador por defecto.
+    </div>
+  `;
+}
+
+function renderDashboard() {
+  const user = getCurrentUser();
+  const p = state.proyectos;
+  const activos = p.filter(x => x.estado === 'active').length;
+  return `
+    <div class="mockup-banner">
+      <span class="mb-icon">◇</span>
+      <span class="mb-text"><b>Pantalla de maqueta.</b> Ilustra el dashboard del sistema completo. Los datos son de ejemplo — no hay backend, base de datos ni autenticación real detrás. Los módulos de cálculo (Wenner, Malla, Tensiones) sí ejecutan algoritmos reales.</span>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:18px;">
+      <div>
+        <h2 class="panel-title" style="margin-bottom:2px;">Hola, ${user.nombre.split(' ')[0]}</h2>
+        <p class="panel-desc" style="margin-bottom:0;">Vista de cuenta — plan Professional (maqueta)</p>
+      </div>
+      <button class="new-project-btn">+ Nuevo proyecto</button>
+    </div>
+
+    <div class="dash-grid">
+      <div class="dash-kpi">
+        <div class="k-label">Proyectos activos</div>
+        <div class="k-value">${activos}</div>
+        <div class="k-delta up">+1 esta semana</div>
+      </div>
+      <div class="dash-kpi">
+        <div class="k-label">Cálculos este mes</div>
+        <div class="k-value">37</div>
+        <div class="k-delta up">+12% vs. mes anterior</div>
+      </div>
+      <div class="dash-kpi">
+        <div class="k-label">Miembros del equipo</div>
+        <div class="k-value">${USERS.length}</div>
+        <div class="k-delta flat">Ver en "Equipo"</div>
+      </div>
+      <div class="dash-kpi">
+        <div class="k-label">Plan actual</div>
+        <div class="k-value" style="font-size:18px; color:var(--copper);">Professional</div>
+        <div class="k-delta flat">Renueva 14 jul 2026</div>
+      </div>
+    </div>
+
+    <div class="section-title">Proyectos recientes</div>
+    <p class="section-sub">Accede a "Proyectos" para ver el listado completo (maqueta).</p>
+    <div class="calc-block" style="padding:0; overflow:hidden;">
+      <table class="project-table">
+        <thead><tr><th>Proyecto</th><th>Cliente</th><th>Estado</th><th>Avance</th><th>Actualizado</th></tr></thead>
+        <tbody>
+          ${p.slice(0,4).map(proj => `
+            <tr>
+              <td class="proj-name">${proj.nombre}</td>
+              <td>${proj.cliente}</td>
+              <td><span class="status-chip ${proj.estado}">${proj.estado === 'active' ? 'En curso' : proj.estado === 'review' ? 'En revisión' : 'Borrador'}</span></td>
+              <td>${proj.avance}%</td>
+              <td>${proj.fecha}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="footer-note">
+      En la versión completa del sistema, este dashboard reflejaría datos reales del usuario autenticado, calculados desde una base de datos, no valores de ejemplo.
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------
+// PROYECTOS (MAQUETA)
+// ---------------------------------------------------------------------
+function renderProyectos() {
+  const p = state.proyectos;
+  return `
+    <div class="mockup-banner">
+      <span class="mb-icon">◇</span>
+      <span class="mb-text"><b>Pantalla de maqueta.</b> Ilustra la gestión de proyectos del sistema completo. No hay persistencia real: los datos no se guardan ni se cargan desde un servidor.</span>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:18px;">
+      <h2 class="panel-title" style="margin-bottom:2px;">Todos los proyectos</h2>
+      <button class="new-project-btn">+ Nuevo proyecto</button>
+    </div>
+
+    <div class="calc-block" style="padding:0; overflow:hidden;">
+      <table class="project-table">
+        <thead><tr><th>Proyecto</th><th>Cliente</th><th>Estado</th><th>Avance</th><th>Última actualización</th></tr></thead>
+        <tbody>
+          ${p.map(proj => `
+            <tr>
+              <td class="proj-name">${proj.nombre}</td>
+              <td>${proj.cliente}</td>
+              <td><span class="status-chip ${proj.estado}">${proj.estado === 'active' ? 'En curso' : proj.estado === 'review' ? 'En revisión' : 'Borrador'}</span></td>
+              <td>${proj.avance}%</td>
+              <td>${proj.fecha}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="footer-note">
+      En el sistema comercial completo, cada proyecto abriría su propio espacio de trabajo con los módulos de cálculo, historial de versiones, y exportación de memoria técnica vinculada a ese proyecto.
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------
+// LOGIN / REGISTRO (MAQUETA — sin autenticación real)
+// ---------------------------------------------------------------------
+function renderAuthScreen() {
+  const isLogin = state.authView === 'login';
+  return `
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <svg width="26" height="26" viewBox="0 0 32 32" fill="none">
+          <path d="M16 3 L16 17" stroke="#E07A23" stroke-width="2"/>
+          <path d="M7 17 L25 17" stroke="#E07A23" stroke-width="2.4"/>
+          <path d="M10 21 L22 21" stroke="#E07A23" stroke-width="1.8" opacity="0.75"/>
+          <circle cx="16" cy="3" r="2" fill="#E07A23"/>
+        </svg>
+        <span style="font-family:var(--cond); font-weight:700; font-size:17px;">GroundDesing Pro</span>
+      </div>
+      <h1 class="auth-title">${isLogin ? 'Inicia sesión' : 'Crea tu cuenta'}</h1>
+      <p class="auth-sub">${isLogin ? 'Accede a tus proyectos y cálculos de puesta a tierra' : 'Prueba gratis los módulos de cálculo de GroundDesing Pro'}</p>
+
+      <div class="mockup-banner" style="margin-bottom:20px;">
+        <span class="mb-icon">◇</span>
+        <span class="mb-text">Pantalla de maqueta: no autentica de verdad. Pulsa el botón para entrar con un usuario de ejemplo.</span>
+      </div>
+
+      ${!isLogin ? `
+      <div class="auth-field"><label>Nombre completo</label><input type="text" placeholder="Ej: Camila Reyes"></div>
+      ` : ''}
+      <div class="auth-field"><label>Correo electrónico</label><input type="email" placeholder="tu@empresa.cl"></div>
+      <div class="auth-field"><label>Contraseña</label><input type="password" placeholder="••••••••"></div>
+
+      <button class="auth-submit" id="auth-submit-btn">${isLogin ? 'Iniciar sesión (demo)' : 'Crear cuenta (demo)'}</button>
+
+      <div class="auth-divider">o</div>
+      <button class="secondary-btn" style="width:100%;" id="auth-google-btn">Continuar con Google (demo)</button>
+
+      <div class="auth-switch">
+        ${isLogin
+          ? `¿No tienes cuenta? <a id="auth-switch-link" data-view="registro">Regístrate</a>`
+          : `¿Ya tienes cuenta? <a id="auth-switch-link" data-view="login">Inicia sesión</a>`}
+      </div>
+    </div>
+  </div>`;
+}
+
+// ---------------------------------------------------------------------
+// PERFIL DE USUARIO (MAQUETA)
+// ---------------------------------------------------------------------
+function renderPerfil() {
+  const user = getCurrentUser();
+  const perms = getCurrentPermisos();
+  const permList = [
+    { label: 'Editar cálculos', ok: perms.puedeEditarCalculos },
+    { label: 'Gestionar usuarios', ok: perms.puedeGestionarUsuarios },
+    { label: 'Ver facturación', ok: perms.puedeVerFacturacion },
+    { label: 'Exportar resultados', ok: perms.puedeExportar },
+  ];
+  return `
+    <div class="mockup-banner">
+      <span class="mb-icon">◇</span>
+      <span class="mb-text"><b>Pantalla de maqueta.</b> Los cambios aquí no se guardan en ningún servidor; reflejan solo el usuario simulado seleccionado en la barra superior.</span>
+    </div>
+
+    <div class="profile-header">
+      <div class="profile-avatar-lg">${user.iniciales}</div>
+      <div>
+        <h2 class="profile-name">${user.nombre}</h2>
+        <div class="profile-meta">${user.email} · en GroundDesing Pro desde ${user.activoDesde}</div>
+        <span class="role-badge ${user.rol}">${perms.label}</span>
+      </div>
+    </div>
+
+    <div class="section-title">Información de la cuenta</div>
+    <div class="calc-block">
+      <div class="field-row">
+        <div class="field"><label>Nombre completo</label><input type="text" value="${user.nombre}" disabled style="opacity:.6;"></div>
+        <div class="field"><label>Correo electrónico</label><input type="text" value="${user.email}" disabled style="opacity:.6;"></div>
+      </div>
+      <div class="hint">Campos deshabilitados en este prototipo — la edición de perfil requeriría un backend real.</div>
+    </div>
+
+    <div class="section-title">Permisos de tu rol <span class="norm-tag">${perms.label}</span></div>
+    <p class="section-sub">Tu rol determina qué partes del sistema puedes usar. Cambia el usuario activo en la barra superior para ver cómo varían estos permisos.</p>
+    <div class="perm-grid">
+      ${permList.map(p => `
+        <div class="perm-item ${p.ok?'granted':'denied'}">
+          <span class="pi-icon">${p.ok?'✓':'✕'}</span><span>${p.label}</span>
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="section-title" style="margin-top:24px;">Plan y facturación</div>
+    <div class="calc-block">
+      ${perms.puedeVerFacturacion ? `
+        <div class="calc-row"><div class="ck">Plan actual</div><div class="cv" style="color:var(--copper); font-weight:600;">Professional</div></div>
+        <div class="calc-row"><div class="ck">Renovación</div><div class="cv">14 de julio, 2026</div></div>
+        <div class="calc-row final"><div class="ck">Próximo cobro</div><div class="cv">$ 29.990 CLP/mes (maqueta)</div></div>
+      ` : `<div class="hint">Tu rol (${perms.label}) no tiene permiso para ver información de facturación.</div>`}
+    </div>
+
+    <div class="footer-note">
+      Cerrar sesión y la edición de datos de cuenta requieren autenticación real; no están implementados en este prototipo.
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------
+// EQUIPO — ADMINISTRACIÓN DE USUARIOS (MAQUETA, solo visible para admin)
+// ---------------------------------------------------------------------
+function renderEquipo() {
+  const perms = getCurrentPermisos();
+  if (!perms.puedeGestionarUsuarios) {
+    return `<div class="locked-pane"><div class="lock-icon">⊘</div><h3>Acceso restringido</h3><p>Tu rol actual no tiene permiso para gestionar usuarios. Cambia a "Camila Reyes — Administrador" en la barra superior para ver este módulo.</p></div>`;
+  }
+  return `
+    <div class="mockup-banner">
+      <span class="mb-icon">◇</span>
+      <span class="mb-text"><b>Pantalla de maqueta — funcionalidad Enterprise.</b> Ilustra cómo un administrador gestionaría roles y permisos de su equipo. Los cambios de rol que hagas aquí sí actualizan el estado de la página (para que veas el efecto), pero no persisten entre sesiones ni se guardan en ningún servidor.</span>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:18px;">
+      <div>
+        <h2 class="panel-title" style="margin-bottom:2px;">Equipo</h2>
+        <p class="panel-desc" style="margin-bottom:0;">${USERS.length} miembros · Plan Professional permite hasta 5 usuarios</p>
+      </div>
+      <button class="new-project-btn">+ Invitar miembro</button>
+    </div>
+
+    <div class="calc-block" style="padding:0; overflow:hidden;">
+      <table class="team-table">
+        <thead><tr><th>Miembro</th><th>Correo</th><th>Rol</th><th>Desde</th><th></th></tr></thead>
+        <tbody>
+          ${USERS.map(u => `
+            <tr>
+              <td>
+                <div class="team-user-cell">
+                  <div class="team-avatar">${u.iniciales}</div>
+                  <span style="color:var(--text);">${u.nombre}</span>
+                </div>
+              </td>
+              <td>${u.email}</td>
+              <td>
+                <select class="role-select" data-role-user="${u.id}">
+                  ${Object.entries(ROL_PERMISOS).map(([key, val]) => `<option value="${key}" ${u.rol===key?'selected':''}>${val.label}</option>`).join('')}
+                </select>
+              </td>
+              <td>${u.activoDesde}</td>
+              <td><button class="danger-link-btn" data-remove-user="${u.id}">Quitar</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section-title" style="margin-top:24px;">Matriz de permisos por rol</div>
+    <div class="calc-block" style="padding:0; overflow:hidden; overflow-x:auto;">
+      <table class="team-table">
+        <thead><tr><th>Permiso</th>${Object.values(ROL_PERMISOS).map(r=>`<th>${r.label}</th>`).join('')}</tr></thead>
+        <tbody>
+          ${['puedeEditarCalculos','puedeGestionarUsuarios','puedeVerFacturacion','puedeExportar'].map(permKey => `
+            <tr>
+              <td style="color:var(--text);">${
+                permKey==='puedeEditarCalculos'?'Editar cálculos':
+                permKey==='puedeGestionarUsuarios'?'Gestionar usuarios':
+                permKey==='puedeVerFacturacion'?'Ver facturación':'Exportar resultados'
+              }</td>
+              ${Object.values(ROL_PERMISOS).map(r => `<td style="text-align:center; color:${r[permKey]?'var(--safe)':'var(--text-faint)'};">${r[permKey]?'✓':'—'}</td>`).join('')}
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="footer-note">
+      En la versión Enterprise completa, esta pantalla incluiría invitaciones por correo, auditoría de cambios de permisos, y límites de usuarios por plan — ninguno de estos está implementado aquí.
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------
+// MÓDULO: SCHLUMBERGER — INPUTS (comparado con Wenner)
+// ---------------------------------------------------------------------
+function renderSchlumbergerInputs() {
+  const validCount = state.schlumbergerReadings.filter(r => r.L>0 && r.l>0 && r.r>0).length;
+  const cumpleMinimo = validCount >= 10;
+  return `
+    <h2 class="panel-title">Lecturas de campo — Schlumberger</h2>
+    <p class="panel-desc">Método de 4 electrodos con separación desigual: electrodos de potencial (MN) fijos y cercanos al centro, electrodos de corriente (AB) que se abren progresivamente. Norma de referencia: IEEE Std 81-2012, Cl. 8.</p>
+
+    <div class="field-group">
+      <div class="field-group-label">Estado de las mediciones</div>
+      <div class="mockup-banner" style="background:${cumpleMinimo?'#2E7D3214':'#C7770014'}; border-color:${cumpleMinimo?'#2E7D3255':'#C7770055'};">
+        <span class="mb-icon" style="color:${cumpleMinimo?'var(--safe)':'var(--warn)'};">${cumpleMinimo?'✓':'⚠'}</span>
+        <span class="mb-text" style="color:${cumpleMinimo?'#8fc991':'#e0a93f'};">
+          <b>${validCount} lecturas válidas</b> ${cumpleMinimo
+            ? '— cumple el mínimo recomendado de 10 mediciones.'
+            : `— se recomienda un mínimo de <b>10 mediciones</b> con AB/2 creciente. Faltan ${10-validCount} lecturas para alcanzar el mínimo.`}
+        </span>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <div class="field-group-label">Mediciones (L=AB/2, ℓ=MN/2, R) — mínimo 8-10 recomendado</div>
+      <table class="readings-table">
+        <thead><tr><th>L (m)</th><th>ℓ (m)</th><th>R (Ω)</th><th></th></tr></thead>
+        <tbody id="schl-readings-body">
+          ${state.schlumbergerReadings.map((r, i) => `
+            <tr>
+              <td><input type="number" step="0.1" value="${r.L}" data-idx="${i}" data-field="L"></td>
+              <td><input type="number" step="0.1" value="${r.l}" data-idx="${i}" data-field="l"></td>
+              <td><input type="number" step="0.1" value="${r.r}" data-idx="${i}" data-field="r"></td>
+              <td><button class="row-del" data-del-schl="${i}" title="Eliminar lectura">✕</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      <button class="add-row-btn" id="add-schl-reading">+ Agregar lectura</button>
+      <div class="hint"><b>L</b> = AB/2, semi-distancia entre electrodos de corriente · <b>ℓ</b> = MN/2, semi-distancia entre electrodos de potencial (se mantiene pequeña y fija) · <b>R</b> = resistencia medida. No hay límite de lecturas.</div>
+    </div>
+
+    <div class="field-group">
+      <div class="field-group-label">Cómo medir en terreno — recomendaciones Schlumberger</div>
+      <div class="calc-block" style="font-size:11.5px; line-height:1.7; color:var(--text-dim);">
+        <p style="margin:0 0 10px;"><b style="color:var(--text);">Disposición:</b> coloca los electrodos de potencial M, N fijos y cercanos al centro del sondeo (típicamente MN ≤ 1/5 de AB). Los electrodos de corriente A, B se abren progresivamente manteniendo el centro fijo.</p>
+        <p style="margin:0 0 10px;"><b style="color:var(--text);">Secuencia de AB/2 sugerida:</b> 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24 m (o mayor según la profundidad de interés) — espaciamiento aproximadamente geométrico para cubrir varias décadas en escala logarítmica.</p>
+        <p style="margin:0 0 10px;"><b style="color:var(--text);">Cuándo abrir MN:</b> si la señal de potencial se vuelve muy débil al aumentar AB, abre también MN (sin superar MN ≈ AB/5) y re-mide en el mismo punto AB para empalmar la curva sin saltos.</p>
+        <p style="margin:0 0 10px;"><b style="color:var(--text);">Ventaja operativa:</b> al mantener M y N fijos en la mayoría de las lecturas, se reducen los desplazamientos de cable en terreno respecto a Wenner, lo que agiliza sondeos profundos.</p>
+        <p style="margin:0;"><b style="color:var(--text);">Mínimo recomendado:</b> 10 lecturas, igual que Wenner; sondeos para interpretación de 3-4 capas requieren más puntos (12-15+) para resolver bien cada estrato.</p>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <div class="field-group-label">Comparación</div>
+      <div class="hint">Esta vista usa las mismas lecturas de campo (espaciamientos equivalentes) que el módulo Wenner para comparar ambos métodos lado a lado. Edita los valores de Wenner en su propia pestaña.</div>
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------
+// MÓDULO: SCHLUMBERGER — RESULTADOS (comparado con Wenner)
+// ---------------------------------------------------------------------
+function renderSchlumbergerResults() {
+  const cmp = compareWennerSchlumberger(state.wennerReadings, state.schlumbergerReadings);
+  if (cmp.w.length < 2 || cmp.s.length < 2) {
+    return `<div class="locked-pane"><div class="lock-icon">⊘</div><h3>Datos insuficientes</h3><p>Ingresa al menos 2 lecturas válidas en ambos métodos (Wenner y Schlumberger) para compararlos.</p></div>`;
+  }
+
+  const maxRho = Math.max(...cmp.w.map(p=>p.rho), ...cmp.s.map(p=>p.rho));
+  const maxA = Math.max(...cmp.w.map(p=>p.a), ...cmp.s.map(p=>p.L));
+  const svgW = 560, svgH = 280, pad = 45;
+  const xScale = (a) => pad + (Math.log10(a+1) / Math.log10(maxA+1)) * (svgW - 2*pad);
+  const yScale = (rho) => svgH - pad - (rho / maxRho) * (svgH - 2*pad);
+
+  const pathW = cmp.w.map((p,i) => `${i===0?'M':'L'} ${xScale(p.a)} ${yScale(p.rho)}`).join(' ');
+  const pathS = cmp.s.map((p,i) => `${i===0?'M':'L'} ${xScale(p.L)} ${yScale(p.rho)}`).join(' ');
+
+  return `
+    <div class="diagram-card">
+      <svg viewBox="0 0 ${svgW} ${svgH}" xmlns="http://www.w3.org/2000/svg">
+        <line x1="${pad}" y1="${svgH-pad}" x2="${svgW-pad}" y2="${svgH-pad}" stroke="#3a4250" stroke-width="1"/>
+        <line x1="${pad}" y1="${pad-10}" x2="${pad}" y2="${svgH-pad}" stroke="#3a4250" stroke-width="1"/>
+        <path d="${pathW}" fill="none" stroke="#E07A23" stroke-width="2"/>
+        ${cmp.w.map(p => `<circle cx="${xScale(p.a)}" cy="${yScale(p.rho)}" r="3" fill="#E07A23"/>`).join('')}
+        <path d="${pathS}" fill="none" stroke="#2E7D32" stroke-width="2" stroke-dasharray="5,3"/>
+        ${cmp.s.map(p => `<circle cx="${xScale(p.L)}" cy="${yScale(p.rho)}" r="3" fill="#2E7D32"/>`).join('')}
+        <text x="${pad}" y="${svgH-10}" font-family="IBM Plex Sans" font-size="9.5" fill="#6b7480">Espaciamiento (escala log) →</text>
+        <g transform="translate(${svgW-180},${pad-2})">
+          <line x1="0" y1="0" x2="16" y2="0" stroke="#E07A23" stroke-width="2"/>
+          <text x="21" y="3.5" font-family="IBM Plex Sans" font-size="10" fill="#9aa3ad">Wenner</text>
+          <line x1="0" y1="16" x2="16" y2="16" stroke="#2E7D32" stroke-width="2" stroke-dasharray="5,3"/>
+          <text x="21" y="19.5" font-family="IBM Plex Sans" font-size="10" fill="#9aa3ad">Schlumberger</text>
+        </g>
+      </svg>
+    </div>
+
+    <div class="result-hero">
+      <div class="stat-card">
+        <div class="stat-label">ρ promedio — Wenner</div>
+        <div class="stat-value">${fmt(cmp.avgW,1)}<span class="stat-unit">Ω·m</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">ρ promedio — Schlumberger</div>
+        <div class="stat-value">${fmt(cmp.avgS,1)}<span class="stat-unit">Ω·m</span></div>
+      </div>
+      <div class="stat-card primary">
+        <div class="stat-label">Diferencia entre métodos</div>
+        <div class="stat-value">${cmp.diffPct>=0?'+':''}${fmt(cmp.diffPct,1)}<span class="stat-unit">%</span></div>
+        <div class="stat-note">Schlumberger vs. Wenner</div>
+      </div>
+    </div>
+
+    <div class="section-title">Cuándo usar cada método</div>
+    <div class="calc-block">
+      <div class="calc-row"><div class="ck">Wenner</div><div class="cv" style="font-size:12.5px; font-family:var(--sans);">Más simple en terreno (un solo espaciamiento 'a' para los 4 electrodos). Más sensible a heterogeneidades laterales superficiales — mover los 4 electrodos cada lectura aumenta el riesgo de error de campo.</div></div>
+      <div class="calc-row"><div class="ck">Schlumberger</div><div class="cv" style="font-size:12.5px; font-family:var(--sans);">Los electrodos de potencial (MN) permanecen fijos mientras se abren los de corriente (AB) — menos movimientos de cable, sondeos más profundos más rápido, y generalmente menor ruido para SEV de varias capas. Es la base de las curvas patrón de Orellana-Mooney.</div></div>
+      <div class="calc-row final"><div class="ck">Ecuaciones</div><div class="cv" style="font-size:12px;">Wenner: ρₐ=2πaR &nbsp;·&nbsp; Schlumberger: ρₐ=π(L²−ℓ²)/(2ℓ)·R</div></div>
+    </div>
+
+    <div class="footer-note">
+      <b>Trazabilidad:</b> IEEE Std 81-2012, Cláusula 8. La ecuación de Schlumberger usada es la forma exacta (Telford, Geldart & Sheriff, "Applied Geophysics"); la forma aproximada πL²R/ℓ es válida solo cuando L≫ℓ.
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------
+// MÓDULO: CURVAS PATRÓN ORELLANA-MOONEY — INPUTS
+// ---------------------------------------------------------------------
+function renderCurvasPatronInputs() {
+  const cp = state.curvaPatron;
+  const N = cp.nCapas;
+  return `
+    <h2 class="panel-title">Interpretación de SEV — curvas patrón</h2>
+    <p class="panel-desc">Modelo de N capas (2-4) usando el kernel recursivo de Wait (1954). Base matemática de las cartillas de Orellana-Mooney y Compagnie Générale de Géophysique. Las curvas teóricas se comparan con los datos de campo de Wenner en escala log-log.</p>
+
+    <div class="field-group">
+      <div class="field-group-label">Número de capas</div>
+      <div class="seg">
+        <button data-ncapas="2" class="${N===2?'active':''}">2 capas</button>
+        <button data-ncapas="3" class="${N===3?'active':''}">3 capas</button>
+        <button data-ncapas="4" class="${N===4?'active':''}">4 capas</button>
+      </div>
+      <div class="hint">Aumentar el número de capas permite modelar suelos más complejos (ej. roca bajo arcilla bajo relleno). Requiere más lecturas de campo con mayor espaciamiento para identificar las capas profundas.</div>
+    </div>
+
+    <div class="field-group">
+      <div class="field-group-label">Resistividades de capas (Ω·m)</div>
+      ${[...Array(N)].map((_, i) => `
+        <div class="field">
+          <label>ρ${i+1} — Capa ${i+1}${i===N-1?' (semi-infinita)':''} <span class="unit">Ω·m</span></label>
+          <input type="number" id="cp-rho-${i}" value="${cp.rhos[i] || 100}" min="0.1" step="10">
+        </div>
+      `).join('')}
+    </div>
+
+    ${N > 1 ? `
+    <div class="field-group">
+      <div class="field-group-label">Espesores (m)</div>
+      ${[...Array(N-1)].map((_, i) => `
+        <div class="field">
+          <label>h${i+1} — Espesor capa ${i+1} <span class="unit">m</span></label>
+          <input type="number" id="cp-h-${i}" value="${cp.hs[i] || 5}" min="0.1" step="0.5">
+        </div>
+      `).join('')}
+    </div>
+    ` : ''}
+
+    <div class="field-group">
+      <div class="field-group-label">Datos de campo usados</div>
+      <div class="hint">${state.wennerReadings.filter(r=>r.a>0&&r.r>0).length} lecturas Wenner válidas. Edítalas en la pestaña "Resistividad — Wenner".</div>
+    </div>
+  `;
+}
+
+function renderCurvasPatronResults() {
+  const cp = state.curvaPatron;
+  const readings = state.wennerReadings.filter(r => r.a > 0 && r.r > 0);
+  if (readings.length < 3) {
+    return `<div class="locked-pane"><div class="lock-icon">⊘</div><h3>Datos insuficientes</h3><p>Se necesitan al menos 3 lecturas válidas en el módulo Wenner para comparar contra las curvas patrón de N capas.</p></div>`;
+  }
+
+  const N = cp.nCapas;
+  const rhos = cp.rhos.slice(0, N);
+  const hs = cp.hs.slice(0, N-1);
+
+  // Curva teórica del modelo N capas usando Wait recursivo
+  const aMin = 0.5, aMax = Math.max(...readings.map(r=>r.a)) * 1.5;
+  const nPts = 60;
+  const theoryCurve = [];
+  for (let i = 0; i <= nPts; i++) {
+    const logA = Math.log10(aMin) + (i/nPts) * (Math.log10(aMax) - Math.log10(aMin));
+    const a = Math.pow(10, logA);
+    const rhoA = wennerApparentNLayer(a, rhos, hs);
+    theoryCurve.push({ a, rhoA });
+  }
+
+  // Datos de campo reales (Wenner)
+  const fieldPts = readings.map(r => ({ a: r.a, rhoA: wennerApparent(r.a, r.r) }));
+
+  // También curvas de referencia de 2 capas para contexto (k=1,3,10)
+  const refKs = N === 2 ? [] : [1, 3, 10];
+  const refCurves = refKs.map(k => {
+    const pts = [];
+    for (let i = 0; i <= 40; i++) {
+      const logA = Math.log10(aMin) + (i/40) * (Math.log10(aMax) - Math.log10(aMin));
+      const a = Math.pow(10, logA);
+      pts.push({ a, rhoA: wennerApparentNLayer(a, [rhos[0], rhos[0]*k], [hs[0]||4]) });
+    }
+    return { k, pts };
+  });
+
+  // SVG en escala log-log
+  const svgW = 580, svgH = 340, padL=55, padR=20, padT=30, padB=38;
+  const allRhos = [...theoryCurve.map(p=>p.rhoA), ...fieldPts.map(p=>p.rhoA)].filter(v=>v>0&&isFinite(v));
+  const allAs = [...theoryCurve.map(p=>p.a), ...fieldPts.map(p=>p.a)];
+  const logXMin = Math.log10(Math.min(...allAs)*0.8), logXMax = Math.log10(Math.max(...allAs)*1.3);
+  const logYMin = Math.log10(Math.min(...allRhos)*0.7), logYMax = Math.log10(Math.max(...allRhos)*1.4);
+  const xp = a => padL + (Math.log10(a)-logXMin)/(logXMax-logXMin) * (svgW-padL-padR);
+  const yp = r => (svgH-padB) - (Math.log10(r)-logYMin)/(logYMax-logYMin) * (svgH-padT-padB);
+
+  // Grilla log-log
+  let grid = '';
+  const xDecades = [], yDecades = [];
+  for (let d = Math.floor(logXMin); d <= Math.ceil(logXMax); d++) xDecades.push(d);
+  for (let d = Math.floor(logYMin); d <= Math.ceil(logYMax); d++) yDecades.push(d);
+  xDecades.forEach(d => {
+    const x = xp(Math.pow(10,d));
+    grid += `<line x1="${x}" y1="${padT}" x2="${x}" y2="${svgH-padB}" stroke="#252d38" stroke-width="0.8"/>`;
+    if (x > padL && x < svgW-padR) grid += `<text x="${x}" y="${svgH-padB+14}" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" fill="#6b7480">${Math.pow(10,d)}</text>`;
+    for (let m=2;m<10;m++) {
+      const xm = xp(m*Math.pow(10,d));
+      if (xm>padL && xm<svgW-padR) grid += `<line x1="${xm}" y1="${padT}" x2="${xm}" y2="${svgH-padB}" stroke="#1f2730" stroke-width="0.4"/>`;
+    }
+  });
+  yDecades.forEach(d => {
+    const y = yp(Math.pow(10,d));
+    grid += `<line x1="${padL}" y1="${y}" x2="${svgW-padR}" y2="${y}" stroke="#252d38" stroke-width="0.8"/>`;
+    if (y > padT && y < svgH-padB) grid += `<text x="${padL-6}" y="${y+3}" text-anchor="end" font-family="IBM Plex Mono" font-size="9" fill="#6b7480">${Math.pow(10,d)}</text>`;
+    for (let m=2;m<10;m++) {
+      const ym = yp(m*Math.pow(10,d));
+      if (ym>padT && ym<svgH-padB) grid += `<line x1="${padL}" y1="${ym}" x2="${svgW-padR}" y2="${ym}" stroke="#1f2730" stroke-width="0.4"/>`;
+    }
+  });
+
+  // Curvas de referencia (2 capas, trazo fino)
+  const REFCOLORS = ['#4a5a6a','#5a6e82','#3a4e5e'];
+  const refSvg = refCurves.map((rc,ci) => {
+    const d = rc.pts.filter(p=>p.rhoA>0&&isFinite(p.rhoA)).map((p,i)=>`${i===0?'M':'L'} ${xp(p.a).toFixed(1)} ${yp(p.rhoA).toFixed(1)}`).join(' ');
+    return `<path d="${d}" fill="none" stroke="${REFCOLORS[ci]}" stroke-width="1.1" stroke-dasharray="4,3" opacity="0.7"/>
+            <text x="${xp(rc.pts[rc.pts.length-1].a)+4}" y="${yp(rc.pts[rc.pts.length-1].rhoA)}" font-family="IBM Plex Mono" font-size="8" fill="${REFCOLORS[ci]}">k=${rc.k}</text>`;
+  }).join('');
+
+  // Curva teórica de N capas (trazo principal)
+  const theoryPath = theoryCurve.filter(p=>p.rhoA>0&&isFinite(p.rhoA)).map((p,i)=>`${i===0?'M':'L'} ${xp(p.a).toFixed(1)} ${yp(p.rhoA).toFixed(1)}`).join(' ');
+
+  // Puntos de campo
+  const fieldSvg = fieldPts.map(p => p.rhoA>0 ? `<circle cx="${xp(p.a).toFixed(1)}" cy="${yp(p.rhoA).toFixed(1)}" r="5" fill="#2E7D32" stroke="#161a20" stroke-width="1.5"/>` : '').join('');
+
+  // Leyenda de capas
+  const layerColors = ['#E07A23','#e8ab6a','#c25e28','#a83d0c'];
+  const COLORES_SUELO = ['#E07A23','#c99a5a','#b87840','#a06030'];
+
+  const soilDescriptions = rhos.map((rho, i) => {
+    const soil = classifySoil(rho);
+    return `${soil.nombre} (ρ=${rho} Ω·m)${i < hs.length ? `, h=${hs[i]}m` : ' [semi-inf.]'}`;
+  });
+
+  return `
+    <div class="diagram-card" style="background:#161a20;">
+      <svg viewBox="0 0 ${svgW} ${svgH}" xmlns="http://www.w3.org/2000/svg">
+        ${grid}
+        <rect x="${padL}" y="${padT}" width="${svgW-padL-padR}" height="${svgH-padT-padB}" fill="none" stroke="#3a4250" stroke-width="1.2"/>
+        ${refSvg}
+        <path d="${theoryPath}" fill="none" stroke="#E07A23" stroke-width="2.6"/>
+        ${fieldSvg}
+        <!-- Eje labels -->
+        <text x="${padL+(svgW-padL-padR)/2}" y="${svgH-4}" text-anchor="middle" font-family="IBM Plex Sans" font-size="10" fill="#9aa3ad">Espaciamiento a (m) — escala log</text>
+        <text x="12" y="${padT+(svgH-padT-padB)/2}" text-anchor="middle" font-family="IBM Plex Sans" font-size="10" fill="#9aa3ad" transform="rotate(-90 12 ${padT+(svgH-padT-padB)/2})">ρa (Ω·m) — escala log</text>
+        <!-- Leyenda -->
+        <g transform="translate(${padL+8},${padT+6})">
+          <line x1="0" y1="0" x2="14" y2="0" stroke="#E07A23" stroke-width="2.6"/>
+          <text x="19" y="3.5" font-family="IBM Plex Sans" font-size="9.5" fill="#e0d0c0">Modelo ${N} capas (Wait)</text>
+          <circle cx="7" cy="16" r="5" fill="#2E7D32"/>
+          <text x="19" y="19.5" font-family="IBM Plex Sans" font-size="9.5" fill="#e0d0c0">Datos de campo (Wenner)</text>
+          ${N<3?`<line x1="0" y1="32" x2="14" y2="32" stroke="#4a5a6a" stroke-width="1.1" stroke-dasharray="4,3"/>
+          <text x="19" y="35.5" font-family="IBM Plex Sans" font-size="9.5" fill="#8a9aaa">Ref. 2 capas (k=1,3,10)</text>`:''}
+        </g>
+        <!-- Título -->
+        <text x="${svgW/2}" y="${padT-12}" text-anchor="middle" font-family="IBM Plex Sans Condensed" font-weight="700" font-size="12" fill="#e7e9ec">Curvas patrón SEV — modelo de ${N} estratos · Kernel de Wait (1954)</text>
+      </svg>
+    </div>
+
+    <div class="result-hero">
+      ${rhos.map((rho, i) => {
+        const soil = classifySoil(rho);
+        return `<div class="stat-card ${i===0?'primary':''}">
+          <div class="stat-label">ρ${i+1} — Capa ${i+1}${i===N-1?' (base)':''}</div>
+          <div class="stat-value">${fmt(rho,0)}<span class="stat-unit">Ω·m</span></div>
+          <div class="stat-note">${soil.nombre}${i<hs.length?` · h=${hs[i]}m`:''}</div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <div class="section-title">Clasificación de suelos según normas internacionales</div>
+    <p class="section-sub">Referencia: IEC 60364-5-54, IEEE 80, CIGRE WG B3.25. La resistividad del suelo varía varios órdenes de magnitud según el tipo y estado de humedad.</p>
+    <div class="calc-block" style="padding:0; overflow:hidden; overflow-x:auto;">
+      <table class="data-table">
+        <thead><tr><th>Tipo de suelo</th><th>ρ mín (Ω·m)</th><th>ρ máx (Ω·m)</th><th>Clase</th></tr></thead>
+        <tbody>
+          ${SOIL_TYPES.map(s => `
+            <tr style="${rhos.some(r=>r>=s.rhoMin&&r<s.rhoMax)?'background:#E07A2314;':''}">
+              <td${rhos.some(r=>r>=s.rhoMin&&r<s.rhoMax)?' class="hl"':''}>${s.nombre}</td>
+              <td>${s.rhoMin}</td><td>${s.rhoMax}</td>
+              <td><span class="norm-tag">${s.clase}</span></td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section-title">Motor de cálculo — Kernel recursivo de Wait</div>
+    <p class="section-sub">Fórmula general para N capas (Wenner). Para 2 capas recupera la expresión de Stefanescu/Orellana-Mooney. Para 3-4 capas no existen cartillas impresas publicadas — se integra numéricamente.</p>
+    <div class="calc-block">
+      <div class="eq">ρa = ρ₁ · [1 + 2a · ∫₀^∞ (T₁(λ)/ρ₁ − 1) · J₁(λa) · λ · dλ]</div>
+      <div class="calc-row"><div class="ck">T₁(λ) — recursión</div><div class="cv">Tᵢ(λ) = ρᵢ · (Tᵢ₊₁ + ρᵢ·tanh(λhᵢ)) / (ρᵢ + Tᵢ₊₁·tanh(λhᵢ))</div></div>
+      <div class="calc-row"><div class="ck">T_N(λ) — condición base</div><div class="cv">T_N = ρ_N (capa semi-infinita)</div></div>
+      <div class="calc-row final"><div class="ck">Método de integración</div><div class="cv">Cuadratura rectangular 150 pts (log-espaciado) · J₁ por A&S 9.4</div></div>
+    </div>
+
+    <div class="footer-note">
+      <b>Trazabilidad:</b> Wait, J.R. (1954) "Mutual electromagnetic coupling of loops". Telford, Geldart & Sheriff, "Applied Geophysics" (2nd ed.), Cl. 8. Para 2 capas equivale exactamente a la función de Stefanescu base de las cartillas Orellana-Mooney (1966). Para 3-4 capas existen tablas CGG (Compagnie Générale de Géophysique) de uso limitado; lo estándar hoy es la inversión numérica. Este prototipo implementa la integración directa del kernel de Wait, que es matemáticamente correcto para cualquier número de capas.
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------
+// MÓDULO: ADITIVO GEL QUÍMICO — INPUTS
+// ---------------------------------------------------------------------
+function renderGelInputs() {
+  const g = state.gel;
+  const m = state.malla;
+  return `
+    <h2 class="panel-title">Mejoramiento de tierras con gel químico</h2>
+    <p class="panel-desc">Modela el efecto de un aditivo gel conductivo (bentonita/gel químico) aplicado alrededor de las varillas de la malla ya diseñada, reduciendo la resistividad efectiva en la interfaz electrodo-suelo. Define primero la geometría en "Resistencia de Malla" — el gel se incorpora al cableado y varillas de esa configuración.</p>
+
+    <div class="field-group">
+      <div class="field-group-label">Geometría base (de "Resistencia de Malla")</div>
+      <div class="hint">Varillas configuradas: <b>${m.nVarillas} unidades × ${fmt(m.longVarilla,1)} m</b> · Resistividad nativa: <b>${fmt(m.rho,1)} Ω·m</b>. Si cambias el número o longitud de varillas en el módulo de Malla, el cálculo de gel aquí se actualiza automáticamente.</div>
+    </div>
+
+    <div class="field-group">
+      <div class="field-group-label">Activación</div>
+      <div class="seg">
+        <button data-gel-activo="0" class="${!g.activo?'active':''}">Sin tratar</button>
+        <button data-gel-activo="1" class="${g.activo?'active':''}">Con gel químico</button>
+      </div>
+      <div class="hint">Al activar, el módulo "Resistencia de Malla" usará automáticamente la resistividad efectiva equivalente en vez de la resistividad nativa del suelo.</div>
+    </div>
+
+    <div class="field-group">
+      <div class="field-group-label">Propiedades del gel</div>
+      <div class="field"><label>ρ<sub>gel</sub> — resistividad del gel <span class="unit">Ω·m</span></label><input type="number" id="gel-rho" value="${g.rhoGel}" min="0.01" step="0.05"></div>
+      <div class="hint">Geles conductivos comerciales típicamente entre 0.2 y 0.5 Ω·m — muy por debajo de cualquier suelo natural.</div>
+    </div>
+
+    <div class="field-group">
+      <div class="field-group-label">Geometría de la perforación tratada</div>
+      <div class="field-row">
+        <div class="field"><label>r<sub>varilla</sub> — radio del conductor <span class="unit">m</span></label><input type="number" id="gel-rvarilla" value="${g.radioVarilla}" min="0.001" step="0.001"></div>
+        <div class="field"><label>r<sub>gel</sub> — radio con gel <span class="unit">m</span></label><input type="number" id="gel-rgel" value="${g.radioConGel}" min="0.01" step="0.005"></div>
+      </div>
+      <div class="field"><label>L — longitud de la varilla <span class="unit">m</span></label><input type="number" id="gel-l" value="${g.longVarillaGel}" min="0.5" step="0.5"></div>
+      <div class="hint">r<sub>gel</sub> es el radio efectivo de la perforación rellena con gel (típicamente 5-10 cm, según diámetro de la barrena usada en la instalación). Por defecto, L se sincroniza con la longitud de varilla del módulo de Malla.</div>
+    </div>
+
+    <div class="field-group">
+      <div class="field-group-label">Resistividad nativa</div>
+      <div class="hint">ρ<sub>suelo</sub> = <b>${fmt(state.malla.rho,1)} Ω·m</b> (tomada del módulo "Resistencia de Malla"). Edítala en esa pestaña.</div>
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------
+// MÓDULO: ADITIVO GEL QUÍMICO — RESULTADOS
+// ---------------------------------------------------------------------
+function renderGelResults() {
+  const g = state.gel;
+  const rhoSuelo = state.malla.rho;
+  const r = computeGel(g, rhoSuelo);
+
+  return `
+    <div class="result-hero">
+      <div class="stat-card">
+        <div class="stat-label">R sin tratar (suelo nativo)</div>
+        <div class="stat-value">${fmt(r.Rsin,2)}<span class="stat-unit">Ω</span></div>
+        <div class="stat-note">Fórmula de Dwight, varilla desnuda</div>
+      </div>
+      <div class="stat-card primary">
+        <div class="stat-label">R con gel químico</div>
+        <div class="stat-value">${fmt(r.Rtotal,2)}<span class="stat-unit">Ω</span></div>
+        <div class="stat-note">Mejora: ${fmt(r.mejoraPct,1)}%</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">ρ efectiva equivalente</div>
+        <div class="stat-value">${fmt(r.rhoEff,1)}<span class="stat-unit">Ω·m</span></div>
+        <div class="stat-note">vs. ${fmt(rhoSuelo,1)} Ω·m nativa</div>
+      </div>
+    </div>
+
+    <div class="verdict-banner ${g.activo ? 'ok' : 'warn'}">
+      <span class="v-icon">${g.activo?'✓':'!'}</span>
+      <span>${g.activo
+        ? `El aditivo gel está ACTIVO: el módulo de malla usará ρ efectiva de ${fmt(r.rhoEff,1)} Ω·m en lugar de la resistividad nativa de ${fmt(rhoSuelo,1)} Ω·m, propagando una mejora de ${fmt(r.mejoraPct,1)}% al cálculo de resistencia de malla completo.`
+        : 'El aditivo gel está calculado pero INACTIVO. Activa el toggle "Con gel químico" arriba para que este mejoramiento se propague al módulo de Resistencia de Malla.'}</span>
+    </div>
+
+    <div class="section-title">Modelo de electrodo con funda de gel (cilindros concéntricos)</div>
+    <p class="section-sub">El gel actúa como una capa de transición de baja resistividad entre el conductor metálico y el suelo nativo, modelada como dos resistencias en serie: la "funda" de gel y el suelo nativo visto desde el radio exterior de esa funda.</p>
+    <div class="calc-block">
+      <div class="eq">R<sub>funda</sub> <span class="op">=</span> ρ<sub>gel</sub> / (2πL) · ln(r<sub>gel</sub>/r<sub>varilla</sub>)</div>
+      <div class="calc-row"><div class="ck">ρ<sub>gel</sub></div><div class="cv">${fmt(g.rhoGel,2)} Ω·m</div></div>
+      <div class="calc-row"><div class="ck">r<sub>varilla</sub> / r<sub>gel</sub></div><div class="cv">${fmt(g.radioVarilla,4)} m / ${fmt(g.radioConGel,3)} m</div></div>
+      <div class="calc-row final"><div class="ck">R<sub>funda</sub> resultante</div><div class="cv">${fmt(r.Rfunda,4)} Ω</div></div>
+    </div>
+    <div class="calc-block">
+      <div class="eq">R<sub>suelo</sub> <span class="op">=</span> ρ<sub>suelo</sub> / (2πL) · [ ln(8L/(2·r<sub>gel</sub>)) − 1 ]</div>
+      <div class="calc-row"><div class="ck">ρ<sub>suelo</sub> (nativa)</div><div class="cv">${fmt(rhoSuelo,1)} Ω·m</div></div>
+      <div class="calc-row"><div class="ck">L (longitud varilla)</div><div class="cv">${fmt(g.longVarillaGel,1)} m</div></div>
+      <div class="calc-row final"><div class="ck">R<sub>suelo</sub> resultante</div><div class="cv">${fmt(r.Rsuelo,3)} Ω</div></div>
+    </div>
+    <div class="calc-block">
+      <div class="eq">R<sub>total</sub> <span class="op">=</span> R<sub>funda</sub> + R<sub>suelo</sub></div>
+      <div class="calc-row"><div class="ck">R sin gel (referencia, Dwight)</div><div class="cv">${fmt(r.Rsin,3)} Ω</div></div>
+      <div class="calc-row final"><div class="ck">R con gel</div><div class="cv">${fmt(r.Rtotal,3)} Ω</div></div>
+    </div>
+
+    <div class="section-title">Propagación al cálculo de malla</div>
+    <p class="section-sub">Para usar este mejoramiento en el cálculo de la malla completa (ecuación de Sverak), se calcula una resistividad efectiva equivalente: la resistividad nativa hipotética que, sin gel, produciría la misma R<sub>total</sub> con la fórmula estándar de Dwight.</p>
+    <div class="calc-block">
+      <div class="eq">ρ<sub>eff</sub> <span class="op">=</span> R<sub>total</sub> / [ (1/(2πL))·(ln(8L/d) − 1) ]</div>
+      <div class="calc-row final"><div class="ck">ρ<sub>eff</sub> resultante</div><div class="cv">${fmt(r.rhoEff,1)} Ω·m</div></div>
+    </div>
+
+    <div class="footer-note">
+      <b>Trazabilidad:</b> Modelo de electrodo vertical de Dwight (1936) / Sunde, extendido con aproximación de cilindros concéntricos para la funda de gel — analogía estándar usada en literatura de mejoramiento de puestas a tierra (geles de bentonita y aditivos químicos conductivos). No es una norma IEEE específica; los fabricantes de gel suelen reportar reducciones de resistencia empíricas de 30-70% según tipo de suelo, consistentes en orden de magnitud con este modelo.
+    </div>
+  `;
+}
+
+
+// ---------------------------------------------------------------------
+// MÓDULO: MATERIALES Y COSTOS
+// ---------------------------------------------------------------------
+function renderMateriales() {
+  const mat = computeMateriales(state.malla, state.gel, state.conductor);
+  const precios = state.materiales;
+  const costos = computeCostos(mat, precios);
+  const fmtCLP = v => '$ ' + Math.round(v).toLocaleString('es-CL');
+
+  return `
+    <div class="mockup-banner">
+      <span class="mb-icon">◇</span>
+      <span class="mb-text"><b>Precios de referencia editables.</b> Los precios unitarios son de referencia en CLP y pueden ajustarse a los valores reales del mercado. El cálculo de cantidades usa la geometría real de la malla y el <b>calibre de conductor realmente seleccionado</b> en el módulo "Dimensionamiento Conductor" (el precio del conductor se escala según su sección). El sistema es acumulativo: cualquier ajuste hecho en los módulos anteriores se refleja aquí y en la Memoria Técnica final.</span>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-bottom:24px;">
+      <div>
+        <div class="section-title" style="margin-bottom:8px;">Lista de materiales</div>
+        <div class="calc-block" style="padding:0; overflow:hidden;">
+          <table class="data-table" style="width:100%;">
+            <thead><tr><th>Ítem</th><th style="text-align:right;">Cant.</th><th style="text-align:right;">Un.</th><th style="text-align:right;">P. Unit (CLP)</th><th style="text-align:right;">Total (CLP)</th></tr></thead>
+            <tbody>
+              ${costos.items.map(item => `
+                <tr>
+                  <td style="font-size:11.5px;">${item.desc}</td>
+                  <td style="text-align:right; font-family:var(--mono);">${fmt(item.qty,1)}</td>
+                  <td style="text-align:right;">${item.unit}</td>
+                  <td style="text-align:right; font-family:var(--mono);">${fmtCLP(item.unitPrice)}</td>
+                  <td style="text-align:right; font-family:var(--mono); color:var(--text);">${fmtCLP(item.total)}</td>
+                </tr>`).join('')}
+              <tr style="border-top:2px solid var(--line);">
+                <td colspan="4" style="font-weight:600; color:var(--text-dim);">Subtotal (sin IVA)</td>
+                <td style="text-align:right; font-family:var(--mono); color:var(--text);">${fmtCLP(costos.subtotal)}</td>
+              </tr>
+              <tr>
+                <td colspan="4" style="color:var(--text-dim);">IVA (19%)</td>
+                <td style="text-align:right; font-family:var(--mono);">${fmtCLP(costos.iva)}</td>
+              </tr>
+              <tr style="background:#E07A2314;">
+                <td colspan="4" style="font-weight:700; color:var(--text); font-size:13px;">TOTAL</td>
+                <td style="text-align:right; font-family:var(--mono); font-weight:700; font-size:15px; color:var(--copper);">${fmtCLP(costos.total)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-title" style="margin-bottom:8px;">Precios unitarios de referencia</div>
+        <div class="calc-block">
+          <div class="field">
+            <label>Conductor Cu — precio/m ref. 4/0 AWG <span class="unit">$/m</span></label>
+            <input type="number" id="mat-pconductor" value="${precios.precioConductorM}" min="1" step="100">
+          </div>
+          <div class="field">
+            <label>Varilla copperweld — precio/un. <span class="unit">$/un.</span></label>
+            <input type="number" id="mat-pvarilla" value="${precios.precioVarilla}" min="1" step="500">
+          </div>
+          <div class="field">
+            <label>Conector exotérmico — precio/un. <span class="unit">$/un.</span></label>
+            <input type="number" id="mat-pconector" value="${precios.precioConector}" min="1" step="100">
+          </div>
+          <div class="field">
+            <label>Excavación zanja — precio/m <span class="unit">$/m</span></label>
+            <input type="number" id="mat-pexcavacion" value="${precios.precioExcavacionM}" min="1" step="100">
+          </div>
+          ${state.gel.activo ? `
+          <div class="field">
+            <label>Gel conductivo — precio/litro <span class="unit">$/L</span></label>
+            <input type="number" id="mat-pgel" value="${precios.precioGelL}" min="1" step="500">
+          </div>` : ''}
+          <div class="hint">Precios de referencia en CLP sin IVA, mercado chileno. Ajusta según cotizaciones reales del proyecto.</div>
+        </div>
+
+        <div class="section-title" style="margin-top:16px; margin-bottom:8px;">Resumen de cantidades</div>
+        <div class="calc-block">
+          <div class="calc-row"><div class="ck">Área de malla</div><div class="cv">${fmt(mat.area,1)} m²</div></div>
+          <div class="calc-row"><div class="ck">Conductor Cu (incl. 5% cortes)</div><div class="cv">${fmt(mat.condLTotal,1)} m</div></div>
+          <div class="calc-row"><div class="ck">Varillas × ${fmt(state.malla.longVarilla,1)} m</div><div class="cv">${mat.nVarillas} unidades</div></div>
+          <div class="calc-row"><div class="ck">Conectores exotérmicos</div><div class="cv">${mat.nConectores} unidades</div></div>
+          <div class="calc-row"><div class="ck">Zanja de excavación</div><div class="cv">${fmt(mat.mLZanja,1)} m lineales</div></div>
+          ${mat.volGelLt > 0 ? `<div class="calc-row"><div class="ck">Gel conductivo</div><div class="cv">${fmt(mat.volGelLt,1)} L</div></div>` : ''}
+          <div class="calc-row final"><div class="ck">TOTAL CON IVA</div><div class="cv">${fmtCLP(costos.total)}</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-note">
+      Los costos de mano de obra de instalación, transporte, diseño e ingeniería <b>no</b> están incluidos. El costo de excavación considera solo el movimiento de tierra para la zanja del conductor horizontal; la perforación de pozos para las varillas verticales tiene un costo adicional según profundidad y tipo de suelo.
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------
+// NORMAS DE REFERENCIA — catálogo visual
+// Solo IEEE 80 / IEEE 81 tienen cálculo real implementado en este
+// prototipo. El resto se muestran como referencia de lo que un sistema
+// multinacional completo debería soportar, marcadas explícitamente como
+// no implementadas — no hay ecuaciones reales detrás de esas filas.
+// ---------------------------------------------------------------------
+function renderNormas() {
+  return `
+    <div class="mockup-banner">
+      <span class="mb-icon">◇</span>
+      <span class="mb-text"><b>Catálogo de referencia.</b> Las normas marcadas como "No implementado" se listan únicamente como contexto de lo que un sistema multinacional completo debería soportar. No tienen ecuaciones ni cálculos reales detrás en este prototipo — solo IEEE Std 80 e IEEE Std 81 están verificados y calculados.</span>
+    </div>
+
+    <h2 class="panel-title" style="margin-bottom:2px;">Normas de referencia</h2>
+    <p class="panel-desc">Cobertura normativa actual de GroundDesing Pro frente a normativas internacionales de sistemas de puesta a tierra.</p>
+
+    <div class="calc-block" style="padding:0; overflow:hidden;">
+      <table class="data-table" style="width:100%;">
+        <thead><tr><th>Código</th><th>País / región</th><th>Descripción</th><th>Estado en este prototipo</th></tr></thead>
+        <tbody>
+          ${NORMAS_REFERENCIA.map(n => `
+            <tr style="${n.implementado ? 'background:#2E7D3214;' : ''}">
+              <td class="${n.implementado?'hl':''}" style="font-family:var(--mono); font-weight:600;">${n.codigo}</td>
+              <td>${n.pais}</td>
+              <td style="font-size:11.5px; color:var(--text-dim);">${n.desc}</td>
+              <td>${n.implementado
+                ? '<span style="color:var(--safe); font-weight:600;">✓ Implementado y calculado</span>'
+                : '<span style="color:var(--text-faint);">○ No implementado (referencia)</span>'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section-title" style="margin-top:20px;">¿Qué significa "implementado" aquí?</div>
+    <div class="calc-block">
+      <div class="calc-row"><div class="ck">Implementado</div><div class="cv" style="font-size:12px; font-family:var(--sans);">Las ecuaciones de la norma están codificadas, verificadas numéricamente, y son las que efectivamente calculan los resultados que ves en los módulos de Wenner, Schlumberger, Malla, Tensiones y Conductor.</div></div>
+      <div class="calc-row final"><div class="ck">No implementado</div><div class="cv" style="font-size:12px; font-family:var(--sans);">Solo aparece el nombre y descripción de la norma como referencia de cobertura futura. Ningún resultado de este prototipo se calcula con esa normativa — agregarla requeriría codificar e verificar sus ecuaciones específicas, que pueden diferir sustancialmente de IEEE 80/81.</div></div>
+    </div>
+
+    <div class="footer-note">
+      Ampliar la cobertura normativa real (no solo el listado) es un trabajo de validación técnica significativo para cada norma — las ecuaciones, factores de seguridad y criterios de aceptación pueden variar entre IEEE, IEC, NFPA y las normativas nacionales listadas.
+    </div>
+  `;
+}
+
+function renderPlanes() {
+  const fmtCLP = (v) => v === null ? null : '$ ' + v.toLocaleString('es-CL');
+  return `
+    <div class="mockup-banner">
+      <span class="mb-icon">◇</span>
+      <span class="mb-text"><b>Pantalla de maqueta.</b> Ningún botón procesa un pago real ni mueve dinero. Una pasarela de pago verdadera (tarjetas, renovación automática, facturación) requiere integración con un proveedor certificado (ej. Webpay, Stripe) y backend propio — fuera del alcance de este prototipo.</span>
+    </div>
+
+    <div style="text-align:center; margin-bottom:30px;">
+      <h2 class="panel-title" style="font-size:22px; margin-bottom:6px;">Planes de GroundDesing Pro</h2>
+      <p class="panel-desc" style="margin-bottom:0;">Elige el plan según el tamaño de tu equipo y la cantidad de proyectos</p>
+    </div>
+
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:18px;" class="plans-grid">
+      ${PLANES.map(plan => `
+        <div class="calc-block" style="${plan.destacado ? 'border-color:var(--copper); background:linear-gradient(160deg, #221c16, var(--panel) 55%);' : ''} display:flex; flex-direction:column;">
+          ${plan.destacado ? `<div style="font-family:var(--mono); font-size:9.5px; color:var(--copper); letter-spacing:.07em; text-transform:uppercase; margin-bottom:10px;">Más elegido</div>` : ''}
+          <div style="font-family:var(--cond); font-weight:700; font-size:17px; color:var(--text); margin-bottom:4px;">${plan.nombre}</div>
+          <div style="font-size:11.5px; color:var(--text-faint); margin-bottom:18px;">${plan.tagline}</div>
+          <div style="margin-bottom:20px;">
+            ${plan.precioMes === null
+              ? `<div style="font-family:var(--cond); font-weight:700; font-size:22px; color:var(--text);">A medida</div><div style="font-size:11px; color:var(--text-faint);">Contacta a ventas</div>`
+              : plan.precioMes === 0
+                ? `<div style="font-family:var(--mono); font-weight:600; font-size:28px; color:var(--text);">$0</div><div style="font-size:11px; color:var(--text-faint);">para siempre</div>`
+                : `<div style="font-family:var(--mono); font-weight:600; font-size:28px; color:var(--copper);">${fmtCLP(plan.precioMes)}<span style="font-size:13px; color:var(--text-faint); font-weight:400;">/mes</span></div><div style="font-size:11px; color:var(--text-faint);">${fmtCLP(plan.precioAnual)}/mes facturado anual</div>`
+            }
+          </div>
+          <div style="flex:1;">
+            ${plan.features.map(f => `
+              <div class="perm-item ${f.ok?'granted':'denied'}" style="margin-bottom:7px; background:transparent; border:none; padding:4px 0;">
+                <span class="pi-icon">${f.ok?'✓':'—'}</span><span>${f.label}</span>
+              </div>
+            `).join('')}
+          </div>
+          <button class="${plan.destacado?'new-project-btn':'secondary-btn'}" style="width:100%; margin-top:18px;" data-select-plan="${plan.id}">
+            ${plan.precioMes === null ? 'Contactar a ventas (demo)' : plan.precioMes === 0 ? 'Plan actual' : 'Suscribirme (demo)'}
+          </button>
+        </div>
+      `).join('')}
+    </div>
+    <style>@media (max-width:900px){ .plans-grid{ grid-template-columns:1fr !important; } }</style>
+
+    <div class="footer-note" style="margin-top:30px;">
+      Los precios mostrados son de referencia en pesos chilenos (CLP), sin IVA. En el sistema comercial real, esta pantalla se conectaría a una pasarela de pago certificada y a un sistema de facturación electrónica (SII, en el caso chileno).
+    </div>
+  `;
+}
+
+// ---------------------------------------------------------------------
+// MEMORIA TÉCNICA (resumen consolidado de los 4 módulos de cálculo)
+// ---------------------------------------------------------------------
+function renderMemoria() {
+  const w = state.wennerReadings.filter(r => r.a > 0 && r.r > 0).map(r => ({ ...r, rho: wennerApparent(r.a, r.r) }));
+  const avgRho = w.length ? w.reduce((s,c)=>s+c.rho,0) / w.length : 0;
+  const gelInfo = state.gel.activo ? computeGel(state.gel, state.malla.rho) : null;
+  const rMalla = computeMalla(state.malla, gelInfo);
+  const rTension = computeTensiones(state.tensiones, state.malla, state.conductor);
+  const rCond = computeConductor(state.conductor);
+  const mat = computeMateriales(state.malla, state.gel, state.conductor);
+  const costos = computeCostos(mat, state.materiales);
+  const fmtCLP = v => '$ ' + Math.round(v).toLocaleString('es-CL');
+  const user = getCurrentUser();
+  const N = state.curvaPatron.nCapas;
+  const rhos = state.curvaPatron.rhos.slice(0, N);
+  const hs = state.curvaPatron.hs.slice(0, N-1);
+
+  return `
+    <div class="mockup-banner">
+      <span class="mb-icon">◇</span>
+      <span class="mb-text"><b>Vista previa de memoria técnica.</b> Resume los resultados actuales de todos los módulos de cálculo, incluyendo los ajustes hechos por el usuario (geometría de malla, gel químico, calibre de conductor). El botón descarga un PDF real generado por GroundDesing Pro.</span>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:18px;">
+      <div>
+        <h2 class="panel-title" style="margin-bottom:2px;">Memoria de cálculo — Sistema de Puesta a Tierra</h2>
+        <p class="panel-desc" style="margin-bottom:0;">Generada por ${user.nombre} · ${new Date().toLocaleDateString('es-CL', { year:'numeric', month:'long', day:'numeric' })}</p>
+      </div>
+      <button class="new-project-btn" id="download-memoria-btn">⬇ Descargar PDF</button>
+    </div>
+
+    ${(() => {
+      const cumpleGlobal = rTension.touchOk && rTension.stepOk && rMalla.gpr < 5000;
+      return `
+      <div class="verdict-banner ${cumpleGlobal?'ok':'warn'}" style="margin-bottom:22px;">
+        <span class="v-icon">${cumpleGlobal?'✓':'!'}</span>
+        <span>${cumpleGlobal
+          ? '<b>Estado consolidado: CUMPLE</b> — con la configuración actual (geometría de malla, gel químico y calibre de conductor elegidos por el usuario), el diseño satisface los límites de tensión de paso, contacto y GPR.'
+          : '<b>Estado consolidado: NO CUMPLE</b> — con la configuración actual, el diseño aún no satisface todos los límites normativos. Ajusta la geometría de la malla, activa el aditivo gel químico, o modifica otros parámetros hasta alcanzar el cumplimiento antes de finalizar el diseño.'}</span>
+      </div>`;
+    })()}
+
+    <div class="section-title">1. Resistividad del suelo <span class="norm-tag">IEEE 81-2012 · Wenner</span></div>
+    <div class="calc-block">
+      <div class="calc-row"><div class="ck">Lecturas válidas</div><div class="cv">${w.length}</div></div>
+      <div class="calc-row final"><div class="ck">ρ promedio</div><div class="cv">${fmt(avgRho,1)} Ω·m</div></div>
+    </div>
+
+    <div class="section-title">2. Estratificación del suelo — ${N} capas <span class="norm-tag">Kernel de Wait</span></div>
+    <div class="calc-block">
+      ${rhos.map((rho,i) => {
+        const soil = classifySoil(rho);
+        return `<div class="calc-row"><div class="ck">Capa ${i+1}${i===N-1?' (base)':''}</div><div class="cv">${rho} Ω·m${i<hs.length?` · h=${hs[i]}m`:''} — ${soil.nombre}</div></div>`;
+      }).join('')}
+    </div>
+
+    <div class="section-title">3. Aditivo gel químico <span class="norm-tag">${gelInfo?'ACTIVO':'Inactivo'}</span></div>
+    <div class="calc-block">
+      ${gelInfo
+        ? `<div class="calc-row"><div class="ck">Mejora</div><div class="cv">${fmt(gelInfo.mejoraPct,1)}%</div></div>
+           <div class="calc-row final"><div class="ck">ρ efectiva</div><div class="cv">${fmt(gelInfo.rhoEff,1)} Ω·m</div></div>`
+        : `<div class="calc-row final"><div class="ck">Resistividad usada</div><div class="cv">${fmt(state.malla.rho,1)} Ω·m (nativa)</div></div>`}
+    </div>
+
+    <div class="section-title">4. Resistencia de malla <span class="norm-tag">IEEE 80-2013 Cl.14</span></div>
+    <div class="calc-block">
+      <div class="calc-row"><div class="ck">Dimensiones</div><div class="cv">${fmt(state.malla.largo,1)} × ${fmt(state.malla.ancho,1)} m</div></div>
+      <div class="calc-row"><div class="ck">R<sub>g</sub></div><div class="cv">${fmt(rMalla.Rg,3)} Ω</div></div>
+      <div class="calc-row final"><div class="ck">GPR</div><div class="cv">${fmt(rMalla.gpr,0)} V</div></div>
+    </div>
+
+    <div class="section-title">5. Tensiones de paso/contacto <span class="norm-tag">IEEE 80-2013 Cl.16</span></div>
+    <div class="calc-block">
+      <div class="calc-row"><div class="ck">E<sub>m</sub> / admisible</div><div class="cv">${fmt(rTension.Em,1)} V / ${fmt(rTension.Etouch,1)} V</div></div>
+      <div class="calc-row final"><div class="ck">Cumplimiento</div>
+        <div class="cv" style="color:${rTension.touchOk&&rTension.stepOk?'var(--safe)':'var(--danger)'}; font-weight:600;">
+          ${rTension.touchOk&&rTension.stepOk?'✓ CUMPLE':'✗ NO CUMPLE'}
+        </div>
+      </div>
+    </div>
+
+    <div class="section-title">6. Dimensionamiento de conductor <span class="norm-tag">IEEE 80-2013 Cl.11</span></div>
+    <div class="calc-block">
+      <div class="calc-row"><div class="ck">Sección mínima</div><div class="cv">${fmt(rCond.areaMm2,2)} mm²</div></div>
+      <div class="calc-row final"><div class="ck">Calibre ${rCond.esSeleccionManual?'seleccionado (manual)':'sugerido (automático)'}</div><div class="cv">${rCond.seleccionado.calibre}</div></div>
+    </div>
+
+    <div class="section-title">7. Materiales y costos estimados</div>
+    <div class="calc-block">
+      ${costos.items.map(item => `
+        <div class="calc-row"><div class="ck" style="font-size:11px;">${item.desc}</div><div class="cv">${fmtCLP(item.total)}</div></div>
+      `).join('')}
+      <div class="calc-row"><div class="ck">Subtotal (sin IVA)</div><div class="cv">${fmtCLP(costos.subtotal)}</div></div>
+      <div class="calc-row final"><div class="ck">TOTAL (con IVA 19%)</div><div class="cv">${fmtCLP(costos.total)}</div></div>
+    </div>
+
+    <div class="footer-note">
+      Esta memoria resume los cálculos del prototipo GroundDesing Pro, con todos los ajustes acumulados que el usuario haya realizado en los distintos módulos. No constituye una memoria de cálculo firmada ni reemplaza la revisión de un ingeniero responsable del proyecto.
+    </div>
+  `;
+}
+
+function attachHandlers() {
+  document.querySelectorAll('.tab[data-tab]').forEach(el => {
+    el.addEventListener('click', () => { state.tab = el.dataset.tab; render(); });
+  });
+
+  document.querySelectorAll('[data-tab-link]').forEach(el => {
+    el.addEventListener('click', () => { state.tab = el.dataset.tabLink; render(); });
+  });
+
+  // --- Panel "Ver fundamento técnico" (toggle expandir/colapsar) ---
+  document.querySelectorAll('[data-fundamento-toggle]').forEach(el => {
+    el.addEventListener('click', () => {
+      const key = el.dataset.fundamentoToggle;
+      const panel = document.getElementById(`fundamento-${key}`);
+      const chevron = document.getElementById(`chevron-${key}`);
+      if (!panel) return;
+      const isOpen = panel.style.display !== 'none';
+      panel.style.display = isOpen ? 'none' : 'block';
+      if (chevron) chevron.classList.toggle('open', !isOpen);
+    });
+  });
+
+  const userSelect = document.getElementById('user-select');
+  if (userSelect) userSelect.addEventListener('change', (e) => {
+    state.currentUserId = e.target.value;
+    render();
+  });
+
+  document.querySelectorAll('[data-soil]').forEach(el => {
+    el.addEventListener('click', () => { state.soilModel = el.dataset.soil; render(); });
+  });
+
+  document.querySelectorAll('[data-rho-origen]').forEach(el => {
+    el.addEventListener('click', () => {
+      const origen = el.dataset.rhoOrigen;
+      state.malla.rhoOrigen = origen;
+      if (origen === 'medido') {
+        const wReadings = state.wennerReadings.filter(r => r.a > 0 && r.r > 0);
+        if (wReadings.length) {
+          state.malla.rho = wReadings.reduce((s,r) => s + wennerApparent(r.a, r.r), 0) / wReadings.length;
+        }
+      }
+      render();
+    });
+  });
+
+  document.querySelectorAll('#readings-body input').forEach(el => {
+    el.addEventListener('input', (e) => {
+      const idx = parseInt(e.target.dataset.idx);
+      const field = e.target.dataset.field;
+      const val = parseFloat(e.target.value);
+      state.wennerReadings[idx][field] = isNaN(val) ? 0 : val;
+      renderResultsOnly();
+    });
+  });
+
+  document.querySelectorAll('.row-del').forEach(el => {
+    el.addEventListener('click', (e) => {
+      const idx = parseInt(e.target.dataset.del);
+      state.wennerReadings.splice(idx, 1);
+      render();
+    });
+  });
+
+  const addBtn = document.getElementById('add-reading');
+  if (addBtn) addBtn.addEventListener('click', () => {
+    state.wennerReadings.push({ a: '', r: '' });
+    render();
+  });
+
+  const mallaFieldMap = {
+    'm-largo':'largo','m-ancho':'ancho','m-profundidad':'profundidad',
+    'm-condL':'nConductoresL','m-condW':'nConductoresW',
+    'm-nvarillas':'nVarillas','m-lvarilla':'longVarilla',
+    'm-rho':'rho','m-ifalla':'iFalla','m-tfalla':'tFalla'
+  };
+  Object.entries(mallaFieldMap).forEach(([id, key]) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      state.malla[key] = isNaN(val) ? 0 : val;
+      renderResultsOnly();
+    });
+  });
+
+  document.querySelectorAll('[data-peso]').forEach(el => {
+    el.addEventListener('click', () => { state.tensiones.pesoPersona = parseInt(el.dataset.peso); render(); });
+  });
+
+  const tensionesFieldMap = { 'tn-rhos':'rhoSuperficial', 'tn-hs':'hSuperficial', 'tn-t':'tFalla' };
+  Object.entries(tensionesFieldMap).forEach(([id, key]) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      state.tensiones[key] = isNaN(val) ? 0 : val;
+      renderResultsOnly();
+    });
+  });
+
+  const conductorFieldMap = { 'cd-ifalla':'iFalla', 'cd-tfalla':'tFalla', 'cd-tamb':'tempAmbiente', 'cd-tmax':'tempMaxFusion' };
+  Object.entries(conductorFieldMap).forEach(([id, key]) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      state.conductor[key] = isNaN(val) ? 0 : val;
+      renderResultsOnly();
+    });
+  });
+
+  const calibreSelectEl = document.getElementById('cd-calibre-select');
+  if (calibreSelectEl) calibreSelectEl.addEventListener('change', (e) => {
+    state.conductor.calibreSeleccionado = e.target.value || null;
+    render();
+  });
+
+  // --- Schlumberger (tabla de lecturas) ---
+  document.querySelectorAll('#schl-readings-body input').forEach(el => {
+    el.addEventListener('input', (e) => {
+      const idx = parseInt(e.target.dataset.idx);
+      const field = e.target.dataset.field;
+      const val = parseFloat(e.target.value);
+      state.schlumbergerReadings[idx][field] = isNaN(val) ? 0 : val;
+      renderResultsOnly();
+    });
+  });
+  document.querySelectorAll('[data-del-schl]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      const idx = parseInt(e.target.dataset.delSchl);
+      state.schlumbergerReadings.splice(idx, 1);
+      render();
+    });
+  });
+  const addSchlBtn = document.getElementById('add-schl-reading');
+  if (addSchlBtn) addSchlBtn.addEventListener('click', () => {
+    state.schlumbergerReadings.push({ L: '', l: 0.5, r: '' });
+    render();
+  });
+
+  // --- Curvas patrón Orellana-Mooney ---
+  document.querySelectorAll('[data-cp-modo]').forEach(el => {
+    el.addEventListener('click', () => { state.curvaPatron.modoAjuste = el.dataset.cpModo; render(); });
+  });
+
+  // --- N capas y parámetros de estratos ---
+  document.querySelectorAll('[data-ncapas]').forEach(el => {
+    el.addEventListener('click', () => { state.curvaPatron.nCapas = parseInt(el.dataset.ncapas); render(); });
+  });
+  const N = state.curvaPatron.nCapas;
+  for (let i = 0; i < 4; i++) {
+    const rhoEl = document.getElementById(`cp-rho-${i}`);
+    if (rhoEl) rhoEl.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      state.curvaPatron.rhos[i] = isNaN(val) ? 100 : val;
+      renderResultsOnly();
+    });
+    const hEl = document.getElementById(`cp-h-${i}`);
+    if (hEl) hEl.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      state.curvaPatron.hs[i] = isNaN(val) ? 1 : val;
+      renderResultsOnly();
+    });
+  }
+
+  // --- Materiales y Costos ---
+  const matFieldMap = {
+    'mat-pconductor':'precioConductorM', 'mat-pvarilla':'precioVarilla',
+    'mat-pconector':'precioConector', 'mat-pexcavacion':'precioExcavacionM',
+    'mat-pgel':'precioGelL'
+  };
+  Object.entries(matFieldMap).forEach(([id, key]) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      state.materiales[key] = isNaN(val) ? 0 : val;
+      renderResultsOnly();
+    });
+  });
+
+  // --- Aditivo gel químico ---
+  document.querySelectorAll('[data-gel-activo]').forEach(el => {
+    el.addEventListener('click', () => { state.gel.activo = el.dataset.gelActivo === '1'; render(); });
+  });
+  const gelFieldMap = { 'gel-rho':'rhoGel', 'gel-rvarilla':'radioVarilla', 'gel-rgel':'radioConGel', 'gel-l':'longVarillaGel' };
+  Object.entries(gelFieldMap).forEach(([id, key]) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      state.gel[key] = isNaN(val) ? 0 : val;
+      renderResultsOnly();
+    });
+  });
+
+  // --- Planes (maqueta, sin pasarela de pago real) ---
+  document.querySelectorAll('[data-select-plan]').forEach(el => {
+    el.addEventListener('click', () => {
+      el.textContent = '✓ Solicitud registrada (demo)';
+      el.disabled = true;
+    });
+  });
+
+  // --- Memoria técnica: descarga real de PDF con los datos actuales ---
+  const downloadBtn = document.getElementById('download-memoria-btn');
+  if (downloadBtn) downloadBtn.addEventListener('click', () => {
+    alert('En este prototipo, la descarga de PDF se genera de forma asistida fuera del navegador (Claude la produce con los valores actuales como un archivo .pdf real). Pide a Claude: "genera el PDF de la memoria técnica con estos valores" y se entregará como descarga.');
+  });
+
+  // --- Auth (maqueta) ---
+  const authSubmit = document.getElementById('auth-submit-btn');
+  if (authSubmit) authSubmit.addEventListener('click', () => {
+    state.currentUserId = 'u1';
+    state.tab = 'dashboard';
+    render();
+  });
+  const authGoogle = document.getElementById('auth-google-btn');
+  if (authGoogle) authGoogle.addEventListener('click', () => {
+    state.currentUserId = 'u1';
+    state.tab = 'dashboard';
+    render();
+  });
+  const authSwitch = document.getElementById('auth-switch-link');
+  if (authSwitch) authSwitch.addEventListener('click', () => {
+    state.authView = authSwitch.dataset.view;
+    state.tab = authSwitch.dataset.view;
+    render();
+  });
+
+  // --- Equipo (maqueta, pero con efecto real en el estado local) ---
+  document.querySelectorAll('[data-role-user]').forEach(el => {
+    el.addEventListener('change', (e) => {
+      const uid = el.dataset.roleUser;
+      const target = USERS.find(u => u.id === uid);
+      if (target) target.rol = e.target.value;
+      render();
+    });
+  });
+  document.querySelectorAll('[data-remove-user]').forEach(el => {
+    el.addEventListener('click', () => {
+      el.closest('tr').style.opacity = '0.35';
+      el.textContent = 'Quitado (demo)';
+      el.disabled = true;
+    });
+  });
+}
+
+// Re-render solo del panel de resultados/inputs para no perder foco al escribir
+function renderResultsOnly() {
+  const resultsPane = document.querySelector('.results');
+  if (resultsPane && !FULLWIDTH_TABS.includes(state.tab)) {
+    resultsPane.innerHTML = renderResultsForTab();
+  }
+}
+
+render();
+</script>
+</body>
+</html>
