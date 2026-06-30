@@ -5,8 +5,8 @@ export default function PlatformLayout({ children }: { children: React.ReactNode
   return (
     <>
       <Topbar />
-      <div style={{ display: 'flex', height: 'calc(100vh - 44px)' }}>
-        <Sidebar />
+      <div className="platform-main" style={{ display: 'flex', height: 'calc(100vh - 44px)' }}>
+        <div className="platform-sidebar"><Sidebar /></div>
         <main style={{ flex: 1, overflow: 'auto' }}>
           {children}
         </main>

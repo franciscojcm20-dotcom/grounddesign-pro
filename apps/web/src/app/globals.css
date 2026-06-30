@@ -45,3 +45,50 @@ body {
 .faint { color: var(--faint); }
 .safe { color: var(--safe); }
 .danger { color: var(--danger); }
+
+/* ── Skeleton shimmer ── */
+@keyframes skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  /* Platform layout: sidebar hidden on mobile */
+  .platform-sidebar { display: none !important; }
+  .platform-main    { height: calc(100vh - 44px) !important; }
+
+  /* Topbar: show hamburger, hide desktop nav */
+  .topbar-nav  { display: none !important; }
+  .hamburger   { display: block !important; }
+
+  /* Marketing sections: tighter padding */
+  section { padding-left: 20px !important; padding-right: 20px !important; }
+
+  /* Grids collapse to 1 col */
+  .grid-auto { grid-template-columns: 1fr !important; }
+
+  /* Pricing: single column */
+  .pricing-grid { grid-template-columns: 1fr !important; }
+
+  /* Calc layout: vertical stack */
+  .calc-layout {
+    flex-direction: column !important;
+    height: auto !important;
+  }
+  .calc-aside {
+    width: 100% !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--line);
+    max-height: 50vh;
+  }
+
+  /* Landing hero: smaller text */
+  .hero-h1 { font-size: 28px !important; }
+  .stats-bar { flex-direction: column !important; gap: 16px !important; align-items: center; }
+}
+
+@media (max-width: 480px) {
+  .hero-h1 { font-size: 22px !important; }
+  .plan-cards { flex-direction: column !important; }
+}
