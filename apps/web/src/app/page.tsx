@@ -4,7 +4,7 @@ const CARDS = [
   { href: '/soil/wenner', label: 'Resistividad Wenner', norm: 'IEEE 81-2012 Cl.8.3',
     desc: 'Cuatro electrodos colineales. Calcula ρa y estima modelo de 2 capas.', status: 'active' },
   { href: '/soil/schlumberger', label: 'Resistividad Schlumberger', norm: 'IEEE 81-2012 Cl.8',
-    desc: 'Electrodos exteriores variables. Forma exacta Telford.', status: 'soon' },
+    desc: 'Electrodos exteriores variables. Forma exacta Telford.', status: 'active' },
   { href: '/grid/resistance', label: 'Resistencia de malla', norm: 'IEEE 80-2013 Cl.14.2',
     desc: 'Ecuación de Sverak. Verifica Rg ≤ 1 Ω.', status: 'active' },
   { href: '/conductor', label: 'Conductor IEEE 80', norm: 'IEEE 80-2013 Cl.11.3',
@@ -12,7 +12,7 @@ const CARDS = [
   { href: '/voltages', label: 'Tensiones paso/contacto', norm: 'IEEE 80-2013 Cl.16',
     desc: 'Em, Es reales vs admisibles. Compliance automático.', status: 'active' },
   { href: '/grid/gel', label: 'Aditivo gel químico', norm: 'Dwight / Sunde',
-    desc: 'Modelo cilindros concéntricos. Mejora de ρ efectiva.', status: 'soon' },
+    desc: 'Modelo cilindros concéntricos. Mejora de ρ efectiva.', status: 'active' },
 ];
 
 export default function HomePage() {

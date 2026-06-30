@@ -80,7 +80,8 @@ export function StatCard({ label, value, unit, primary, ok }: {
   );
 }
 
-export function CompBanner({ pass, msg, norm }: { pass: boolean; msg: string; norm: string }) {
+export function CompBanner({ pass, msg, norm }: { pass?: boolean; msg: string; norm: string }) {
+  pass = pass ?? true;
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10, padding: '9px 13px',
@@ -142,7 +143,7 @@ export function FundBtn({ show, onToggle, label, children }: {
   );
 }
 
-export function Th({ children }: { children: ReactNode }) {
+export function Th({ children }: { children?: ReactNode }) {
   return (
     <th style={{
       textAlign: 'left', color: 'var(--faint)', textTransform: 'uppercase',

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "dev": "concurrently -n api,web -c cyan,magenta \"pnpm -F @gdp/api dev\" \"pnpm -F @gdp/web dev\"",
     "test": "pnpm -r test",
     "test:legacy": "node --test tests/motors.test.js",
     "build": "pnpm -r build",
@@ -11,5 +12,8 @@
   "engines": {
     "node": ">=18",
     "pnpm": ">=9"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.3"
   }
 }
