@@ -16,7 +16,8 @@ const COMMANDS = [
   { id: 'gel',          label: 'Gel químico',                icon: '🧪', href: '/grid/gel',          group: 'Módulos' },
   { id: 'gpr',          label: 'GPR — Potencial de tierra', icon: '⚡', href: '/gpr',               group: 'Módulos' },
   { id: 'pricing',      label: 'Precios y planes',           icon: '💎', href: '/pricing',           group: 'Información' },
-  { id: 'admin',        label: 'Panel de administración',    icon: '🛡', href: '/admin',             group: 'Sistema' },
+  { id: 'changelog',   label: 'Changelog — versiones',      icon: '📋', href: '/changelog',         group: 'Información' },
+  { id: 'admin',       label: 'Panel de administración',    icon: '🛡', href: '/admin',             group: 'Sistema' },
 ];
 
 export function CommandPalette() {
