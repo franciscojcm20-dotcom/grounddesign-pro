@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { api, type ConductorResult, type ConductorEntry } from '@/lib/api';
 import { Field, SectionLabel, StatCard, CompBanner, ExpertItem, FundBtn, calcLayout, inputStyle, panelStyle } from '@/components/ui/CalcShared';
+import { ExportBar } from '@/components/ui/ExportBar';
 
 const DEFAULTS = { iFalla: 8500, tFalla: 0.5, tempAmbiente: 40, tempMaxFusion: 450 };
 
@@ -93,6 +94,7 @@ export function ConductorClient() {
               msg={result.compliance.pass
                 ? `Calibre ${result.seleccionado.calibre} (${result.seleccionado.mm2} mm²) cumple con margen +${result.compliance.margenPct}%`
                 : result.compliance.advertencia ?? 'Calibre subdimensionado'} />
+            <ExportBar module="conductor" inputs={form as unknown as Record<string,unknown>} outputs={result as unknown as Record<string,unknown>} norm={result.norm} />
 
             {result.calibreSubdimensionado && (
               <ExpertItem type="warn">

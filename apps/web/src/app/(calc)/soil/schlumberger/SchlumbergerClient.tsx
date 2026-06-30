@@ -5,6 +5,7 @@ import {
   SectionLabel, StatCard, CompBanner, ExpertItem, FundBtn,
   calcLayout, inputStyle, panelStyle, Th, TdMono,
 } from '@/components/ui/CalcShared';
+import { ExportBar } from '@/components/ui/ExportBar';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -107,6 +108,7 @@ export function SchlumbergerClient() {
 
             <CompBanner pass={true} norm={result.norm}
               msg={`${result.points.length} lecturas Schlumberger procesadas — ρ promedio ${result.rhoAvg.toFixed(0)} Ω·m`} />
+            <ExportBar module="schlumberger" inputs={{ nLecturas: result.points.length }} outputs={result as unknown as Record<string,unknown>} norm={result.norm} />
 
             <SectionLabel purple>Sistema Experto</SectionLabel>
             <ExpertItem type="info">

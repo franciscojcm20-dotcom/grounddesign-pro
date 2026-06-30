@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
-import { api, type WennerResult, downloadReport } from '@/lib/api';
+import { api, type WennerResult } from '@/lib/api';
+import { ExportBar } from '@/components/ui/ExportBar';
 import {
   SectionLabel, StatCard, CompBanner, ExpertItem, FundBtn,
   calcLayout, inputStyle, panelStyle, Th, TdMono,
@@ -26,19 +27,7 @@ export function WennerClient() {
   const [result, setResult] = useState<WennerResult | null>(null);
   const [error, setError]   = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [showFund, setShowFund]   = useState(false);
-  const [pdfLoading, setPdfLoading] = useState(false);
-
-  async function exportPdf() {
-    if (!result) return;
-    setPdfLoading(true);
-    try {
-      await downloadReport(
-        { projectName: 'Ensayo de resistividad', projectCode: 'GDP-RES-001' },
-        [{ module: 'wenner', inputs: { nLecturas: result.points.length }, outputs: result as unknown as Record<string, unknown> }],
-      );
-    } finally { setPdfLoading(false); }
-  }
+  const [showFund, setShowFund] = useState(false);
 
   function updateRow(i: number, field: 'a' | 'r', val: string) {
     setRows(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r));
@@ -116,14 +105,7 @@ export function WennerClient() {
             <CompBanner pass={true} norm="IEEE 81-2012 · Cl. 8.3"
               msg={`${result.points.length} lecturas procesadas — ρ promedio ${result.rhoAvg.toFixed(0)} Ω·m`} />
 
-            <button onClick={exportPdf} disabled={pdfLoading} style={{
-              display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16,
-              background: 'none', border: '1px solid var(--copper)', borderRadius: 3,
-              color: 'var(--copper)', fontFamily: 'var(--font-mono)', fontSize: 10,
-              padding: '6px 14px', cursor: 'pointer', opacity: pdfLoading ? 0.6 : 1,
-            }}>
-              {pdfLoading ? '⏳ Generando…' : '↓ Exportar PDF'}
-            </button>
+            <ExportBar module="wenner" inputs={{ nLecturas: result.points.length }} outputs={result as unknown as Record<string,unknown>} norm="IEEE 81-2012 Cl.8.3" />
 
             <SectionLabel purple>Sistema Experto</SectionLabel>
             <ExpertItem type="info">

@@ -5,6 +5,7 @@ import {
   Field, SectionLabel, StatCard, CompBanner, ExpertItem,
   FundBtn, calcLayout, inputStyle, panelStyle, Th, TdMono,
 } from '@/components/ui/CalcShared';
+import { ExportBar } from '@/components/ui/ExportBar';
 
 const DEFAULTS = {
   largo: 40, ancho: 30, profundidad: 0.6,
@@ -90,6 +91,7 @@ export function GridClient() {
                 ? `Rg = ${result.Rg.toFixed(3)} Ω cumple el límite de 1 Ω`
                 : `Rg = ${result.Rg.toFixed(3)} Ω supera el límite de 1 Ω — revisar geometría o ρ efectiva`}
             />
+            <ExportBar module="grid" inputs={form as unknown as Record<string,unknown>} outputs={result as unknown as Record<string,unknown>} norm={result.norm} />
 
             {!result.compliance.rg1ohm.pass && (
               <ExpertItem type="warn">
