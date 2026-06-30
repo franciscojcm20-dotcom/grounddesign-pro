@@ -1,0 +1,36 @@
+-- GroundDesing Pro — PostgreSQL schema
+-- Run once: psql -U postgres -d grounddesing -f schema.sql
+
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+CREATE TABLE IF NOT EXISTS users (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email       TEXT NOT NULL UNIQUE,
+  name        TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  plan        TEXT NOT NULL DEFAULT 'community' CHECK (plan IN ('community','individual','professional')),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS projects (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  description TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS calc_results (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id  UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  module      TEXT NOT NULL,   -- 'wenner' | 'schlumberger' | 'grid' | 'conductor' | 'voltages' | 'gel'
+  inputs      JSONB NOT NULL,
+  outputs     JSONB NOT NULL,
+  norm        TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_projects_user   ON projects(user_id);
+CREATE INDEX IF NOT EXISTS idx_results_project ON calc_results(project_id);
+CREATE INDEX IF NOT EXISTS idx_results_module  ON calc_results(module);
