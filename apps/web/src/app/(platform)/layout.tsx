@@ -1,6 +1,7 @@
-import { Topbar }     from '@/components/ui/Topbar';
-import { Sidebar }    from '@/components/ui/Sidebar';
-import { Breadcrumb } from '@/components/ui/Breadcrumb';
+import { Topbar }          from '@/components/ui/Topbar';
+import { Sidebar }         from '@/components/ui/Sidebar';
+import { Breadcrumb }      from '@/components/ui/Breadcrumb';
+import { ModulesSidebar }  from '@/components/ui/ModulesSidebar';
 
 export default function PlatformLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -15,6 +16,7 @@ export default function PlatformLayout({ children }: { children: React.ReactNode
           </main>
         </div>
       </div>
+      <ModulesSidebar />
     </>
   );
 }
