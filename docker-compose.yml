@@ -30,8 +30,25 @@ services:
       DATABASE_URL: postgres://gdp:${DB_PASSWORD:-gdpdev}@db:5432/grounddesing
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       WEB_URL: ${WEB_URL:-http://localhost:3000}
+      # Email (optional — dev mode logs to console without SMTP)
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      FROM_EMAIL: ${FROM_EMAIL:-noreply@grounddesing.pro}
+      # Stripe (optional — endpoints return 503 without key)
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PRICE_INDIVIDUAL: ${STRIPE_PRICE_INDIVIDUAL:-}
+      STRIPE_PRICE_PROFESSIONAL: ${STRIPE_PRICE_PROFESSIONAL:-}
     ports:
       - "3001:3001"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   web:
     build:
@@ -39,7 +56,8 @@ services:
       dockerfile: apps/web/Dockerfile
     restart: unless-stopped
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     environment:
       NEXT_PUBLIC_API_URL: ${API_URL:-http://localhost:3001}
     ports:
