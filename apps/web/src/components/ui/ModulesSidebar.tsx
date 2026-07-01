@@ -10,7 +10,12 @@ const MODULES = [
     { label: 'N Capas',      href: '/soil/nlayer',       icon: '🌍' },
   ]},
   { group: 'Malla',  items: [
-    { label: 'Resistencia',  href: '/grid/resistance',   icon: '⬡' },
+    { label: 'Rectangular',  href: '/grid/resistance',   icon: '⬡' },
+    { label: 'Picas (N)',    href: '/grid/rod',          icon: '⬇' },
+    { label: 'Horizontal',   href: '/grid/strip',        icon: '─' },
+    { label: 'Radial ★',    href: '/grid/radial',       icon: '✦' },
+    { label: 'Anillo',       href: '/grid/ring',         icon: '◯' },
+    { label: 'Malla+Picas',  href: '/grid/combined',     icon: '⊞' },
     { label: 'Gel Químico',  href: '/grid/gel',          icon: '🧪' },
   ]},
   { group: 'Sistema', items: [

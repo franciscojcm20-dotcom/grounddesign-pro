@@ -64,6 +64,27 @@ export interface GridResult {
   norm: string;
 }
 
+export interface RodResult {
+  R1: number; Rm: number; Rn: number; gpr: number;
+  compliance: { rg1: boolean; rg5: boolean }; norm: string;
+}
+export interface StripResult {
+  Rh: number; gpr: number;
+  compliance: { rg1: boolean; rg5: boolean }; norm: string;
+}
+export interface RadialResult {
+  R1: number; Rstar: number; Ltotal: number; gpr: number;
+  compliance: { rg1: boolean; rg5: boolean }; norm: string;
+}
+export interface RingResult {
+  rEq: number; Rring: number; gpr: number;
+  compliance: { rg1: boolean; rg5: boolean }; norm: string;
+}
+export interface CombinedResult {
+  Rg: number; Rr: number; Rmr: number; Rc: number; gpr: number; mejora: number;
+  compliance: { rg1: boolean; rg5: boolean }; norm: string;
+}
+
 export interface VoltagesRealResult {
   mesh:        { Em: number; Km: number; Ki: number; Kh: number };
   step:        { Es: number; Ks: number };
@@ -129,6 +150,22 @@ export const api = {
       rho: number; iFalla: number; tFalla: number;
       gel?: { activo: boolean; rhoGel: number; radioVarilla: number; radioConGel: number; longVarillaGel: number };
     }) => post<GridResult>('/api/v1/grid/resistance', body),
+    rod: (body: {
+      rho: number; L: number; radius: number; n: number; spacing: number; iFalla: number;
+    }) => post<RodResult>('/api/v1/grid/rod', body),
+    strip: (body: {
+      rho: number; L: number; h: number; radius: number; iFalla: number;
+    }) => post<StripResult>('/api/v1/grid/strip', body),
+    radial: (body: {
+      rho: number; L: number; h: number; radius: number; n: number; iFalla: number;
+    }) => post<RadialResult>('/api/v1/grid/radial', body),
+    ring: (body: {
+      rho: number; perimeter: number; h: number; radius: number; iFalla: number;
+    }) => post<RingResult>('/api/v1/grid/ring', body),
+    combined: (body: {
+      rho: number; area: number; Ltotal: number; depth: number;
+      nRods: number; rodLength: number; rodRadius: number; rodSpacing: number; iFalla: number;
+    }) => post<CombinedResult>('/api/v1/grid/combined', body),
   },
   voltages: {
     real: (body: {

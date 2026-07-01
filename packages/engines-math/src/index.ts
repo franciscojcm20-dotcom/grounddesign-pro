@@ -383,6 +383,169 @@ export function computeConductor(c: ConductorInput): ConductorResult {
   return { ...r, sugerido, seleccionado, esSeleccionManual, calibreSubdimensionado, margen };
 }
 
+// ─── TOPOLOGÍAS ADICIONALES DE ELECTRODOS (IEEE 80-2013 Annex B) ─────────────
+
+export interface MultipleRodsInput {
+  rho: number;      // Ω·m — resistividad del suelo
+  L: number;        // m   — longitud de cada pica
+  radius: number;   // m   — radio del conductor de la pica
+  n: number;        // —   — número de picas
+  spacing: number;  // m   — separación entre picas (>= 2L recomendado)
+  iFalla: number;   // A   — corriente de falla
+}
+export interface MultipleRodsResult {
+  R1: number;       // Ω — resistencia de una pica sola (Dwight)
+  Rm: number;       // Ω — resistencia mutua por par de picas
+  Rn: number;       // Ω — resistencia total n picas en paralelo
+  gpr: number;      // V — potencial de tierra (GPR = Rn × Ifalla)
+  compliance: { rg1: boolean; rg5: boolean };
+}
+
+/**
+ * N electrodos verticales en paralelo — Dwight con resistencia mutua
+ * IEEE 80-2013 Annex B.1, Sunde (1949)
+ */
+export function computeMultipleRods(p: MultipleRodsInput): MultipleRodsResult {
+  const R1 = rodResistanceDwight(p.rho, p.L, p.radius);
+  // Resistencia mutua entre dos picas: Rm = (ρ/2πL)·[ln(2L/s) - 1]
+  const Rm = (p.rho / (2 * Math.PI * p.L)) * (Math.log(2 * p.L / p.spacing) - 1);
+  // Para n picas en fila: R_n = (R1 + (n-1)·Rm) / n²  (Sunde)
+  const Rn = p.n === 1 ? R1 : (R1 + (p.n - 1) * Rm) / p.n;
+  const gpr = Rn * p.iFalla;
+  return { R1, Rm, Rn, gpr, compliance: { rg1: Rn <= 1, rg5: Rn <= 5 } };
+}
+
+export interface HorizontalStripInput {
+  rho: number;      // Ω·m
+  L: number;        // m — longitud total del conductor
+  h: number;        // m — profundidad de enterramiento
+  radius: number;   // m — radio del conductor
+  iFalla: number;   // A
+}
+export interface HorizontalStripResult {
+  Rh: number;
+  gpr: number;
+  compliance: { rg1: boolean; rg5: boolean };
+}
+
+/**
+ * Conductor horizontal enterrado (tira) — Dwight (1936)
+ * IEEE 80-2013 Annex B.3
+ * R = (ρ/πL) · [ln(2L²/a·h) - 1]
+ */
+export function computeHorizontalStrip(p: HorizontalStripInput): HorizontalStripResult {
+  const Rh = (p.rho / (Math.PI * p.L)) * (Math.log(2 * p.L * p.L / (p.radius * p.h)) - 1);
+  const gpr = Rh * p.iFalla;
+  return { Rh, gpr, compliance: { rg1: Rh <= 1, rg5: Rh <= 5 } };
+}
+
+export interface RadialStarInput {
+  rho: number;      // Ω·m
+  L: number;        // m — longitud de cada radial
+  h: number;        // m — profundidad
+  radius: number;   // m — radio del conductor
+  n: number;        // — número de radiales (igual separación angular)
+  iFalla: number;   // A
+}
+export interface RadialStarResult {
+  R1: number;       // Ω — resistencia de un radial solo
+  Rstar: number;    // Ω — resistencia sistema radial completo
+  Ltotal: number;   // m — longitud total de conductor
+  gpr: number;
+  compliance: { rg1: boolean; rg5: boolean };
+}
+
+/**
+ * Sistema de electrodos radiales (estrella) — Laurent-Niemann
+ * IEEE 80-2013 Annex B, fórmula de Niemann (1952)
+ * Rg = (ρ/π·n·L) · [ln(2L²/a·h) - 1 + (n−1)·(h/L)]
+ */
+export function computeRadialStar(p: RadialStarInput): RadialStarResult {
+  const R1 = (p.rho / (Math.PI * p.L)) * (Math.log(2 * p.L * p.L / (p.radius * p.h)) - 1);
+  // Factor de acoplamiento mutuo entre radiales a igual ángulo (Niemann)
+  const mutualFactor = p.n > 1 ? ((p.n - 1) * p.h) / p.L : 0;
+  const Rstar = (p.rho / (Math.PI * p.n * p.L))
+    * (Math.log(2 * p.L * p.L / (p.radius * p.h)) - 1 + mutualFactor);
+  return {
+    R1, Rstar,
+    Ltotal: p.n * p.L,
+    gpr: Rstar * p.iFalla,
+    compliance: { rg1: Rstar <= 1, rg5: Rstar <= 5 },
+  };
+}
+
+export interface RingLoopInput {
+  rho: number;      // Ω·m
+  perimeter: number;// m — perímetro del anillo (cualquier forma)
+  h: number;        // m — profundidad
+  radius: number;   // m — radio del conductor
+  iFalla: number;   // A
+}
+export interface RingLoopResult {
+  rEq: number;      // m — radio equivalente del anillo
+  Rring: number;    // Ω
+  gpr: number;
+  compliance: { rg1: boolean; rg5: boolean };
+}
+
+/**
+ * Anillo perimetral — Sunde (1949)
+ * IEEE 80-2013 §14.3
+ * R = (ρ/2π²·r) · [ln(8r/a) + ln(2r/h) − 2]
+ * r = radio equivalente del anillo = P / (2π)
+ */
+export function computeRingLoop(p: RingLoopInput): RingLoopResult {
+  const rEq = p.perimeter / (2 * Math.PI);
+  const Rring = (p.rho / (2 * Math.PI * Math.PI * rEq))
+    * (Math.log(8 * rEq / p.radius) + Math.log(2 * rEq / p.h) - 2);
+  return { rEq, Rring, gpr: Rring * p.iFalla, compliance: { rg1: Rring <= 1, rg5: Rring <= 5 } };
+}
+
+export interface CombinedGridRodInput {
+  // Malla rectangular (Sverak)
+  rho: number;
+  area: number;          // m²
+  Ltotal: number;        // m — longitud total conductores de malla
+  depth: number;         // m — profundidad de malla
+  // Picas adicionales
+  nRods: number;
+  rodLength: number;     // m
+  rodRadius: number;     // m
+  rodSpacing: number;    // m (separación entre picas)
+  iFalla: number;        // A
+}
+export interface CombinedGridRodResult {
+  Rg: number;    // Ω — resistencia malla sola (Sverak)
+  Rr: number;    // Ω — resistencia picas en paralelo
+  Rmr: number;   // Ω — resistencia mutua malla-picas
+  Rc: number;    // Ω — resistencia combinada (Schwarz)
+  gpr: number;
+  mejora: number; // % reducción respecto a malla sola
+  compliance: { rg1: boolean; rg5: boolean };
+}
+
+/**
+ * Sistema combinado malla + picas — Schwarz (1954)
+ * IEEE 80-2013 §14.5
+ * Rc = (Rg·Rr − Rmr²) / (Rg + Rr − 2·Rmr)
+ */
+export function computeCombinedGridRod(p: CombinedGridRodInput): CombinedGridRodResult {
+  const { Rg } = sverakGridResistance({ rho: p.rho, area: p.area, Ltotal: p.Ltotal, depth: p.depth });
+  // Resistencia de las picas en paralelo (Dwight + Sunde)
+  const R1rod = rodResistanceDwight(p.rho, p.rodLength, p.rodRadius);
+  const Rmutual = p.nRods > 1
+    ? (p.rho / (2 * Math.PI * p.rodLength)) * (Math.log(2 * p.rodLength / p.rodSpacing) - 1)
+    : 0;
+  const Rr = p.nRods === 1 ? R1rod : (R1rod + (p.nRods - 1) * Rmutual) / p.nRods;
+  // Resistencia mutua malla-picas (Schwarz): Rmr = (ρ/2πLt)·ln(Lt/hp) - 1
+  // Aproximación: Rmr = ρ/(2π·√(area)) · k  donde k ≈ 1
+  const Rmr = (p.rho / (2 * Math.PI * Math.sqrt(p.area)));
+  const denom = Rg + Rr - 2 * Rmr;
+  const Rc = denom > 0 ? (Rg * Rr - Rmr * Rmr) / denom : Math.min(Rg, Rr);
+  const mejora = ((Rg - Rc) / Rg) * 100;
+  return { Rg, Rr, Rmr, Rc, gpr: Rc * p.iFalla, mejora, compliance: { rg1: Rc <= 1, rg5: Rc <= 5 } };
+}
+
 // ─── Lightning Protection — Rolling Sphere / NFPA 780 / IEC 62305 ────────────
 
 /** LPS protection level → rolling sphere radius (m) per IEC 62305-3 Table 2 */
