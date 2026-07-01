@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
 import { sql } from '../db/client.ts';
 import type { User } from '../db/client.ts';
+import { sendPasswordReset, sendWelcome } from '../lib/mailer.ts';
 
 export async function authRoutes(app: FastifyInstance) {
 
@@ -25,6 +26,12 @@ export async function authRoutes(app: FastifyInstance) {
 
     const token = app.jwt.sign({ sub: user.id, email: user.email, plan: user.plan }, { expiresIn: '7d' });
     reply.setCookie('token', token, { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 60 * 60 * 24 * 7 });
+
+    // Fire-and-forget welcome email
+    sendWelcome({ to: user.email, name: user.name }).catch(err =>
+      app.log.warn({ err }, 'welcome email failed')
+    );
+
     return { user: { id: user.id, email: user.email, name: user.name, plan: user.plan } };
   });
 
@@ -66,8 +73,10 @@ export async function authRoutes(app: FastifyInstance) {
         VALUES (${user.id}, ${tokenHash})
       `;
 
-      // In production this would send an email. Log for dev:
-      app.log.info({ resetUrl: `${process.env.WEB_URL ?? 'http://localhost:3000'}/reset-password?token=${rawToken}` }, 'Password reset link');
+      // Send email (fire-and-forget; always return 200 to prevent enumeration)
+      sendPasswordReset({ to: user.email, name: user.name, token: rawToken }).catch(err =>
+        app.log.warn({ err }, 'password-reset email failed')
+      );
     }
 
     // Always 200 — prevent email enumeration
