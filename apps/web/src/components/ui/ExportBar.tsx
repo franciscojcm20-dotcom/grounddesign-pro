@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { downloadReport, type ReportMeta } from '@/lib/api';
 import { useToast } from '@/context/ToastContext';
 import { SaveToProjectModal } from './SaveToProjectModal';
+import { useI18n } from '@/context/I18nContext';
 
 interface ExportBarProps {
   module: string;
@@ -12,11 +13,19 @@ interface ExportBarProps {
   projectName?: string;
 }
 
-const MODULE_NAMES: Record<string, string> = {
+const MODULE_NAMES_ES: Record<string, string> = {
   wenner: 'Resistividad Wenner', schlumberger: 'Resistividad Schlumberger',
   nlayer: 'Modelo N capas', grid: 'Resistencia de malla',
   conductor: 'Conductor IEEE 80', voltages: 'Tensiones paso/contacto',
   gel: 'Gel químico', gpr: 'Potencial de tierra GPR',
+  lightning: 'Protección contra Rayos',
+};
+const MODULE_NAMES_EN: Record<string, string> = {
+  wenner: 'Wenner Resistivity', schlumberger: 'Schlumberger Resistivity',
+  nlayer: 'N-Layer Model', grid: 'Grid Resistance',
+  conductor: 'Conductor IEEE 80', voltages: 'Step / Touch Voltages',
+  gel: 'Chemical Ground Gel', gpr: 'Ground Potential Rise',
+  lightning: 'Lightning Protection',
 };
 
 export function ExportBar({ module, inputs, outputs, norm, projectName }: ExportBarProps) {
@@ -24,7 +33,9 @@ export function ExportBar({ module, inputs, outputs, norm, projectName }: Export
   const [pdfOk,      setPdfOk]      = useState(false);
   const [showSave,   setShowSave]   = useState(false);
   const [savedTo,    setSavedTo]    = useState<string | null>(null);
-  const toast = useToast();
+  const toast  = useToast();
+  const { t, locale } = useI18n();
+  const MODULE_NAMES = locale === 'en' ? MODULE_NAMES_EN : MODULE_NAMES_ES;
 
   async function handlePdf() {
     setPdfLoading(true); setPdfOk(false);
@@ -54,7 +65,7 @@ export function ExportBar({ module, inputs, outputs, norm, projectName }: Export
           padding: '6px 14px', cursor: 'pointer', opacity: pdfLoading ? 0.6 : 1,
           transition: 'border-color .2s, color .2s',
         }}>
-          {pdfLoading ? '⏳ Generando…' : pdfOk ? '✓ Descargado' : '↓ Exportar PDF'}
+          {pdfLoading ? t('generating') : pdfOk ? t('downloaded') : t('exportPdf')}
         </button>
 
         <button onClick={() => setShowSave(true)} style={{
