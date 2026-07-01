@@ -2,25 +2,74 @@
 import { useState } from 'react';
 import {
   SectionLabel, StatCard, CompBanner, ExpertItem, FundBtn,
-  calcLayout, inputStyle, Field,
+  calcLayout, inputStyle, panelStyle, Th, TdMono, Field,
 } from '@/components/ui/CalcShared';
 import { ExportBar } from '@/components/ui/ExportBar';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 interface GprResult {
-  GPR:        number;
-  Ib:         number;
-  Ib50:       number;
-  Ib70:       number;
-  Etouch:     number;
-  Estep:      number;
-  EtouchMax:  number;
+  GPR: number; Ib: number; Ib50: number; Ib70: number;
+  Etouch: number; Estep: number; EtouchMax: number;
   compliance: {
     gprUnder5kV: { pass: boolean; limit: string; norm: string };
     touchSafe:   { pass: boolean; limit: string; norm: string };
   };
   norm: string;
+}
+
+/* ── GPR vs Rg sensitivity curve ──────────────────────────── */
+function GprCurve({ Ig, Sf, Rg }: { Ig: number; Sf: number; Rg: number }) {
+  const W = 360, H = 150, PL = 46, PR = 12, PT = 10, PB = 28;
+  const rMin = Rg * 0.1, rMax = Rg * 2.5;
+  const gprMax = Ig * Sf * rMax;
+  const steps = 24;
+
+  const xFor = (r: number) => PL + ((r - rMin) / (rMax - rMin)) * (W - PL - PR);
+  const yFor = (g: number) => PT + (H - PT - PB) * (1 - g / gprMax);
+
+  const pts = Array.from({ length: steps + 1 }, (_, i) => {
+    const r = rMin + (i / steps) * (rMax - rMin);
+    return { r, g: Ig * Sf * r };
+  });
+  const poly = pts.map(p => `${xFor(p.r).toFixed(1)},${yFor(p.g).toFixed(1)}`).join(' ');
+  const area = `${xFor(rMin)},${yFor(0)} ${poly} ${xFor(rMax)},${yFor(0)}`;
+  const cx = xFor(Rg), cy = yFor(Ig * Sf * Rg);
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map(f => f * gprMax);
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: H, display: 'block' }}>
+      {yTicks.map(v => {
+        const y = yFor(v);
+        return (
+          <g key={v}>
+            <line x1={PL} y1={y} x2={W - PR} y2={y} stroke="var(--line)" strokeWidth="0.5" />
+            <text x={PL - 4} y={y + 3} fontSize="7" fill="var(--faint)" textAnchor="end" fontFamily="var(--font-mono)">
+              {(v / 1000).toFixed(0)}k
+            </text>
+          </g>
+        );
+      })}
+      <line x1={PL} y1={PT} x2={PL} y2={H - PB} stroke="var(--line)" strokeWidth="0.7" />
+      <line x1={PL} y1={H - PB} x2={W - PR} y2={H - PB} stroke="var(--line)" strokeWidth="0.7" />
+
+      {/* 5 kV safety limit */}
+      {gprMax > 5000 && (
+        <line x1={PL} y1={yFor(5000)} x2={W - PR} y2={yFor(5000)}
+          stroke="var(--danger)" strokeWidth="1" strokeDasharray="4,3" />
+      )}
+
+      <polygon points={area} fill="var(--copper)" fillOpacity="0.07" />
+      <polyline points={poly} fill="none" stroke="var(--copper)" strokeWidth="1.5" />
+      <line x1={cx} y1={PT} x2={cx} y2={H - PB} stroke="var(--copper)" strokeWidth="0.8" strokeDasharray="3,2" strokeOpacity="0.5" />
+      <circle cx={cx} cy={cy} r="4.5" fill="var(--copper)" />
+      <text x={cx + 7} y={cy - 4} fontSize="8" fill="var(--copper)" fontFamily="var(--font-mono)">
+        {(Ig * Sf * Rg / 1000).toFixed(2)} kV
+      </text>
+      <text x={(PL + W - PR) / 2} y={H - 2} fontSize="7" fill="var(--faint)" textAnchor="middle" fontFamily="var(--font-mono)">Rg (Ω)</text>
+      <text x={9} y={H / 2} fontSize="7" fill="var(--faint)" textAnchor="middle" fontFamily="var(--font-mono)" transform={`rotate(-90, 9, ${H / 2})`}>GPR (V)</text>
+    </svg>
+  );
 }
 
 export function GprClient() {
@@ -48,16 +97,14 @@ export function GprClient() {
           Cs: Number(Cs), rhoS: Number(rhoS),
         }),
       });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error ?? 'Error'); }
-      setResult(await res.json());
+      if (!res.ok) { const d = await res.json(); throw new Error((d as { error: string }).error ?? 'Error'); }
+      setResult(await res.json() as GprResult);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error de conexión');
     } finally { setLoading(false); }
   }
 
-  const allPass = result
-    ? Object.values(result.compliance).every(c => c.pass)
-    : false;
+  const allPass = result ? Object.values(result.compliance).every(c => c.pass) : false;
 
   return (
     <div style={calcLayout}>
@@ -118,7 +165,7 @@ export function GprClient() {
       <section style={{ overflowY: 'auto', padding: '18px 24px 40px', background: 'var(--bg)' }}>
         {!result ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12 }}>
-            <div style={{ fontSize: 32 }}>⚡</div>
+            <div style={{ fontSize: 32 }}>⏚</div>
             <div style={{ color: 'var(--faint)', fontSize: 11 }}>Ingresa los parámetros y presiona Calcular</div>
           </div>
         ) : (
@@ -128,14 +175,21 @@ export function GprClient() {
             <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
               <StatCard label="GPR" value={(result.GPR / 1000).toFixed(2)} unit="kV" primary />
               <StatCard label="Etoque máx." value={result.EtouchMax.toFixed(0)} unit="V" />
-              <StatCard label="Etoque admis." value={result.Etouch.toFixed(0)} unit="V" />
-              <StatCard label="Epaso admis." value={result.Estep.toFixed(0)} unit="V" />
+              <StatCard label="Etoque adm." value={result.Etouch.toFixed(0)} unit="V" />
+              <StatCard label="Epaso adm." value={result.Estep.toFixed(0)} unit="V" />
             </div>
 
-            <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-              <StatCard label={`Ib (${bodyW} kg)`} value={(result.Ib * 1000).toFixed(1)} unit="mA" />
-              <StatCard label="Ib50" value={(result.Ib50 * 1000).toFixed(1)} unit="mA" />
-              <StatCard label="Ib70" value={(result.Ib70 * 1000).toFixed(1)} unit="mA" />
+            {/* GPR vs Rg curve */}
+            <div style={{ ...panelStyle, marginBottom: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 8 }}>
+                GPR vs Rg — sensibilidad al diseño de malla
+              </div>
+              <GprCurve Ig={+Ig} Sf={+Sf} Rg={+Rg} />
+              {+Ig * +Sf * +Rg > 5000 && (
+                <div style={{ fontSize: 9, color: 'var(--danger)', marginTop: 4 }}>
+                  — — límite de 5 kV (IEEE 80-2013 Cl. 1)
+                </div>
+              )}
             </div>
 
             <SectionLabel>Cumplimiento IEEE 80-2013</SectionLabel>
@@ -145,10 +199,31 @@ export function GprClient() {
               </ExpertItem>
             ))}
 
+            {/* Currents table */}
+            <div style={{ ...panelStyle, marginTop: 16, marginBottom: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 10 }}>Corrientes de fibrillación (Dalziel-Lee)</div>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead><tr><Th>Peso</Th><Th>Ib (mA)</Th><Th>Etouch adm. (V)</Th><Th>Estep adm. (V)</Th></tr></thead>
+                <tbody>
+                  {[
+                    { w: '50 kg', ib: result.Ib50, et: (1000 + 1.5 * +Cs * +rhoS) * result.Ib50, es: (1000 + 6 * +Cs * +rhoS) * result.Ib50 },
+                    { w: '70 kg', ib: result.Ib70, et: (1000 + 1.5 * +Cs * +rhoS) * result.Ib70, es: (1000 + 6 * +Cs * +rhoS) * result.Ib70 },
+                  ].map(row => (
+                    <tr key={row.w}>
+                      <TdMono>{row.w}</TdMono>
+                      <TdMono highlight>{(row.ib * 1000).toFixed(1)}</TdMono>
+                      <TdMono>{row.et.toFixed(0)}</TdMono>
+                      <TdMono>{row.es.toFixed(0)}</TdMono>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
             <ExportBar
               module="gpr"
               inputs={{ Ig: Number(Ig), Rg: Number(Rg), Sf: Number(Sf), ts: Number(ts), bodyW, Cs: Number(Cs), rhoS: Number(rhoS) }}
-              outputs={result}
+              outputs={{ GPR: result.GPR, Etouch: result.Etouch, Estep: result.Estep, Ib: result.Ib }}
               norm={result.norm}
             />
 
@@ -157,10 +232,10 @@ export function GprClient() {
                 GPR = Sf · Ig · Rg
               </div>
               <p><strong style={{ color: 'var(--text)' }}>Sf (Split Factor):</strong> fracción de la corriente de falla que circula por la malla. Depende del diseño del sistema y de la impedancia de la red de tierra remota.</p>
-              <p style={{ marginTop: 8 }}><strong style={{ color: 'var(--text)' }}>Corriente admisible:</strong> Ib = 0.116/√ts (50 kg) o 0.157/√ts (70 kg) — fórmulas de Dalziel (IEEE 80-2013 Ec. 29-30).</p>
-              <p style={{ marginTop: 8 }}><strong style={{ color: 'var(--text)' }}>Tensión de toque admisible:</strong> Etouch = (1000 + 1.5·Cs·ρs)·Ib — IEEE 80-2013 Ec. 32.</p>
-              <p style={{ marginTop: 8 }}><strong style={{ color: 'var(--text)' }}>Tensión de paso admisible:</strong> Estep = (1000 + 6·Cs·ρs)·Ib — IEEE 80-2013 Ec. 33.</p>
-              <p style={{ marginTop: 12, fontSize: 9, color: 'var(--faint)' }}>IEEE Std 80-2013 Cl. 15 · Dalziel & Lee (1968)</p>
+              <p style={{ marginTop: 8 }}><strong style={{ color: 'var(--text)' }}>Ib (Dalziel-Lee):</strong> 0.116/√ts (50 kg) y 0.157/√ts (70 kg) — IEEE 80-2013 Ec. 29-30.</p>
+              <p style={{ marginTop: 8 }}><strong style={{ color: 'var(--text)' }}>Etouch = (1000 + 1.5·Cs·ρs)·Ib</strong> — IEEE 80-2013 Ec. 32.</p>
+              <p style={{ marginTop: 8 }}><strong style={{ color: 'var(--text)' }}>Estep = (1000 + 6·Cs·ρs)·Ib</strong> — IEEE 80-2013 Ec. 33.</p>
+              <p style={{ marginTop: 12, fontSize: 9, color: 'var(--faint)' }}>IEEE Std 80-2013 Cl. 15-16 · Dalziel & Lee (1968)</p>
             </FundBtn>
           </>
         )}

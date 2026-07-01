@@ -12,6 +12,7 @@ const MODULE_LABELS: Record<string, string> = {
   conductor:    'Conductor IEEE 80',
   voltages:     'Tensiones paso/contacto',
   gel:          'Aditivo gel químico',
+  gpr:          'GPR — Potencial de tierra',
 };
 
 export function ProjectDetailClient({ id }: { id: string }) {
