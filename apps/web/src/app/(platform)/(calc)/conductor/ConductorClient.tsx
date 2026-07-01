@@ -3,10 +3,12 @@ import { useState } from 'react';
 import { api, type ConductorResult, type ConductorEntry } from '@/lib/api';
 import { Field, SectionLabel, StatCard, CompBanner, ExpertItem, FundBtn, calcLayout, inputStyle, panelStyle } from '@/components/ui/CalcShared';
 import { ExportBar } from '@/components/ui/ExportBar';
+import { useI18n } from '@/context/I18nContext';
 
 const DEFAULTS = { iFalla: 8500, tFalla: 0.5, tempAmbiente: 40, tempMaxFusion: 450 };
 
 export function ConductorClient() {
+  const { t } = useI18n();
   const [form, setForm] = useState({ ...DEFAULTS, calibreSeleccionado: '' });
   const [result, setResult] = useState<ConductorResult | null>(null);
   const [table, setTable]   = useState<ConductorEntry[]>([]);
@@ -47,19 +49,19 @@ export function ConductorClient() {
           A = (I·197.4) / denom · IEEE Std 80-2013, Cl. 11.3
         </p>
 
-        <SectionLabel>Corriente y tiempo de falla</SectionLabel>
-        <Field label="Corriente de falla" unit="A">
+        <SectionLabel>{t('faultCurrent')} / {t('clearingTime')}</SectionLabel>
+        <Field label={t('faultCurrent')} unit="A">
           <input style={inputStyle} type="number" value={form.iFalla} onChange={e => set('iFalla', e.target.value)} />
         </Field>
-        <Field label="Tiempo de despeje" unit="s">
+        <Field label={t('clearingTime')} unit="s">
           <input style={inputStyle} type="number" step="0.1" value={form.tFalla} onChange={e => set('tFalla', e.target.value)} />
         </Field>
 
-        <SectionLabel>Temperaturas (Onderdonk)</SectionLabel>
-        <Field label="Temperatura ambiente" unit="°C">
+        <SectionLabel>{t('ambientTemp')} (Onderdonk)</SectionLabel>
+        <Field label={t('ambientTemp')} unit="°C">
           <input style={inputStyle} type="number" value={form.tempAmbiente} onChange={e => set('tempAmbiente', e.target.value)} />
         </Field>
-        <Field label="Temp. máx. fusión conductor" unit="°C">
+        <Field label={t('maxTemp')} unit="°C">
           <input style={inputStyle} type="number" value={form.tempMaxFusion} onChange={e => set('tempMaxFusion', e.target.value)} />
         </Field>
 
@@ -73,7 +75,7 @@ export function ConductorClient() {
           width: '100%', background: 'var(--copper)', border: 'none',
           color: '#fff', fontWeight: 700, fontSize: 11, padding: 10,
           borderRadius: 3, cursor: 'pointer', opacity: loading ? 0.6 : 1, marginTop: 8,
-        }}>{loading ? 'Calculando…' : 'Calcular'}</button>
+        }}>{loading ? t('calculating') : t('calculate')}</button>
         {error && <div style={{ marginTop: 10, padding: '8px 10px', background: '#1a0d0d', border: '1px solid #ef444433', borderRadius: 3, fontSize: 10, color: 'var(--danger)' }}>{error}</div>}
       </aside>
 
