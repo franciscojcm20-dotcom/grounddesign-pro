@@ -112,4 +112,33 @@ export async function authRoutes(app: FastifyInstance) {
     if (!user) throw { statusCode: 404, message: 'Usuario no encontrado' };
     return { user };
   });
+
+  // PUT /api/v1/auth/me — update name and/or password
+  app.put('/me', { preHandler: [app.authenticate] }, async (req, reply) => {
+    const { sub } = req.user as { sub: string };
+    const { name, currentPassword, newPassword } = req.body as {
+      name?: string; currentPassword?: string; newPassword?: string;
+    };
+
+    const [user] = await sql<User[]>`SELECT * FROM users WHERE id = ${sub}`;
+    if (!user) return reply.code(404).send({ error: 'Usuario no encontrado' });
+
+    // Update name
+    if (name?.trim() && name.trim() !== user.name) {
+      await sql`UPDATE users SET name = ${name.trim()} WHERE id = ${sub}`;
+    }
+
+    // Update password
+    if (newPassword) {
+      if (!currentPassword) return reply.code(400).send({ error: 'Se requiere la contraseña actual' });
+      if (newPassword.length < 8) return reply.code(400).send({ error: 'La nueva contraseña debe tener al menos 8 caracteres' });
+      const valid = await bcrypt.compare(currentPassword, user.password_hash);
+      if (!valid) return reply.code(401).send({ error: 'Contraseña actual incorrecta' });
+      const hash = await bcrypt.hash(newPassword, 12);
+      await sql`UPDATE users SET password_hash = ${hash} WHERE id = ${sub}`;
+    }
+
+    const [updated] = await sql<User[]>`SELECT id, email, name, plan, created_at FROM users WHERE id = ${sub}`;
+    return { ok: true, user: updated };
+  });
 }
