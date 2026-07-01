@@ -7,6 +7,13 @@
       "runtimeArgs": ["node_modules/next/dist/bin/next", "dev", "--port", "3000"],
       "cwd": "apps/web",
       "port": 3000
+    },
+    {
+      "name": "strike-web",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
+      "runtimeArgs": ["node_modules/next/dist/bin/next", "dev", "--port", "3002"],
+      "cwd": "apps/strike-web",
+      "port": 3002
     }
   ]
 }

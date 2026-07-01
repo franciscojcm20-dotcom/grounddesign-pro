@@ -1,0 +1,87 @@
+/* ─── Strike Ground Design — Design Tokens ──────────────────────────────────── */
+
+:root {
+  /* Brand */
+  --blue:        #1a56db;
+  --blue-soft:   #0d1a3a;
+  --blue-mid:    #1e3a7a;
+  --yellow:      #facc15;
+  --yellow-soft: #2a2200;
+
+  /* Base */
+  --bg:          #080c14;
+  --panel:       #0e1420;
+  --panel2:      #111827;
+  --text:        #e8edf5;
+  --dim:         #8898b0;
+  --faint:       #3d4f68;
+  --line:        #1e2a3e;
+
+  /* Semantic */
+  --safe:        #22c55e;
+  --safe-bg:     #0a1f0f;
+  --danger:      #ef4444;
+  --danger-bg:   #1f0a0a;
+  --warn:        #f59e0b;
+  --warn-bg:     #1f1500;
+  --info:        #3b82f6;
+  --info-bg:     #0a1530;
+
+  /* Typography */
+  --font-sans:   system-ui, -apple-system, sans-serif;
+  --font-mono:   'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 13px; }
+
+body {
+  background:  var(--bg);
+  color:       var(--text);
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  min-height:  100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Scrollbars ──────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--panel); }
+::-webkit-scrollbar-thumb { background: var(--faint); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--dim); }
+
+/* ── Selection ───────────────────────────────────────────────────────────────── */
+::selection { background: var(--blue-mid); color: var(--text); }
+
+/* ── Focus ───────────────────────────────────────────────────────────────────── */
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 2px; }
+
+/* ── Links ───────────────────────────────────────────────────────────────────── */
+a { color: var(--blue); text-decoration: none; }
+a:hover { color: var(--yellow); }
+
+/* ── Inputs & selects ────────────────────────────────────────────────────────── */
+input, select, textarea {
+  font-family: var(--font-mono);
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 7px 10px;
+  font-size: 12px;
+  transition: border-color 0.15s;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--blue);
+  outline: none;
+}
+
+/* ── Utility ─────────────────────────────────────────────────────────────────── */
+.mono  { font-family: var(--font-mono); }
+.dim   { color: var(--dim); }
+.faint { color: var(--faint); }
+.blue  { color: var(--blue); }
+.yellow{ color: var(--yellow); }
+.safe  { color: var(--safe); }
+.danger{ color: var(--danger); }
