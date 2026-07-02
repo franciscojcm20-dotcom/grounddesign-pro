@@ -1,6 +1,12 @@
 import PDFDocument from 'pdfkit';
 import { Writable } from 'node:stream';
 
+export {
+  generateGridDxf, generateRodDxf, generateStripDxf, generateRadialDxf, generateRingDxf, generateCombinedDxf,
+  type GridDxfInput, type RodDxfInput, type StripDxfInput, type RadialDxfInput, type RingDxfInput, type CombinedDxfInput,
+  type DxfLayer, type ResumenRow,
+} from './dxf.ts';
+
 // ─── Public types ─────────────────────────────────────────────────────────────
 
 export interface ReportMeta {
@@ -72,15 +78,15 @@ function strokeRect(doc: PDFKit.PDFDocument, x: number, y: number, w: number, h:
   doc.save().rect(x, y, w, h).lineWidth(lw).strokeColor(hex(color)).stroke().restore();
 }
 
-function hRule(doc: PDFKit.PDFDocument, y: number, color = C.line, lw = 0.5) {
+function hRule(doc: PDFKit.PDFDocument, y: number, color: string = C.line, lw = 0.5) {
   doc.save().moveTo(MARGIN, y).lineTo(PAGE.width - MARGIN, y).lineWidth(lw).strokeColor(hex(color)).stroke().restore();
 }
 
-function lbl(doc: PDFKit.PDFDocument, x: number, y: number, text: string, size = 7, color = C.dim) {
+function lbl(doc: PDFKit.PDFDocument, x: number, y: number, text: string, size = 7, color: string = C.dim) {
   doc.fontSize(size).fillColor(hex(color)).font('Helvetica').text(text, x, y, { lineBreak: false });
 }
 
-function val(doc: PDFKit.PDFDocument, x: number, y: number, text: string, size = 9, color = C.text, bold = false) {
+function val(doc: PDFKit.PDFDocument, x: number, y: number, text: string, size = 9, color: string = C.text, bold = false) {
   doc.fontSize(size).fillColor(hex(color)).font(bold ? 'Helvetica-Bold' : 'Helvetica').text(text, x, y, { lineBreak: false });
 }
 
@@ -268,7 +274,7 @@ function drawSection(doc: PDFKit.PDFDocument, sec: ReportSection, startY: number
   // ── Inputs column ────────────────────────────────────────────────────────
   let iy = y;
   for (let i = 0; i < sec.inputs.length; i++) {
-    const inp = sec.inputs[i];
+    const inp = sec.inputs[i]!;
     const bg  = i % 2 === 0 ? C.panelDark : C.panel;
     fillRect(doc, MARGIN, iy, COL_W, 17, bg);
     doc.font('Helvetica').fontSize(7.5).fillColor(hex(C.dim))
@@ -285,7 +291,7 @@ function drawSection(doc: PDFKit.PDFDocument, sec: ReportSection, startY: number
   const rx = MARGIN + COL_W + 12;
   let ry    = y;
   for (let i = 0; i < sec.results.length; i++) {
-    const res    = sec.results[i];
+    const res    = sec.results[i]!;
     const bg     = res.highlight ? C.copperSoft : (i % 2 === 0 ? C.panelDark : C.panel);
     const vColor = res.highlight ? C.copper : C.text;
     fillRect(doc, rx, ry, COL_W, 17, bg);
