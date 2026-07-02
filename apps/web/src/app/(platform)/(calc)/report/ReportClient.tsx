@@ -1,0 +1,676 @@
+'use client';
+import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
+import {
+  downloadReport, downloadValorizacionPdf, api,
+  downloadGridDxf, downloadRodDxf, downloadStripDxf, downloadRadialDxf, downloadRingDxf, downloadCombinedDxf,
+  type ReportMeta, type CubicacionInput, type PreciosUnitariosCLP, type ValorizacionResult,
+} from '@/lib/api';
+import { useToast } from '@/context/ToastContext';
+import { useSoilModel } from '@/context/SoilModelContext';
+import { useFaultAnalysis } from '@/context/FaultAnalysisContext';
+import { useI18n } from '@/context/I18nContext';
+import { SectionLabel, StatCard, CompBanner, panelStyle, calcLayout, Field, inputStyle, Th, TdMono } from '@/components/ui/CalcShared';
+import { API_BASE as BASE } from '@/lib/apiBase';
+
+const GEOMETRY_MODULES = new Set(['grid', 'rod', 'strip', 'radial', 'ring', 'combined']);
+
+/** Deriva una cubicación inicial (editable) a partir del resultado guardado de un módulo de malla. */
+function deriveCubicacion(module: string, inputs: Record<string, unknown>, outputs: Record<string, unknown>): CubicacionInput {
+  const num = (v: unknown, d = 0) => typeof v === 'number' ? v : d;
+  let conductorMetros = 0, varillasCantidad = 0, varillaLongitudM = 0;
+
+  if (module === 'grid') {
+    conductorMetros = num(outputs['Ltotal']);
+    varillasCantidad = num(inputs['nVarillas']);
+    varillaLongitudM = num(inputs['longVarilla']);
+  } else if (module === 'rod') {
+    varillasCantidad = num(inputs['n']);
+    varillaLongitudM = num(inputs['L']);
+    conductorMetros = varillasCantidad * varillaLongitudM;
+  } else if (module === 'strip') {
+    conductorMetros = num(inputs['L']);
+  } else if (module === 'radial') {
+    conductorMetros = num(outputs['Ltotal']) || num(inputs['n']) * num(inputs['L']);
+  } else if (module === 'ring') {
+    conductorMetros = num(inputs['perimeter']);
+  } else if (module === 'combined') {
+    conductorMetros = num(inputs['Ltotal']);
+    varillasCantidad = num(inputs['nRods']);
+    varillaLongitudM = num(inputs['rodLength']);
+  }
+
+  const conectoresCantidad = varillasCantidad + Math.max(1, Math.ceil(conductorMetros / 20));
+  const gelActivo = Boolean((outputs['gelInfo'] as { activo?: boolean } | null)?.activo);
+
+  return {
+    conductorMetros: Math.round(conductorMetros * 10) / 10,
+    conductorSeccionMm2: 67.4, // 2/0 AWG por defecto — editable
+    varillasCantidad, varillaLongitudM,
+    conectoresCantidad, gelActivo,
+    gelKg: gelActivo ? Math.round(conductorMetros * 0.5 * 10) / 10 : 0,
+    zanjaM3: Math.round(conductorMetros * 0.3 * 0.6 * 10) / 10,
+  };
+}
+
+interface Project { id: string; name: string; description?: string; created_at: string; updated_at: string }
+interface CalcResult { id: string; module: string; inputs: Record<string, unknown>; outputs: Record<string, unknown>; norm?: string; created_at: string }
+
+const MODULE_META: Record<string, { label: string; icon: string; group: string }> = {
+  field:        { label: 'Mediciones de Campo',        icon: '🌐', group: 'Suelo' },
+  schlumberger: { label: 'Resistividad Schlumberger',   icon: '📡', group: 'Suelo' },
+  wenner:       { label: 'Resistividad Wenner',          icon: '〰', group: 'Suelo' },
+  nlayer:       { label: 'Modelo N capas',               icon: '🌍', group: 'Suelo' },
+  grid:         { label: 'Malla rectangular (Sverak)',   icon: '⬡', group: 'Malla' },
+  rod:          { label: 'Electrodos verticales (picas)',icon: '⬇', group: 'Malla' },
+  strip:        { label: 'Conductor horizontal',         icon: '─', group: 'Malla' },
+  radial:       { label: 'Sistema radial / estrella',    icon: '✦', group: 'Malla' },
+  ring:         { label: 'Anillo perimetral',            icon: '◯', group: 'Malla' },
+  combined:     { label: 'Malla + picas combinada',      icon: '⊞', group: 'Malla' },
+  gel:          { label: 'Aditivo gel químico',          icon: '🧪', group: 'Malla' },
+  conductor:    { label: 'Conductor IEEE 80',            icon: '〰', group: 'Sistema' },
+  voltages:     { label: 'Tensiones paso/contacto',      icon: '⚠', group: 'Sistema' },
+  gpr:          { label: 'GPR — Potencial de tierra',    icon: '⏚', group: 'Sistema' },
+};
+
+const HEADLINE_KEYS = ['Rg', 'Rn', 'Rstar', 'Rring', 'Rc', 'Rh', 'Rtotal', 'rhoAvg', 'areaMm2'] as const;
+
+function summarize(outputs: Record<string, unknown>) {
+  const compliance = outputs['compliance'] as Record<string, unknown> | undefined;
+  let pass: boolean | null = null;
+  if (compliance) {
+    if ('rg1ohm' in compliance) pass = Boolean((compliance['rg1ohm'] as { pass?: boolean })?.pass) || Boolean((compliance['rg5ohm'] as { pass?: boolean })?.pass);
+    else if ('rg1' in compliance) pass = Boolean(compliance['rg1']) || Boolean(compliance['rg5']);
+    else if ('pass' in compliance) pass = Boolean(compliance['pass']);
+    else if ('touch' in compliance) pass = Boolean((compliance['touch'] as { pass?: boolean })?.pass) && Boolean((compliance['step'] as { pass?: boolean })?.pass);
+  }
+  const headlineKey = HEADLINE_KEYS.find(k => typeof outputs[k] === 'number');
+  const headline = headlineKey ? (outputs[headlineKey] as number) : null;
+  const gpr = typeof outputs['gpr'] === 'number' ? outputs['gpr'] as number : null;
+  const rhoUsado = typeof outputs['rhoUsado'] === 'number' ? outputs['rhoUsado'] as number : null;
+  const gelInfo = outputs['gelInfo'] as { activo?: boolean } | null | undefined;
+  return { pass, headlineKey, headline, gpr, rhoUsado, gelActivo: Boolean(gelInfo?.activo) };
+}
+
+function timeAgo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'ahora';
+  if (m < 60) return `hace ${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `hace ${h}h`;
+  return `hace ${Math.floor(h / 24)}d`;
+}
+
+export function ReportClient() {
+  const toast = useToast();
+  const soilModel = useSoilModel();
+  const faultAnalysis = useFaultAnalysis();
+  const { t } = useI18n();
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [results, setResults] = useState<CalcResult[]>([]);
+  const [project, setProject] = useState<Project | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [view, setView] = useState<'consolidado' | 'valorizacion' | 'dxf'>('consolidado');
+
+  // ── Cubicación y Valorización ──
+  const [valResultId, setValResultId] = useState<string | null>(null);
+  const [cubicacion, setCubicacion] = useState<CubicacionInput | null>(null);
+  const [precios, setPrecios] = useState<PreciosUnitariosCLP | null>(null);
+  const [valorizacion, setValorizacion] = useState<ValorizacionResult | null>(null);
+  const [valLoading, setValLoading] = useState(false);
+  const [valPdfLoading, setValPdfLoading] = useState(false);
+
+  // ── Plano DXF ──
+  const [dxfResultId, setDxfResultId] = useState<string | null>(null);
+  const [dxfLoading, setDxfLoading] = useState(false);
+
+  const loadProjects = useCallback(async () => {
+    try {
+      const res = await fetch(`${BASE}/api/v1/projects`, { credentials: 'include' });
+      if (!res.ok) return;
+      const body = await res.json() as { projects: Project[] };
+      setProjects(body.projects);
+      if (body.projects[0] && !selected) setSelected(body.projects[0].id);
+    } catch { /* silent */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const loadProject = useCallback(async (id: string) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/v1/projects/${id}`, { credentials: 'include' });
+      if (!res.ok) return;
+      const body = await res.json() as { project: Project; results: CalcResult[] };
+      setProject(body.project);
+      setResults(body.results);
+    } catch { /* silent */ }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { loadProjects(); }, [loadProjects]);
+  useEffect(() => { if (selected) loadProject(selected); }, [selected, loadProject]);
+
+  const geometryResults = results.filter(r => GEOMETRY_MODULES.has(r.module));
+  const dxfResults = results.filter(r => GEOMETRY_MODULES.has(r.module));
+
+  function selectValResult(id: string) {
+    const r = results.find(x => x.id === id);
+    if (!r) return;
+    setValResultId(id);
+    setCubicacion(deriveCubicacion(r.module, r.inputs, r.outputs));
+    setValorizacion(null);
+    if (!precios) api.valorizacion.preciosDefault().then(setPrecios).catch(() => {});
+  }
+
+  async function computeVal() {
+    if (!cubicacion || !precios) return;
+    setValLoading(true);
+    try {
+      const r = await api.valorizacion.compute({ ...cubicacion, precios });
+      setValorizacion(r);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al calcular la valorización');
+    } finally { setValLoading(false); }
+  }
+
+  async function exportValorizacionPdf() {
+    if (!project || !cubicacion || !precios || !valorizacion) return;
+    setValPdfLoading(true);
+    try {
+      const meta: ReportMeta = {
+        projectName: project.name,
+        projectCode: `GDP-${project.id.slice(0, 8).toUpperCase()}-VAL`,
+        engineer: 'Ingeniero de proyecto',
+        location: project.description ?? undefined,
+      };
+      await downloadValorizacionPdf(meta, cubicacion, precios, valorizacion);
+      toast.success('Valorización económica exportada en PDF');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al generar el PDF');
+    } finally { setValPdfLoading(false); }
+  }
+
+  async function exportDxf() {
+    const r = results.find(x => x.id === dxfResultId);
+    if (!r) return;
+    setDxfLoading(true);
+    try {
+      const num = (v: unknown) => Number(v);
+      /** Formatea un output numérico como texto; retorna '—' si no es un número válido. */
+      const fmt = (v: unknown, decimals: number, suffix = ''): string => {
+        const n = Number(v);
+        return Number.isFinite(n) ? `${n.toFixed(decimals)}${suffix}` : '—';
+      };
+      const proyecto = project?.name, norm = r.norm;
+      if (r.module === 'grid') {
+        await downloadGridDxf({
+          largo: num(r.inputs['largo']), ancho: num(r.inputs['ancho']),
+          nConductoresL: num(r.inputs['nConductoresL']), nConductoresW: num(r.inputs['nConductoresW']),
+          nVarillas: num(r.inputs['nVarillas']), longVarilla: num(r.inputs['longVarilla']), proyecto, norm,
+          resultados: [
+            { label: 'Rg (Sverak)', value: fmt(r.outputs['Rg'], 3, ' Ω') },
+            { label: 'GPR', value: Number.isFinite(Number(r.outputs['gpr'])) ? `${(Number(r.outputs['gpr']) / 1000).toFixed(2)} kV` : '—' },
+          ],
+        });
+      } else if (r.module === 'rod') {
+        await downloadRodDxf({
+          n: num(r.inputs['n']), L: num(r.inputs['L']), spacing: num(r.inputs['spacing']), proyecto, norm,
+          resultados: [
+            { label: 'Rn', value: fmt(r.outputs['Rn'], 3, ' Ω') },
+            { label: 'GPR', value: Number.isFinite(Number(r.outputs['gpr'])) ? `${(Number(r.outputs['gpr']) / 1000).toFixed(2)} kV` : '—' },
+          ],
+        });
+      } else if (r.module === 'strip') {
+        await downloadStripDxf({
+          L: num(r.inputs['L']), h: num(r.inputs['h']), proyecto, norm,
+          resultados: [{ label: 'Rh', value: fmt(r.outputs['Rh'], 3, ' Ω') }],
+        });
+      } else if (r.module === 'radial') {
+        await downloadRadialDxf({
+          n: num(r.inputs['n']), L: num(r.inputs['L']), proyecto, norm,
+          resultados: [{ label: 'R★', value: fmt(r.outputs['Rstar'], 3, ' Ω') }],
+        });
+      } else if (r.module === 'ring') {
+        await downloadRingDxf({
+          largo: num(r.inputs['largo']), ancho: num(r.inputs['ancho']), proyecto, norm,
+          resultados: [{ label: 'Rring', value: fmt(r.outputs['Rring'], 3, ' Ω') }],
+        });
+      } else if (r.module === 'combined') {
+        await downloadCombinedDxf({
+          largo: num(r.inputs['largo']), ancho: num(r.inputs['ancho']),
+          nConductoresL: num(r.inputs['nConductoresL']), nConductoresW: num(r.inputs['nConductoresW']),
+          nRods: num(r.inputs['nRods']), rodLength: num(r.inputs['rodLength']), proyecto, norm,
+          resultados: [
+            { label: 'Rc (Schwarz)', value: fmt(r.outputs['Rc'], 3, ' Ω') },
+            { label: 'Mejora vs malla sola', value: fmt(r.outputs['mejora'], 1, '%') },
+          ],
+        });
+      }
+      toast.success('Plano DXF generado');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al generar el DXF');
+    } finally { setDxfLoading(false); }
+  }
+
+  async function generatePdf() {
+    if (!project || results.length === 0) return;
+    setPdfLoading(true);
+    try {
+      const meta: ReportMeta = {
+        projectName: project.name,
+        projectCode: `GDP-${project.id.slice(0, 8).toUpperCase()}-${new Date().toISOString().slice(0, 10)}`,
+        engineer: 'Ingeniero de proyecto',
+        location: project.description ?? undefined,
+      };
+      const sections = results.map(r => ({ module: r.module, inputs: r.inputs, outputs: r.outputs, norm: r.norm }));
+      // Capítulos sintéticos previos a cualquier diseño de malla, en el orden de ingeniería
+      // profesional: 1) mediciones de terreno y modelo de suelo, 2) corriente de diseño.
+      const prepend: typeof sections = [];
+      if (model) {
+        prepend.push({
+          module: 'soilModel',
+          inputs: {
+            rho1: model.rho1, rho2: model.rho2, h: model.h, rhoUniform: model.rhoUniform, source: model.source,
+            ...(model.validatedBy ? { validatedBy: model.validatedBy } : {}),
+            schlumbergerReadings: soilModel.schlumbergerReadings,
+            wennerReadings: soilModel.wennerReadings,
+          },
+          outputs: {},
+          norm: 'IEEE Std 81-2012 Cl. 8',
+        });
+      }
+      if (faultAnalysis.result) {
+        const fa = faultAnalysis.result;
+        prepend.push({
+          module: 'faultAnalysis',
+          inputs: {
+            If: fa.If, tFalla: fa.tFalla, xr: fa.xr, freq: fa.freq, Ta: fa.Ta, Df: fa.Df, Sf: fa.Sf, Ig: fa.Ig,
+            splitMethod: fa.splitMethod, splitJustificacion: fa.splitJustificacion, confidence: fa.confidence,
+          },
+          outputs: {},
+          norm: 'IEEE Std 80-2013 Cl. 15.9–15.10',
+        });
+      }
+      sections.unshift(...prepend);
+      await downloadReport(meta, sections);
+      toast.success(`Informe completo de "${project.name}" generado — ${sections.length} secciones`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al generar el informe');
+    } finally { setPdfLoading(false); }
+  }
+
+  const grouped = results.reduce<Record<string, CalcResult[]>>((acc, r) => {
+    const group = MODULE_META[r.module]?.group ?? 'Otros';
+    (acc[group] ??= []).push(r);
+    return acc;
+  }, {});
+
+  const determinable = results.map(r => summarize(r.outputs)).filter(s => s.pass !== null);
+  const allPass = determinable.length > 0 && determinable.every(s => s.pass);
+  const anyFail = determinable.some(s => s.pass === false);
+
+  const model = soilModel.model;
+
+  return (
+    <div style={calcLayout}>
+      <aside style={{ borderRight: '1px solid var(--line)', overflowY: 'auto', background: 'var(--panel)', padding: '18px 16px 40px' }}>
+        <h2 style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>{t('moduleReport')}</h2>
+        <p style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 14, lineHeight: 1.5 }}>
+          {t('deliverablesSubtitle')}
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 18 }}>
+          {([
+            { id: 'consolidado', icon: '📋', label: t('tabConsolidated') },
+            { id: 'valorizacion', icon: '💰', label: t('tabValorization') },
+            { id: 'dxf', icon: '📐', label: t('tabDxf') },
+          ] as const).map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setView(tab.id)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left',
+                padding: '9px 12px', borderRadius: 3, cursor: 'pointer',
+                background: view === tab.id ? 'var(--copper-soft)' : 'transparent',
+                border: `1px solid ${view === tab.id ? 'var(--copper)' : 'var(--line)'}`,
+                color: view === tab.id ? 'var(--copper)' : 'var(--dim)', fontSize: 11, fontWeight: view === tab.id ? 700 : 400,
+              }}
+            >
+              <span>{tab.icon}</span>{tab.label}
+            </button>
+          ))}
+        </div>
+
+        <SectionLabel>Proyecto</SectionLabel>
+        {projects.length === 0 ? (
+          <div style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 14, lineHeight: 1.5 }}>
+            No tienes proyectos todavía. Ve a cualquier módulo de cálculo, presiona "Calcular" y usa "💾 Guardar en proyecto".
+          </div>
+        ) : (
+          <div style={{ marginBottom: 16 }}>
+            {projects.map(p => (
+              <button
+                key={p.id}
+                onClick={() => setSelected(p.id)}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  padding: '9px 12px', marginBottom: 4, borderRadius: 3,
+                  background: selected === p.id ? 'var(--copper-soft)' : 'transparent',
+                  border: `1px solid ${selected === p.id ? 'var(--copper)' : 'var(--line)'}`,
+                  color: selected === p.id ? 'var(--copper)' : 'var(--dim)', cursor: 'pointer',
+                }}
+              >
+                <div style={{ fontSize: 11, fontWeight: selected === p.id ? 700 : 400 }}>{p.name}</div>
+                {p.description && <div style={{ fontSize: 9, color: 'var(--faint)', marginTop: 2 }}>{p.description}</div>}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <SectionLabel purple>Modelo de suelo activo</SectionLabel>
+        {model ? (
+          <div style={{ fontSize: 10, color: 'var(--dim)', lineHeight: 1.7, marginBottom: 14 }}>
+            ρ1 = {model.rho1.toFixed(0)} Ω·m · ρ2 = {model.rho2.toFixed(0)} Ω·m<br />
+            h ≈ {model.h}m · fuente: {model.source === 'schlumberger' ? 'Schlumberger ★' : 'Wenner'}
+            {model.validatedBy && <><br />validado con {model.validatedBy.deltaPct.toFixed(1)}% de diferencia</>}
+          </div>
+        ) : (
+          <div style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 14 }}>
+            Sin modelo activo — ve a <Link href="/soil/field" style={{ color: 'var(--copper)' }}>Mediciones de Campo</Link>.
+          </div>
+        )}
+
+        {view === 'consolidado' && (
+          <button
+            onClick={generatePdf}
+            disabled={pdfLoading || !project || results.length === 0}
+            style={{
+              width: '100%', background: 'var(--copper)', border: 'none', color: '#fff',
+              fontWeight: 700, fontSize: 11, padding: 10, borderRadius: 3, cursor: 'pointer',
+              opacity: (pdfLoading || !project || results.length === 0) ? 0.6 : 1,
+            }}
+          >
+            {pdfLoading ? 'Generando…' : '📄 Generar informe PDF completo'}
+          </button>
+        )}
+      </aside>
+
+      <section style={{ overflowY: 'auto', padding: '18px 24px 40px', background: 'var(--bg)' }}>
+        {loading ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--faint)', fontSize: 11 }}>
+            Cargando proyecto…
+          </div>
+        ) : !project || results.length === 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12 }}>
+            <div style={{ fontSize: 32 }}>📋</div>
+            <div style={{ color: 'var(--faint)', fontSize: 11, textAlign: 'center', maxWidth: 320 }}>
+              {projects.length === 0
+                ? 'Aún no hay proyectos con cálculos guardados.'
+                : 'Este proyecto no tiene cálculos guardados todavía. Guarda resultados desde cualquier módulo con "💾 Guardar en proyecto".'}
+            </div>
+          </div>
+        ) : view === 'valorizacion' ? (
+          <>
+            <div style={{ marginBottom: 4 }}>
+              <h1 style={{ fontSize: 18, fontWeight: 700 }}>Cubicación y Valorización Económica</h1>
+              <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 2 }}>
+                Entregable independiente del informe técnico — cubicación de materiales del sistema elegido y su costo estimado en CLP.
+              </p>
+            </div>
+
+            {geometryResults.length === 0 ? (
+              <div style={{ color: 'var(--faint)', fontSize: 11, marginTop: 20 }}>
+                Este proyecto no tiene ningún diseño de malla/electrodos guardado todavía.
+              </div>
+            ) : (
+              <>
+                <SectionLabel>Sistema a valorizar</SectionLabel>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+                  {geometryResults.map(r => (
+                    <button
+                      key={r.id}
+                      onClick={() => selectValResult(r.id)}
+                      style={{
+                        padding: '7px 12px', borderRadius: 3, cursor: 'pointer', fontSize: 10.5,
+                        background: valResultId === r.id ? 'var(--copper-soft)' : 'var(--panel)',
+                        border: `1px solid ${valResultId === r.id ? 'var(--copper)' : 'var(--line)'}`,
+                        color: valResultId === r.id ? 'var(--copper)' : 'var(--dim)',
+                      }}
+                    >
+                      {MODULE_META[r.module]?.icon ?? '📄'} {MODULE_META[r.module]?.label ?? r.module}
+                    </button>
+                  ))}
+                </div>
+
+                {cubicacion && precios && (
+                  <>
+                    <div style={panelStyle}>
+                      <SectionLabel>Cubicación (editable)</SectionLabel>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                        <Field label="Conductor" unit="m">
+                          <input style={inputStyle} type="number" value={cubicacion.conductorMetros}
+                            onChange={e => setCubicacion(c => c && ({ ...c, conductorMetros: Number(e.target.value) }))} />
+                        </Field>
+                        <Field label="Sección" unit="mm²">
+                          <input style={inputStyle} type="number" value={cubicacion.conductorSeccionMm2}
+                            onChange={e => setCubicacion(c => c && ({ ...c, conductorSeccionMm2: Number(e.target.value) }))} />
+                        </Field>
+                        <Field label="Varillas" unit="un">
+                          <input style={inputStyle} type="number" value={cubicacion.varillasCantidad}
+                            onChange={e => setCubicacion(c => c && ({ ...c, varillasCantidad: Number(e.target.value) }))} />
+                        </Field>
+                        <Field label="Conectores" unit="un">
+                          <input style={inputStyle} type="number" value={cubicacion.conectoresCantidad}
+                            onChange={e => setCubicacion(c => c && ({ ...c, conectoresCantidad: Number(e.target.value) }))} />
+                        </Field>
+                        <Field label="Gel químico" unit="kg">
+                          <input style={inputStyle} type="number" value={cubicacion.gelKg} disabled={!cubicacion.gelActivo}
+                            onChange={e => setCubicacion(c => c && ({ ...c, gelKg: Number(e.target.value) }))} />
+                        </Field>
+                        <Field label="Excavación zanja" unit="m³">
+                          <input style={inputStyle} type="number" value={cubicacion.zanjaM3}
+                            onChange={e => setCubicacion(c => c && ({ ...c, zanjaM3: Number(e.target.value) }))} />
+                        </Field>
+                      </div>
+                    </div>
+
+                    <div style={panelStyle}>
+                      <SectionLabel purple>Precios unitarios de referencia (CLP)</SectionLabel>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                        <Field label="Conductor" unit="CLP/m·mm²">
+                          <input style={inputStyle} type="number" value={precios.conductorPorMetroPorMm2}
+                            onChange={e => setPrecios(p => p && ({ ...p, conductorPorMetroPorMm2: Number(e.target.value) }))} />
+                        </Field>
+                        <Field label="Varilla" unit="CLP/un">
+                          <input style={inputStyle} type="number" value={precios.varillaPorUnidad}
+                            onChange={e => setPrecios(p => p && ({ ...p, varillaPorUnidad: Number(e.target.value) }))} />
+                        </Field>
+                        <Field label="Conector" unit="CLP/un">
+                          <input style={inputStyle} type="number" value={precios.conectorPorUnidad}
+                            onChange={e => setPrecios(p => p && ({ ...p, conectorPorUnidad: Number(e.target.value) }))} />
+                        </Field>
+                        <Field label="Gel" unit="CLP/kg">
+                          <input style={inputStyle} type="number" value={precios.gelPorKg}
+                            onChange={e => setPrecios(p => p && ({ ...p, gelPorKg: Number(e.target.value) }))} />
+                        </Field>
+                        <Field label="Excavación" unit="CLP/m³">
+                          <input style={inputStyle} type="number" value={precios.excavacionPorM3}
+                            onChange={e => setPrecios(p => p && ({ ...p, excavacionPorM3: Number(e.target.value) }))} />
+                        </Field>
+                        <Field label="Mano de obra" unit="%">
+                          <input style={inputStyle} type="number" value={precios.manoObraPct}
+                            onChange={e => setPrecios(p => p && ({ ...p, manoObraPct: Number(e.target.value) }))} />
+                        </Field>
+                        <Field label="Imprevistos" unit="%">
+                          <input style={inputStyle} type="number" value={precios.imprevistosPct}
+                            onChange={e => setPrecios(p => p && ({ ...p, imprevistosPct: Number(e.target.value) }))} />
+                        </Field>
+                      </div>
+                    </div>
+
+                    <button onClick={computeVal} disabled={valLoading} style={{
+                      background: 'var(--copper)', border: 'none', color: '#fff', fontWeight: 700,
+                      fontSize: 11, padding: '9px 16px', borderRadius: 3, cursor: 'pointer', marginBottom: 16,
+                      opacity: valLoading ? 0.6 : 1,
+                    }}>
+                      {valLoading ? 'Calculando…' : '💰 Calcular valorización'}
+                    </button>
+
+                    {valorizacion && (
+                      <>
+                        <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+                          <StatCard label="Subtotal materiales" value={`$${Math.round(valorizacion.subtotalMateriales).toLocaleString('es-CL')}`} unit="" />
+                          <StatCard label="Mano de obra" value={`$${Math.round(valorizacion.manoObra).toLocaleString('es-CL')}`} unit="" />
+                          <StatCard label="TOTAL" value={`$${Math.round(valorizacion.total).toLocaleString('es-CL')}`} unit="CLP" primary />
+                        </div>
+                        <div style={panelStyle}>
+                          <SectionLabel>Cubicación de materiales (BOQ)</SectionLabel>
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead><tr><Th>Ítem</Th><Th>Cant.</Th><Th>P. Unit.</Th><Th>Subtotal</Th></tr></thead>
+                            <tbody>
+                              {valorizacion.items.map(it => (
+                                <tr key={it.item}>
+                                  <td style={{ padding: '6px 8px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--dim)' }}>{it.item}</td>
+                                  <TdMono>{it.cantidad} {it.unidad}</TdMono>
+                                  <TdMono>${Math.round(it.precioUnitCLP).toLocaleString('es-CL')}</TdMono>
+                                  <TdMono highlight>${Math.round(it.subtotalCLP).toLocaleString('es-CL')}</TdMono>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        <button onClick={exportValorizacionPdf} disabled={valPdfLoading} style={{
+                          background: 'var(--panel)', border: '1px solid var(--copper-soft)', color: 'var(--copper)',
+                          fontWeight: 700, fontSize: 11, padding: '9px 16px', borderRadius: 3, cursor: 'pointer',
+                          opacity: valPdfLoading ? 0.6 : 1,
+                        }}>
+                          {valPdfLoading ? 'Generando…' : '📄 Exportar valorización en PDF (portada + índice)'}
+                        </button>
+                      </>
+                    )}
+                  </>
+                )}
+              </>
+            )}
+          </>
+        ) : view === 'dxf' ? (
+          <>
+            <div style={{ marginBottom: 4 }}>
+              <h1 style={{ fontSize: 18, fontWeight: 700 }}>Plano DXF (AutoCAD)</h1>
+              <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 2 }}>
+                Exporta el plano del sistema de puesta a tierra en formato DXF, compatible con AutoCAD, DraftSight, LibreCAD y QCAD.
+              </p>
+            </div>
+            {dxfResults.length === 0 ? (
+              <div style={{ color: 'var(--faint)', fontSize: 11, marginTop: 20 }}>
+                Este proyecto no tiene ningún diseño de malla/electrodos guardado todavía.
+              </div>
+            ) : (
+              <>
+                <SectionLabel>Sistema a exportar</SectionLabel>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+                  {dxfResults.map(r => (
+                    <button
+                      key={r.id}
+                      onClick={() => setDxfResultId(r.id)}
+                      style={{
+                        padding: '7px 12px', borderRadius: 3, cursor: 'pointer', fontSize: 10.5,
+                        background: dxfResultId === r.id ? 'var(--copper-soft)' : 'var(--panel)',
+                        border: `1px solid ${dxfResultId === r.id ? 'var(--copper)' : 'var(--line)'}`,
+                        color: dxfResultId === r.id ? 'var(--copper)' : 'var(--dim)',
+                      }}
+                    >
+                      {MODULE_META[r.module]?.icon ?? '📄'} {MODULE_META[r.module]?.label ?? r.module} — {timeAgo(r.created_at)}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={exportDxf} disabled={!dxfResultId || dxfLoading} style={{
+                  background: 'var(--copper)', border: 'none', color: '#fff', fontWeight: 700,
+                  fontSize: 11, padding: '9px 16px', borderRadius: 3, cursor: 'pointer',
+                  opacity: (!dxfResultId || dxfLoading) ? 0.6 : 1,
+                }}>
+                  {dxfLoading ? 'Generando…' : '📐 Exportar plano DXF'}
+                </button>
+                <div style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 10, lineHeight: 1.6 }}>
+                  Incluye capas separadas (conductor, varillas, cotas, texto) generadas directamente desde la geometría calculada — sin ningún servicio de CAD externo.
+                </div>
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            <div style={{ marginBottom: 4 }}>
+              <h1 style={{ fontSize: 18, fontWeight: 700 }}>{project.name}</h1>
+              {project.description && <p style={{ fontSize: 11, color: 'var(--faint)', marginTop: 2 }}>{project.description}</p>}
+            </div>
+            <div style={{ fontSize: 9.5, color: 'var(--faint)', fontFamily: 'var(--font-mono)', marginBottom: 16 }}>
+              {results.length} secciones guardadas · última actualización {timeAgo(project.updated_at)}
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+              <StatCard label="Secciones" value={String(results.length)} unit="" />
+              <StatCard label="Verificadas" value={String(determinable.length)} unit="" />
+              <StatCard label="Estado global" value={anyFail ? 'REVISAR' : allPass ? 'CUMPLE' : 'PARCIAL'} unit="" ok={allPass} />
+            </div>
+
+            {determinable.length > 0 && (
+              <CompBanner
+                pass={allPass}
+                norm="Resumen consolidado — IEEE Std 80-2013 / 81-2012"
+                msg={allPass
+                  ? 'Todas las secciones verificables cumplen los límites normativos aplicables.'
+                  : `${determinable.filter(s => s.pass === false).length} de ${determinable.length} secciones verificables no cumplen — revisar antes de emitir el informe final.`}
+              />
+            )}
+
+            {['Suelo', 'Malla', 'Sistema', 'Otros'].filter(g => grouped[g]?.length).map(group => (
+              <div key={group} style={{ marginBottom: 20 }}>
+                <SectionLabel>{group}</SectionLabel>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {grouped[group]!.map(r => {
+                    const meta = MODULE_META[r.module];
+                    const s = summarize(r.outputs);
+                    return (
+                      <div key={r.id} style={{ ...panelStyle, marginBottom: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ fontSize: 18, flexShrink: 0 }}>{meta?.icon ?? '📄'}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 11.5, fontWeight: 700 }}>{meta?.label ?? r.module}</div>
+                          <div style={{ fontSize: 9, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>
+                            {r.norm ?? 'IEEE'} · {timeAgo(r.created_at)}
+                            {s.rhoUsado !== null && ` · ρ=${s.rhoUsado.toFixed(0)} Ω·m${s.gelActivo ? ' (gel)' : ''}`}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          {s.headline !== null && (
+                            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--copper)', fontFamily: 'var(--font-mono)' }}>
+                              {s.headlineKey === 'areaMm2' ? `${s.headline.toFixed(1)} mm²` : `${s.headline.toFixed(3)} Ω`}
+                            </div>
+                          )}
+                          {s.gpr !== null && (
+                            <div style={{ fontSize: 9, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>GPR {(s.gpr / 1000).toFixed(2)} kV</div>
+                          )}
+                        </div>
+                        {s.pass !== null && (
+                          <div style={{
+                            fontSize: 9, fontWeight: 700, padding: '3px 8px', borderRadius: 10, flexShrink: 0,
+                            background: s.pass ? 'var(--safe-soft)' : 'var(--danger-soft)',
+                            color: s.pass ? 'var(--safe)' : 'var(--danger)',
+                          }}>
+                            {s.pass ? '✓ CUMPLE' : '✗ REVISAR'}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
