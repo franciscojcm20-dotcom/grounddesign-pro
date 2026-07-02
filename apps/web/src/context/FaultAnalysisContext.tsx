@@ -3,8 +3,22 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 
 export type SplitFactorMethod = 'manual' | 'conservative' | 'estimated';
 
+/** Traza del modelado del sistema (red + transformador) cuando If se calculó en vez de ingresarse manualmente. */
+export interface ShortCircuitTrace {
+  tipoFalla: 'trifasica' | 'monofasica_tierra';
+  fuente: { un: number; ikss3: number; xr: number; ik1?: number };
+  transformador?: { sn: number; un: number; vcc: number; xr: number; z0Factor?: number };
+  zn?: number;
+  Z1: { R: number; X: number; Z: number };
+  Z0: { R: number; X: number; Z: number } | null;
+  z0Assumed: boolean;
+  memoria: string[];
+}
+
 export interface FaultAnalysisMaster {
-  If:      number;   // A — corriente de falla simétrica (estudio de cortocircuito)
+  If:      number;   // A — corriente de falla simétrica (estudio de cortocircuito o modelado calculado)
+  ifOrigin: 'manual' | 'calculado';
+  shortCircuitModel?: ShortCircuitTrace;
   tFalla:  number;   // s
   xr:      number;   // X/R
   freq:    number;   // Hz

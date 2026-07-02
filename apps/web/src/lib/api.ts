@@ -296,11 +296,36 @@ export interface FaultAnalysisResult {
   splitJustificacion: string; confidence: 'alta' | 'media' | 'conservadora'; norm: string;
 }
 
+// ─── Modelado del sistema — niveles de cortocircuito (calcula If) ──────────────
+
+export type ShortCircuitFaultType = 'trifasica' | 'monofasica_tierra';
+
+export interface SourceImpedanceInput {
+  un: number; ikss3: number; xr: number; ik1?: number; c?: number;
+}
+export interface TransformerImpedanceInput {
+  activo: boolean; sn: number; un: number; vcc: number; xr: number; z0Factor?: number;
+}
+export interface ShortCircuitInput {
+  fuente: SourceImpedanceInput;
+  transformador?: TransformerImpedanceInput;
+  tipoFalla: ShortCircuitFaultType;
+  zn?: number;
+  c?: number;
+}
+export interface ImpedanceRX { R: number; X: number; Z: number }
+export interface ShortCircuitResult {
+  tipoFalla: ShortCircuitFaultType;
+  Z1: ImpedanceRX; Z0: ImpedanceRX | null; z0Assumed: boolean;
+  If: number; un: number; memoria: string[]; norm: string;
+}
+
 // ─── Llamadas ─────────────────────────────────────────────────────────────────
 
 export const api = {
   faultAnalysis: {
     compute: (body: FaultAnalysisInput) => post<FaultAnalysisResult>('/api/v1/fault-analysis', body),
+    shortCircuit: (body: ShortCircuitInput) => post<ShortCircuitResult>('/api/v1/fault-analysis/short-circuit', body),
   },
   soil: {
     wenner: (readings: { a: number; r: number }[]) =>

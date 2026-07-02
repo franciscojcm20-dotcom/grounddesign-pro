@@ -287,7 +287,8 @@ export function ReportClient() {
         prepend.push({
           module: 'faultAnalysis',
           inputs: {
-            If: fa.If, tFalla: fa.tFalla, xr: fa.xr, freq: fa.freq, Ta: fa.Ta, Df: fa.Df, Sf: fa.Sf, Ig: fa.Ig,
+            If: fa.If, ifOrigin: fa.ifOrigin, shortCircuitModel: fa.shortCircuitModel,
+            tFalla: fa.tFalla, xr: fa.xr, freq: fa.freq, Ta: fa.Ta, Df: fa.Df, Sf: fa.Sf, Ig: fa.Ig,
             splitMethod: fa.splitMethod, splitJustificacion: fa.splitJustificacion, confidence: fa.confidence,
           },
           outputs: {},

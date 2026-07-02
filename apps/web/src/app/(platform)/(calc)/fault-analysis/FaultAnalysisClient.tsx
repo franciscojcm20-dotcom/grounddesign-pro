@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { api, type FaultAnalysisResult, type SplitFactorMethod } from '@/lib/api';
+import { api, type FaultAnalysisResult, type SplitFactorMethod, type ShortCircuitResult, type ShortCircuitFaultType } from '@/lib/api';
 import {
   Field, SectionLabel, StatCard, CompBanner, ExpertItem,
   FundBtn, calcLayout, inputStyle, panelStyle, Th, TdMono,
@@ -9,6 +9,13 @@ import { useFaultAnalysis, type FaultAnalysisMaster } from '@/context/FaultAnaly
 import { useToast } from '@/context/ToastContext';
 
 const DEFAULTS = { If: 12000, tFalla: 0.5, xr: 15, freq: 50 };
+
+const SC_DEFAULTS = {
+  un: 15, ikss3: 8, xrRed: 15, ik1: 0,
+  trafoActivo: false, sn: 1000, vcc: 6, xrTrafo: 10, z0Factor: 0,
+  tipoFalla: 'monofasica_tierra' as ShortCircuitFaultType,
+  zn: 0,
+};
 
 const CONFIDENCE_LABEL: Record<FaultAnalysisResult['confidence'], string> = {
   alta: 'Alta — validada por estudio específico',
@@ -29,8 +36,35 @@ export function FaultAnalysisClient() {
   const [showWhy, setShowWhy] = useState(false);
   const [showFund, setShowFund] = useState(false);
 
+  const [ifOrigin, setIfOrigin] = useState<'manual' | 'calculado'>('manual');
+  const [sc, setSc] = useState(SC_DEFAULTS);
+  const [scResult, setScResult] = useState<ShortCircuitResult | null>(null);
+  const [scLoading, setScLoading] = useState(false);
+  const [scError, setScError] = useState<string | null>(null);
+
   function set<K extends keyof typeof DEFAULTS>(k: K, v: number) { setForm(f => ({ ...f, [k]: v })); }
   function num(k: keyof typeof DEFAULTS) { return (e: React.ChangeEvent<HTMLInputElement>) => set(k, Number(e.target.value)); }
+
+  function setSc_<K extends keyof typeof SC_DEFAULTS>(k: K, v: (typeof SC_DEFAULTS)[K]) { setSc(s => ({ ...s, [k]: v })); }
+  function scNum(k: keyof typeof SC_DEFAULTS) { return (e: React.ChangeEvent<HTMLInputElement>) => setSc_(k, Number(e.target.value) as (typeof SC_DEFAULTS)[typeof k]); }
+
+  async function calculateShortCircuit() {
+    setScLoading(true); setScError(null);
+    try {
+      const r = await api.faultAnalysis.shortCircuit({
+        fuente: { un: sc.un, ikss3: sc.ikss3, xr: sc.xrRed, ...(sc.ik1 > 0 ? { ik1: sc.ik1 } : {}) },
+        ...(sc.trafoActivo ? {
+          transformador: { activo: true, sn: sc.sn, un: sc.un, vcc: sc.vcc, xr: sc.xrTrafo, ...(sc.z0Factor > 0 ? { z0Factor: sc.z0Factor } : {}) },
+        } : {}),
+        tipoFalla: sc.tipoFalla,
+        ...(sc.zn > 0 ? { zn: sc.zn } : {}),
+      });
+      setScResult(r);
+      set('If', Math.round(r.If));
+    } catch (e) {
+      setScError(e instanceof Error ? e.message : 'Error de conexión');
+    } finally { setScLoading(false); }
+  }
 
   async function calculate() {
     setLoading(true); setError(null);
@@ -48,7 +82,17 @@ export function FaultAnalysisClient() {
   function saveAsOfficial() {
     if (!result) return;
     const master: FaultAnalysisMaster = {
-      If: form.If, tFalla: form.tFalla, xr: form.xr, freq: form.freq,
+      If: form.If, ifOrigin,
+      ...(ifOrigin === 'calculado' && scResult ? {
+        shortCircuitModel: {
+          tipoFalla: sc.tipoFalla,
+          fuente: { un: sc.un, ikss3: sc.ikss3, xr: sc.xrRed, ...(sc.ik1 > 0 ? { ik1: sc.ik1 } : {}) },
+          ...(sc.trafoActivo ? { transformador: { sn: sc.sn, un: sc.un, vcc: sc.vcc, xr: sc.xrTrafo, ...(sc.z0Factor > 0 ? { z0Factor: sc.z0Factor } : {}) } } : {}),
+          ...(sc.zn > 0 ? { zn: sc.zn } : {}),
+          Z1: scResult.Z1, Z0: scResult.Z0, z0Assumed: scResult.z0Assumed, memoria: scResult.memoria,
+        },
+      } : {}),
+      tFalla: form.tFalla, xr: form.xr, freq: form.freq,
       splitMethod: method,
       ...(method === 'manual' ? { splitManualValue: manualSf } : {}),
       ...(method === 'estimated' ? { splitNPaths: nPaths } : {}),
@@ -80,12 +124,110 @@ export function FaultAnalysisClient() {
         )}
 
         <SectionLabel>Corriente de falla</SectionLabel>
-        <Field label="If — corriente de falla simétrica" unit="A">
-          <input style={inputStyle} type="number" value={form.If} onChange={num('If')} />
-        </Field>
-        <p style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: -6, marginBottom: 10, lineHeight: 1.5 }}>
-          Obtenida del estudio de cortocircuito del sistema eléctrico (nivel de falla en la barra/subestación en estudio).
-        </p>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+          {([
+            { id: 'manual' as const, label: 'Valor conocido' },
+            { id: 'calculado' as const, label: 'Modelado calculado' },
+          ]).map(o => (
+            <button key={o.id} onClick={() => setIfOrigin(o.id)} style={{
+              flex: 1, padding: '7px 6px', borderRadius: 3, cursor: 'pointer', fontSize: 10, fontWeight: 700,
+              background: ifOrigin === o.id ? 'var(--copper-soft)' : 'var(--bg)',
+              border: `1px solid ${ifOrigin === o.id ? 'var(--copper)' : 'var(--line)'}`,
+              color: ifOrigin === o.id ? 'var(--copper)' : 'var(--dim)',
+            }}>{o.label}</button>
+          ))}
+        </div>
+
+        {ifOrigin === 'manual' ? (
+          <>
+            <Field label="If — corriente de falla simétrica" unit="A">
+              <input style={inputStyle} type="number" value={form.If} onChange={num('If')} />
+            </Field>
+            <p style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: -6, marginBottom: 10, lineHeight: 1.5 }}>
+              Obtenida del estudio de cortocircuito del sistema eléctrico (nivel de falla en la barra/subestación en estudio).
+            </p>
+          </>
+        ) : (
+          <div style={{ background: 'var(--panel3)', border: '1px solid var(--line)', borderRadius: 4, padding: '10px 10px 4px', marginBottom: 10 }}>
+            <p style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 0, marginBottom: 8, lineHeight: 1.5 }}>
+              Calcula If modelando la red y el transformador por componentes simétricas (IEC 60909), en vez de asumir un valor.
+            </p>
+            <Field label="Tipo de falla" unit="">
+              <div style={{ display: 'flex', gap: 6 }}>
+                {([
+                  { id: 'trifasica' as const, label: 'Trifásica' },
+                  { id: 'monofasica_tierra' as const, label: 'Monofásica a tierra' },
+                ]).map(o => (
+                  <button key={o.id} onClick={() => setSc_('tipoFalla', o.id)} style={{
+                    flex: 1, padding: '6px 4px', borderRadius: 3, cursor: 'pointer', fontSize: 9.5, fontWeight: 700,
+                    background: sc.tipoFalla === o.id ? 'var(--copper-soft)' : 'var(--bg)',
+                    border: `1px solid ${sc.tipoFalla === o.id ? 'var(--copper)' : 'var(--line)'}`,
+                    color: sc.tipoFalla === o.id ? 'var(--copper)' : 'var(--dim)',
+                  }}>{o.label}</button>
+                ))}
+              </div>
+            </Field>
+
+            <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--dim)', margin: '8px 0 4px' }}>Red aguas arriba</div>
+            <Field label="Un — tensión en el punto de falla" unit="kV">
+              <input style={inputStyle} type="number" step="0.1" value={sc.un} onChange={scNum('un')} />
+            </Field>
+            <Field label="I''kss3 — Icc trifásica de la red" unit="kA">
+              <input style={inputStyle} type="number" step="0.1" value={sc.ikss3} onChange={scNum('ikss3')} />
+            </Field>
+            <Field label="X/R de la fuente" unit="">
+              <input style={inputStyle} type="number" step="0.5" value={sc.xrRed} onChange={scNum('xrRed')} />
+            </Field>
+            {sc.tipoFalla === 'monofasica_tierra' && (
+              <Field label="Ik1 — Icc monofásica de la red (opcional)" unit="kA">
+                <input style={inputStyle} type="number" step="0.1" value={sc.ik1} onChange={scNum('ik1')} />
+              </Field>
+            )}
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 9.5, color: 'var(--dim)', margin: '10px 0 6px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={sc.trafoActivo} onChange={e => setSc_('trafoActivo', e.target.checked)} />
+              Incluir transformador de poder en serie
+            </label>
+            {sc.trafoActivo && (
+              <>
+                <Field label="Sn — potencia nominal" unit="kVA">
+                  <input style={inputStyle} type="number" step="10" value={sc.sn} onChange={scNum('sn')} />
+                </Field>
+                <Field label="Ucc — tensión de cortocircuito (placa)" unit="%">
+                  <input style={inputStyle} type="number" step="0.1" value={sc.vcc} onChange={scNum('vcc')} />
+                </Field>
+                <Field label="X/R del transformador" unit="">
+                  <input style={inputStyle} type="number" step="0.5" value={sc.xrTrafo} onChange={scNum('xrTrafo')} />
+                </Field>
+                {sc.tipoFalla === 'monofasica_tierra' && (
+                  <Field label="Z0/Z1 del transformador (opcional, placa)" unit="">
+                    <input style={inputStyle} type="number" step="0.05" value={sc.z0Factor} onChange={scNum('z0Factor')} />
+                  </Field>
+                )}
+              </>
+            )}
+            {sc.tipoFalla === 'monofasica_tierra' && (
+              <Field label="Zn — impedancia de puesta a tierra del neutro" unit="Ω">
+                <input style={inputStyle} type="number" step="0.1" value={sc.zn} onChange={scNum('zn')} />
+              </Field>
+            )}
+
+            <button onClick={calculateShortCircuit} disabled={scLoading} style={{
+              width: '100%', background: 'var(--panel)', border: '1px solid var(--copper)', color: 'var(--copper)',
+              fontWeight: 700, fontSize: 10.5, padding: 8, borderRadius: 3, cursor: 'pointer',
+              opacity: scLoading ? 0.6 : 1, marginTop: 4, marginBottom: scResult ? 0 : 10,
+            }}>{scLoading ? 'Calculando…' : 'Calcular If del sistema'}</button>
+            {scError && <div style={{ marginTop: 8, padding: '7px 9px', background: 'var(--danger-soft)', border: '1px solid var(--danger)', borderRadius: 3, fontSize: 9.5, color: 'var(--danger)' }}>{scError}</div>}
+            {scResult && (
+              <div style={{ marginTop: 8, marginBottom: 10, padding: '8px 10px', background: 'var(--safe-soft)', border: '1px solid var(--safe)', borderRadius: 3, fontSize: 9.5, color: 'var(--safe)', lineHeight: 1.6 }}>
+                ✓ If = {(scResult.If / 1000).toFixed(3)} kA ({scResult.If.toFixed(0)} A) — aplicado al campo If.
+                {scResult.z0Assumed && sc.tipoFalla === 'monofasica_tierra' && (
+                  <div style={{ marginTop: 4, color: 'var(--dim)' }}>Z0 asumida ≈ Z1 (sin dato de Ik1/placa) — ver detalle en el desglose.</div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         <Field label="Tiempo de despeje tf" unit="s">
           <input style={inputStyle} type="number" step="0.05" value={form.tFalla} onChange={num('tFalla')} />
         </Field>
@@ -188,6 +330,33 @@ export function FaultAnalysisClient() {
               <ExpertItem type="warn">
                 Df = {result.Df.toFixed(3)} es alto — el tiempo de despeje (tf = {form.tFalla} s) es corto en relación a la constante de tiempo del sistema (Ta = {result.Ta.toFixed(3)} s), por lo que la componente asimétrica no alcanza a decaer y penaliza fuertemente la corriente de diseño. Verificar la coordinación de protecciones si este valor parece inusualmente alto.
               </ExpertItem>
+            )}
+
+            {ifOrigin === 'calculado' && scResult && (
+              <div style={panelStyle}>
+                <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 10 }}>Modelado del sistema — cálculo de If</div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 10 }}>
+                  <tbody>
+                    {[
+                      ['Tipo de falla', sc.tipoFalla === 'trifasica' ? 'Trifásica simétrica' : 'Monofásica a tierra'],
+                      ['Z1 total', `${scResult.Z1.Z.toFixed(4)} Ω (R=${scResult.Z1.R.toFixed(4)}, X=${scResult.Z1.X.toFixed(4)})`],
+                      ...(scResult.Z0 ? [['Z0 total', `${scResult.Z0.Z.toFixed(4)} Ω (R=${scResult.Z0.R.toFixed(4)}, X=${scResult.Z0.X.toFixed(4)})${scResult.z0Assumed ? ' — asumida ≈ Z1' : ''}`]] : []),
+                      ['If calculada', `${(scResult.If / 1000).toFixed(3)} kA (${scResult.If.toFixed(0)} A)`],
+                    ].map(([k, v]) => (
+                      <tr key={k as string}>
+                        <td style={{ padding: '5px 8px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--dim)' }}>{k}</td>
+                        <TdMono highlight>{v}</TdMono>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={{ fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.7 }}>
+                  {scResult.memoria.map((m, i) => <p key={i} style={{ margin: '0 0 6px' }}>{m}</p>)}
+                </div>
+                <p style={{ fontSize: 9, color: 'var(--faint)', marginTop: 6, marginBottom: 0 }}>
+                  Método: componentes simétricas de Fortescue (1918), impedancia equivalente de cortocircuito según IEC 60909.
+                </p>
+              </div>
             )}
 
             <div style={panelStyle}>

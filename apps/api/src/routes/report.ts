@@ -443,6 +443,22 @@ const CONFIDENCE_LABEL: Record<string, string> = {
  * de puesta a tierra. Ig, aquí determinada y justificada, es el parámetro
  * maestro que alimenta automáticamente todos los módulos de diseño posteriores.
  */
+const FAULT_TYPE_LABEL: Record<string, string> = {
+  trifasica: 'Trifásica simétrica',
+  monofasica_tierra: 'Monofásica a tierra',
+};
+
+interface ShortCircuitTraceLike {
+  tipoFalla: string;
+  fuente: { un: number; ikss3: number; xr: number; ik1?: number };
+  transformador?: { sn: number; un: number; vcc: number; xr: number; z0Factor?: number };
+  zn?: number;
+  Z1: { R: number; X: number; Z: number };
+  Z0: { R: number; X: number; Z: number } | null;
+  z0Assumed: boolean;
+  memoria: string[];
+}
+
 function faultAnalysisSection(inputs: Record<string, unknown>): ReportSection {
   const If = Number(inputs['If']);
   const tFalla = Number(inputs['tFalla']);
@@ -455,11 +471,34 @@ function faultAnalysisSection(inputs: Record<string, unknown>): ReportSection {
   const splitMethod = String(inputs['splitMethod']);
   const splitJustificacion = String(inputs['splitJustificacion']);
   const confidence = String(inputs['confidence']);
+  const ifOrigin = String(inputs['ifOrigin'] ?? 'manual');
+  const sc = inputs['shortCircuitModel'] as ShortCircuitTraceLike | undefined;
+
+  const scInputs = sc ? [
+    { label: 'Tipo de falla modelada', value: FAULT_TYPE_LABEL[sc.tipoFalla] ?? sc.tipoFalla, unit: '' },
+    { label: 'Un — tensión en el punto de falla', value: sc.fuente.un, unit: 'kV' },
+    { label: "I''kss3 — Icc trifásica de la red", value: sc.fuente.ikss3, unit: 'kA' },
+    { label: 'X/R de la fuente', value: sc.fuente.xr, unit: '' },
+    ...(sc.fuente.ik1 ? [{ label: 'Ik1 — Icc monofásica de la red', value: sc.fuente.ik1, unit: 'kA' }] : []),
+    ...(sc.transformador ? [
+      { label: 'Sn — potencia del transformador', value: sc.transformador.sn, unit: 'kVA' },
+      { label: 'Ucc — tensión de cortocircuito (placa)', value: sc.transformador.vcc, unit: '%' },
+      { label: 'X/R del transformador', value: sc.transformador.xr, unit: '' },
+    ] : []),
+    ...(sc.zn ? [{ label: 'Zn — impedancia de puesta a tierra del neutro', value: sc.zn, unit: 'Ω' }] : []),
+  ] : [];
+
+  const scResults = sc ? [
+    { label: 'Z1 total (red + transformador)', value: sc.Z1.Z.toFixed(4), unit: 'Ω' },
+    ...(sc.Z0 ? [{ label: 'Z0 total (red + transformador)', value: `${sc.Z0.Z.toFixed(4)}${sc.z0Assumed ? ' (asumida ≈ Z1)' : ''}`, unit: 'Ω' }] : []),
+  ] : [];
 
   return {
     title: 'Determinación de la Corriente de Diseño del Sistema de Puesta a Tierra',
     norm: 'IEEE Std 80-2013, Cláusula 15.9–15.10 (Ec. 79) — Motor de Análisis de Falla propio',
     inputs: [
+      { label: 'Origen de If', value: ifOrigin === 'calculado' ? 'Modelado calculado del sistema (red + transformador)' : 'Valor conocido (estudio de cortocircuito existente)', unit: '' },
+      ...scInputs,
       { label: 'Método de división de corriente', value: SPLIT_METHOD_LABEL[splitMethod] ?? splitMethod, unit: '' },
       { label: 'If — corriente de falla simétrica', value: If.toFixed(0), unit: 'A' },
       { label: 'tf — tiempo de despeje', value: tFalla, unit: 's' },
@@ -467,6 +506,7 @@ function faultAnalysisSection(inputs: Record<string, unknown>): ReportSection {
       { label: 'Frecuencia del sistema', value: freq, unit: 'Hz' },
     ],
     results: [
+      ...scResults,
       { label: 'Ta = (X/R)/(2πf) — constante de tiempo', value: Ta.toFixed(4), unit: 's' },
       { label: 'Df = √(1+(Ta/tf)(1−e^(−2tf/Ta))) — factor de decremento', value: Df.toFixed(4), unit: '' },
       { label: 'Sf — factor de división de corriente', value: Sf.toFixed(3), unit: '' },
@@ -477,12 +517,20 @@ function faultAnalysisSection(inputs: Record<string, unknown>): ReportSection {
     passLabel: `Ig = ${If.toFixed(0)} × ${Sf.toFixed(3)} × ${Df.toFixed(4)} = ${Ig.toFixed(0)} A — corriente de diseño oficial del proyecto, aplicada automáticamente a todos los módulos posteriores`,
     observations: [
       `Nivel de confiabilidad: ${CONFIDENCE_LABEL[confidence] ?? confidence}.`,
+      ...(sc ? [
+        `Modelado del sistema para determinar If: ${sc.memoria.join(' ')}`,
+        ...(sc.z0Assumed && sc.tipoFalla === 'monofasica_tierra'
+          ? ['Nota de hipótesis: al no disponerse de la Icc monofásica de la red ni del factor Z0/Z1 de placa del transformador, se asumió conservadoramente Z0 ≈ Z1 — simplificación habitual para transformadores trifásicos de tres columnas con conexión Dyn; se recomienda verificar con datos de placa para proyectos críticos.']
+          : []),
+      ] : [
+        'If fue ingresada directamente por el profesional a partir de un estudio de cortocircuito existente del sistema eléctrico (nivel de falla en la barra/subestación en estudio).',
+      ]),
       `Explicación del factor de división (Sf): ${splitJustificacion}`,
       'Explicación del factor de decremento (Df): corrige la corriente de falla por su componente asimétrica (DC) durante el período transitorio inmediatamente posterior a la falla. Si el tiempo de despeje de las protecciones (tf) es corto en relación a la constante de tiempo del sistema (Ta = (X/R)/(2πf)), la componente DC no alcanza a decaer y la severidad efectiva de la falla es mayor que la corriente simétrica sola — Df ≥ 1 siempre, y Df → 1 cuando tf ≫ Ta.',
       'Interpretación técnica: la corriente de diseño Ig obtenida en este capítulo no es la corriente de falla total del sistema, sino la fracción de ella que efectivamente circula por la malla de tierra en estudio (vía Sf), corregida por el efecto transitorio asimétrico (vía Df). Es este valor — y no If directamente — el que debe usarse para dimensionar la malla, calcular el GPR y verificar las tensiones de paso y contacto.',
       'Regla fundamental de este software: ningún módulo de diseño de malla, verificación de tensiones o dimensionamiento de conductor define su propia corriente de falla — todos consumen automáticamente Ig desde este capítulo, evitando inconsistencias y garantizando trazabilidad completa del parámetro más sensible del proyecto.',
-      'Referencias normativas: IEEE Std 80-2013, Cláusula 15.9 (determinación de la corriente máxima de malla) y Cláusula 15.10 con Ecuación 79 (factor de decremento); IEEE Std 80-2013 Annex C (métodos de estimación del factor de división de corriente).',
-      'Bibliografía: IEEE Std 80-2013 — IEEE Guide for Safety in AC Substation Grounding, Institute of Electrical and Electronics Engineers; Sunde, E.D. (1949) — Earth Conduction Effects in Transmission Systems; Dwight, H.B. (1936) — Calculation of Resistances to Ground.',
+      'Referencias normativas: IEEE Std 80-2013, Cláusula 15.9 (determinación de la corriente máxima de malla) y Cláusula 15.10 con Ecuación 79 (factor de decremento); IEEE Std 80-2013 Annex C (métodos de estimación del factor de división de corriente); IEC 60909 (corrientes de cortocircuito en sistemas trifásicos — método de la impedancia equivalente de cortocircuito).',
+      'Bibliografía: IEEE Std 80-2013 — IEEE Guide for Safety in AC Substation Grounding, Institute of Electrical and Electronics Engineers; Sunde, E.D. (1949) — Earth Conduction Effects in Transmission Systems; Dwight, H.B. (1936) — Calculation of Resistances to Ground; Fortescue, C.L. (1918) — Method of Symmetrical Co-Ordinates Applied to the Solution of Polyphase Networks.',
     ],
   };
 }

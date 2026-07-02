@@ -1233,3 +1233,151 @@ export function computeFaultAnalysis(p: FaultAnalysisInput): FaultAnalysisResult
     p.splitFactor.method === 'estimated' ? 'media' : 'conservadora';
   return { If: p.If, Df, Ta, Sf, Ig, splitJustificacion: justificacion, confidence };
 }
+
+// ============================================================================
+// MODELADO DEL SISTEMA — NIVELES DE CORTOCIRCUITO (para determinar If)
+// ============================================================================
+// El software nunca asume una corriente de falla fija: If puede ingresarse
+// directamente desde un estudio de cortocircuito existente, o calcularse
+// modelando el sistema real (red aguas arriba + transformador de poder) por
+// el método de componentes simétricas (Fortescue, 1918) con impedancias
+// equivalentes de cortocircuito según IEC 60909 (método simplificado de la
+// fuente de tensión equivalente en el punto de falla).
+//
+// Alcance deliberadamente acotado: este motor calcula ÚNICAMENTE la
+// corriente de falla (If) en el punto de interés para el diseño de la
+// puesta a tierra — trifásica simétrica y monofásica a tierra, las dos
+// que IEEE Std 80-2013 Cl. 15.9 considera para determinar la corriente
+// máxima de malla. No reemplaza un estudio de cortocircuito completo de
+// coordinación de protecciones (aportes de motores, múltiples fuentes en
+// paralelo, fallas evolutivas, etc.).
+
+export interface ImpedanceRX { R: number; X: number; Z: number } // Ω
+
+function splitRX(Z: number, xr: number): ImpedanceRX {
+  const R = Z / Math.sqrt(1 + xr * xr);
+  const X = R * xr;
+  return { R, X, Z };
+}
+function addRX(a: ImpedanceRX, b: ImpedanceRX): ImpedanceRX {
+  const R = a.R + b.R, X = a.X + b.X;
+  return { R, X, Z: Math.hypot(R, X) };
+}
+
+export interface SourceImpedanceInput {
+  un:     number;   // kV — tensión nominal en el punto de falla
+  ikss3:  number;   // kA — Icc trifásica simétrica de la red aguas arriba (dato de la empresa distribuidora u operador del sistema)
+  xr:     number;   // — relación X/R de la fuente en el punto de conexión
+  ik1?:   number;   // kA — Icc monofásica a tierra de la red, si está disponible (permite derivar Z0 real en vez de asumirla)
+  c?:     number;   // factor de tensión IEC 60909 (1.1 para cc máximo — el usado para dimensionar puesta a tierra; 1.0 para cc mínimo)
+}
+
+export interface SourceImpedanceResult {
+  Z1: ImpedanceRX;
+  Z0: ImpedanceRX;
+  z0Assumed: boolean; // true si no se entregó ik1 y Z0 se asumió igual a Z1
+}
+
+/**
+ * Impedancia equivalente de la red aguas arriba en el punto de falla —
+ * IEC 60909, método de la fuente de tensión equivalente:
+ *   Z1 = c·Un / (√3·I''kss3)
+ * Si se dispone de la Icc monofásica a tierra de la red (dato habitual en
+ * los estudios de las empresas distribuidoras chilenas), Z0 se despeja de
+ * forma exacta a partir de If(1φ) = √3·c·Un/(2·Z1+Z0). En caso contrario,
+ * se asume conservadoramente Z0 ≈ Z1 (redes de distribución efectivamente
+ * aterrizadas), dejando la hipótesis explícitamente señalada.
+ */
+export function computeSourceImpedance(p: SourceImpedanceInput): SourceImpedanceResult {
+  const c = p.c ?? 1.1;
+  const Z1mag = (c * p.un) / (Math.sqrt(3) * p.ikss3);
+  const Z1 = splitRX(Z1mag, p.xr);
+  if (p.ik1 && p.ik1 > 0) {
+    const Z0mag = Math.max((Math.sqrt(3) * c * p.un) / p.ik1 - 2 * Z1mag, 0.001);
+    return { Z1, Z0: splitRX(Z0mag, p.xr), z0Assumed: false };
+  }
+  return { Z1, Z0: Z1, z0Assumed: true };
+}
+
+export interface TransformerImpedanceInput {
+  sn:        number;   // kVA — potencia nominal
+  un:        number;   // kV — tensión nominal del lado en estudio
+  vcc:       number;   // % — tensión de cortocircuito nominal (placa)
+  xr:        number;   // — relación X/R del transformador
+  z0Factor?: number;   // Z0/Z1 del transformador (típico 0.85–1 para bancos trifásicos Dyn de 3 columnas; mayor en transformadores tipo shell/5 columnas). Si no se especifica, se asume 1.
+}
+
+export interface TransformerImpedanceResult {
+  Z1: ImpedanceRX;
+  Z0: ImpedanceRX;
+  z0Assumed: boolean;
+}
+
+/** Impedancia equivalente del transformador: Z1 = (Ucc%/100)·(Un²·1000/Sn). */
+export function computeTransformerImpedance(p: TransformerImpedanceInput): TransformerImpedanceResult {
+  const zBase = (1000 * p.un * p.un) / p.sn; // Ω
+  const Z1mag = (p.vcc / 100) * zBase;
+  const Z1 = splitRX(Z1mag, p.xr);
+  const z0Assumed = p.z0Factor === undefined;
+  const Z0 = splitRX(Z1mag * (p.z0Factor ?? 1), p.xr);
+  return { Z1, Z0, z0Assumed };
+}
+
+export type ShortCircuitFaultType = 'trifasica' | 'monofasica_tierra';
+
+export interface ShortCircuitInput {
+  fuente:         SourceImpedanceInput;
+  transformador?: TransformerImpedanceInput & { activo: boolean };
+  tipoFalla:      ShortCircuitFaultType;
+  zn?:            number;  // Ω — impedancia de puesta a tierra del neutro del transformador (0 = sólidamente aterrizado)
+  c?:             number;
+}
+
+export interface ShortCircuitResult {
+  tipoFalla: ShortCircuitFaultType;
+  Z1: ImpedanceRX;
+  Z0: ImpedanceRX | null;
+  z0Assumed: boolean;
+  If: number;      // A — corriente de falla calculada, lista para usar en computeFaultAnalysis
+  un: number;      // kV
+  memoria: string[]; // pasos de sustitución numérica, para trazabilidad en la memoria de cálculo
+}
+
+/**
+ * Corriente de cortocircuito en el punto de falla, combinando la red
+ * aguas arriba y (opcionalmente) el transformador de poder en serie,
+ * por componentes simétricas. Z2 se asume igual a Z1 (elementos
+ * estáticos — IEC 60909), práctica estándar para redes sin máquinas
+ * rotativas significativas en el aporte de falla.
+ */
+export function computeShortCircuit(p: ShortCircuitInput): ShortCircuitResult {
+  const c = p.c ?? 1.1;
+  const src = computeSourceImpedance({ ...p.fuente, c });
+  let Z1 = src.Z1;
+  let Z0: ImpedanceRX = src.Z0;
+  let z0Assumed = src.z0Assumed;
+  const memoria: string[] = [
+    `Z1 red = c·Un/(√3·I''kss3) = ${c}×${p.fuente.un} kV / (√3×${p.fuente.ikss3} kA) = ${src.Z1.Z.toFixed(4)} Ω (R=${src.Z1.R.toFixed(4)}, X=${src.Z1.X.toFixed(4)})`,
+  ];
+  if (p.transformador?.activo) {
+    const t = computeTransformerImpedance(p.transformador);
+    memoria.push(`Z1 transformador = (Ucc%/100)·(Un²·1000/Sn) = (${p.transformador.vcc}/100)×(${p.transformador.un}² × 1000 / ${p.transformador.sn}) = ${t.Z1.Z.toFixed(4)} Ω (R=${t.Z1.R.toFixed(4)}, X=${t.Z1.X.toFixed(4)})`);
+    Z1 = addRX(Z1, t.Z1);
+    Z0 = addRX(Z0, t.Z0);
+    z0Assumed = z0Assumed || t.z0Assumed;
+  }
+  const un = p.fuente.un;
+  if (p.tipoFalla === 'trifasica') {
+    const If = (c * un * 1000) / (Math.sqrt(3) * Z1.Z);
+    memoria.push(`Falla trifásica simétrica: If = c·Un/(√3·Z1) = ${c}×${un} kV / (√3×${Z1.Z.toFixed(4)} Ω) = ${(If / 1000).toFixed(3)} kA`);
+    return { tipoFalla: p.tipoFalla, Z1, Z0: null, z0Assumed: false, If, un, memoria };
+  }
+  const zn = p.zn ?? 0;
+  const denom = 2 * Z1.Z + Z0.Z + 3 * zn;
+  const If = (Math.sqrt(3) * c * un * 1000) / denom;
+  memoria.push(`Falla monofásica a tierra (Fortescue): If = 3·I1 = √3·c·Un / (2·Z1 + Z0 + 3·Zn) = √3×${c}×${un} kV / (2×${Z1.Z.toFixed(4)} + ${Z0.Z.toFixed(4)} + 3×${zn}) Ω = ${(If / 1000).toFixed(3)} kA`);
+  if (z0Assumed) {
+    memoria.push('Z0 se asumió igual a Z1 por no disponerse de datos de secuencia cero de la red (Ik1) ni del transformador — hipótesis conservadora habitual para transformadores trifásicos de tres columnas con conexión Dyn; para mayor precisión, ingresar Ik1 de la red o el factor Z0/Z1 de placa del transformador.');
+  }
+  return { tipoFalla: p.tipoFalla, Z1, Z0, z0Assumed, If, un, memoria };
+}
