@@ -127,6 +127,9 @@ export function ReportClient() {
   const [dxfResultId, setDxfResultId] = useState<string | null>(null);
   const [dxfLoading, setDxfLoading] = useState(false);
 
+  // ── Sistema elegido (fija cuál topología, entre las calculadas, es la oficial del proyecto) ──
+  const [chosenId, setChosenId] = useState<string | null>(null);
+
   const loadProjects = useCallback(async () => {
     try {
       const res = await fetch(`${BASE}/api/v1/projects`, { credentials: 'include' });
@@ -153,8 +156,23 @@ export function ReportClient() {
   useEffect(() => { loadProjects(); }, [loadProjects]);
   useEffect(() => { if (selected) loadProject(selected); }, [selected, loadProject]);
 
+  // Carga el sistema elegido (fijado) del proyecto activo — una topología, entre
+  // las varias calculadas para comparar, marcada como la oficial del proyecto.
+  useEffect(() => {
+    setChosenId(project ? localStorage.getItem(`gdp-chosen-design:${project.id}`) : null);
+  }, [project?.id]);
+
   const geometryResults = results.filter(r => GEOMETRY_MODULES.has(r.module));
   const dxfResults = results.filter(r => GEOMETRY_MODULES.has(r.module));
+  const chosenValid = Boolean(chosenId) && geometryResults.some(r => r.id === chosenId);
+  const needsChoice = geometryResults.length > 1 && !chosenValid;
+
+  function chooseDesign(id: string) {
+    if (!project) return;
+    setChosenId(id);
+    localStorage.setItem(`gdp-chosen-design:${project.id}`, id);
+    toast.success('Sistema fijado como diseño elegido del proyecto');
+  }
 
   function selectValResult(id: string) {
     const r = results.find(x => x.id === id);
@@ -164,6 +182,15 @@ export function ReportClient() {
     setValorizacion(null);
     if (!precios) api.valorizacion.preciosDefault().then(setPrecios).catch(() => {});
   }
+
+  // Preselecciona el sistema fijado como elegido al entrar a Valorización o DXF,
+  // para evitar generar esos entregables sobre una topología distinta a la oficial.
+  useEffect(() => {
+    if (!chosenValid || !chosenId) return;
+    if (view === 'valorizacion' && !valResultId) selectValResult(chosenId);
+    if (view === 'dxf' && !dxfResultId) setDxfResultId(chosenId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, chosenValid, chosenId]);
 
   async function computeVal() {
     if (!cubicacion || !precios) return;
@@ -257,6 +284,10 @@ export function ReportClient() {
 
   async function generatePdf() {
     if (!project || results.length === 0) return;
+    if (needsChoice) {
+      toast.error('Hay más de un sistema de puesta a tierra calculado en este proyecto — fija cuál es el elegido antes de generar el informe.');
+      return;
+    }
     setPdfLoading(true);
     try {
       const meta: ReportMeta = {
@@ -265,7 +296,12 @@ export function ReportClient() {
         engineer: 'Ingeniero de proyecto',
         location: project.description ?? undefined,
       };
-      const sections = results.map(r => ({ module: r.module, inputs: r.inputs, outputs: r.outputs, norm: r.norm }));
+      // El informe oficial incluye solo el sistema fijado como elegido — las demás
+      // topologías calculadas para comparar quedan excluidas de la memoria definitiva.
+      const chosenGeometryId = geometryResults.length <= 1 ? geometryResults[0]?.id : chosenId;
+      const sections = results
+        .filter(r => !GEOMETRY_MODULES.has(r.module) || r.id === chosenGeometryId)
+        .map(r => ({ module: r.module, inputs: r.inputs, outputs: r.outputs, norm: r.norm }));
       // Capítulos sintéticos previos a cualquier diseño de malla, en el orden de ingeniería
       // profesional: 1) mediciones de terreno y modelo de suelo, 2) corriente de diseño.
       const prepend: typeof sections = [];
@@ -385,17 +421,24 @@ export function ReportClient() {
         )}
 
         {view === 'consolidado' && (
-          <button
-            onClick={generatePdf}
-            disabled={pdfLoading || !project || results.length === 0}
-            style={{
-              width: '100%', background: 'var(--copper)', border: 'none', color: '#fff',
-              fontWeight: 700, fontSize: 11, padding: 10, borderRadius: 3, cursor: 'pointer',
-              opacity: (pdfLoading || !project || results.length === 0) ? 0.6 : 1,
-            }}
-          >
-            {pdfLoading ? 'Generando…' : '📄 Generar informe PDF completo'}
-          </button>
+          <>
+            <button
+              onClick={generatePdf}
+              disabled={pdfLoading || !project || results.length === 0 || needsChoice}
+              style={{
+                width: '100%', background: 'var(--copper)', border: 'none', color: '#fff',
+                fontWeight: 700, fontSize: 11, padding: 10, borderRadius: 3, cursor: 'pointer',
+                opacity: (pdfLoading || !project || results.length === 0 || needsChoice) ? 0.6 : 1,
+              }}
+            >
+              {pdfLoading ? 'Generando…' : '📄 Generar informe PDF completo'}
+            </button>
+            {needsChoice && (
+              <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--danger-soft)', border: '1px solid var(--danger)', borderRadius: 3, fontSize: 9.5, color: 'var(--danger)', lineHeight: 1.6 }}>
+                Hay {geometryResults.length} sistemas de puesta a tierra calculados en este proyecto. Fija cuál es el elegido en el resumen (grupo "Malla") antes de generar el informe.
+              </div>
+            )}
+          </>
         )}
       </aside>
 
@@ -630,12 +673,34 @@ export function ReportClient() {
             {['Suelo', 'Malla', 'Sistema', 'Otros'].filter(g => grouped[g]?.length).map(group => (
               <div key={group} style={{ marginBottom: 20 }}>
                 <SectionLabel>{group}</SectionLabel>
+                {group === 'Malla' && geometryResults.length > 1 && (
+                  <div style={{ fontSize: 9.5, color: 'var(--faint)', marginBottom: 8, lineHeight: 1.5 }}>
+                    Hay varios sistemas calculados para comparar — fija cuál es el elegido para el informe oficial del proyecto.
+                  </div>
+                )}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {grouped[group]!.map(r => {
                     const meta = MODULE_META[r.module];
                     const s = summarize(r.outputs);
+                    const isGeometry = GEOMETRY_MODULES.has(r.module);
+                    const isChosen = isGeometry && chosenValid && r.id === chosenId;
                     return (
-                      <div key={r.id} style={{ ...panelStyle, marginBottom: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div key={r.id} style={{
+                        ...panelStyle, marginBottom: 0, display: 'flex', alignItems: 'center', gap: 12,
+                        border: isChosen ? '1px solid var(--copper)' : panelStyle.border,
+                      }}>
+                        {isGeometry && geometryResults.length > 1 && (
+                          <label
+                            title="Fijar como sistema elegido del proyecto"
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, cursor: 'pointer',
+                              fontSize: 9, fontWeight: 700, color: isChosen ? 'var(--copper)' : 'var(--faint)',
+                            }}
+                          >
+                            <input type="radio" name="chosenDesign" checked={isChosen} onChange={() => chooseDesign(r.id)} />
+                            {isChosen ? '★ Elegido' : 'Elegir'}
+                          </label>
+                        )}
                         <div style={{ fontSize: 18, flexShrink: 0 }}>{meta?.icon ?? '📄'}</div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 11.5, fontWeight: 700 }}>{meta?.label ?? r.module}</div>
