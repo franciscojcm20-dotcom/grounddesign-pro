@@ -23,6 +23,7 @@ export async function authRoutes(app: FastifyInstance) {
       VALUES (${email.toLowerCase()}, ${name.trim()}, ${password_hash})
       RETURNING id, email, name, plan, created_at
     `;
+    if (!user) return reply.code(500).send({ error: 'No se pudo crear el usuario' });
 
     const token = app.jwt.sign({ sub: user.id, email: user.email, plan: user.plan }, { expiresIn: '7d' });
     reply.setCookie('token', token, { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 60 * 60 * 24 * 7 });

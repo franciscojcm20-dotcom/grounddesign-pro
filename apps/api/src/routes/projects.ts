@@ -67,7 +67,7 @@ export async function projectRoutes(app: FastifyInstance) {
 
     const [r] = await sql<CalcResult[]>`
       INSERT INTO calc_results (project_id, module, inputs, outputs, norm)
-      VALUES (${p.id}, ${module}, ${sql.json(inputs as object)}, ${sql.json(outputs as object)}, ${norm ?? null})
+      VALUES (${p.id}, ${module}, ${sql.json(inputs as Parameters<typeof sql.json>[0])}, ${sql.json(outputs as Parameters<typeof sql.json>[0])}, ${norm ?? null})
       RETURNING *
     `;
 

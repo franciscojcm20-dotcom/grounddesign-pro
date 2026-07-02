@@ -3,6 +3,7 @@ import {
   wennerApparent,
   estimateTwoLayer,
   schlumbergerApparent,
+  estimateTwoLayerSchlumberger,
   wennerApparentNLayer,
   theoreticalTwoLayerRho,
   type Reading,
@@ -41,7 +42,8 @@ export async function routesSoil(app: FastifyInstance): Promise<void> {
         rhoA: schlumbergerApparent(L, l, r),
       }));
       const rhoAvg = points.reduce((s, p) => s + p.rhoA, 0) / points.length;
-      return { points, rhoAvg, norm: 'IEEE Std 81-2012 Cl. 8' };
+      const twoLayer = estimateTwoLayerSchlumberger(readings);
+      return { points, rhoAvg, twoLayer, norm: 'IEEE Std 81-2012 Cl. 8' };
     }
   );
 

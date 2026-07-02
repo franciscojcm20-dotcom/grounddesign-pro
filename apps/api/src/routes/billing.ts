@@ -20,7 +20,7 @@ const PLAN_MAP: Record<string, string> = {
 
 function stripe() {
   if (!STRIPE_SECRET) throw new Error('STRIPE_SECRET_KEY no configurado');
-  return new Stripe(STRIPE_SECRET, { apiVersion: '2025-05-28.basil' });
+  return new Stripe(STRIPE_SECRET, { apiVersion: '2026-06-24.dahlia' });
 }
 
 export async function billingRoutes(app: FastifyInstance) {
@@ -72,9 +72,7 @@ export async function billingRoutes(app: FastifyInstance) {
 
   // ── POST /api/v1/billing/webhook ───────────────────────────────────────────
   // Stripe webhook — updates user plan on subscription events
-  app.post('/webhook', {
-    config: { rawBody: true },
-  }, async (req: FastifyRequest & { rawBody?: Buffer }, reply) => {
+  app.post('/webhook', async (req: FastifyRequest & { rawBody?: Buffer }, reply) => {
     if (!STRIPE_WEBHOOK) {
       return reply.code(503).send({ error: 'STRIPE_WEBHOOK_SECRET no configurado' });
     }
