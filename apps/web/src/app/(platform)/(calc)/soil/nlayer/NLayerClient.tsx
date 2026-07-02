@@ -6,8 +6,7 @@ import {
 } from '@/components/ui/CalcShared';
 import { ExportBar } from '@/components/ui/ExportBar';
 import { ChartRho }  from '@/components/ui/ChartRho';
-
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+import { API_BASE as BASE } from '@/lib/apiBase';
 
 interface CurvePoint   { a: number; rhoA: number }
 interface NLayerResult { curve: CurvePoint[]; rhos: number[]; hs: number[]; norm: string }
@@ -205,7 +204,7 @@ export function NLayerClient() {
         <button onClick={calculate} disabled={loading} style={{ width: '100%', background: 'var(--copper)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 11, padding: 10, borderRadius: 3, cursor: 'pointer', opacity: loading ? 0.6 : 1 }}>
           {loading ? 'Calculando…' : 'Calcular'}
         </button>
-        {error && <div style={{ marginTop: 12, padding: '8px 10px', background: '#1a0d0d', border: '1px solid #ef444444', borderRadius: 3, fontSize: 10, color: 'var(--danger)' }}>{error}</div>}
+        {error && <div style={{ marginTop: 12, padding: '8px 10px', background: 'var(--danger-soft)', border: '1px solid var(--danger)', borderRadius: 3, fontSize: 10, color: 'var(--danger)' }}>{error}</div>}
       </aside>
 
       <section style={{ overflowY: 'auto', padding: '18px 24px 40px', background: 'var(--bg)' }}>
