@@ -90,7 +90,12 @@ export function Scene3D({ children, size = 40, height = 340, cameraDistance }: {
         camera={{ position: [dist, dist * 0.8, dist], fov: 40 }}
         style={{ width: '100%', height: '100%', display: 'block' }}
         resize={{ scroll: false, debounce: 0 }}
-        gl={{ preserveDrawingBuffer: true, antialias: true, alpha: false, powerPreference: 'default' }}
+        dpr={[1, 1.5]}
+        frameloop="demand"
+        gl={{ preserveDrawingBuffer: true, antialias: false, alpha: false, powerPreference: 'low-power' }}
+        onCreated={({ gl }) => {
+          gl.domElement.addEventListener('webglcontextlost', (e) => e.preventDefault());
+        }}
       >
         <color attach="background" args={['#0f1117']} />
         <ambientLight intensity={0.8} />
