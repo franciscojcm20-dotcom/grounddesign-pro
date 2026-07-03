@@ -3,9 +3,8 @@ import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useI18n, type Locale, LOCALES } from '@/context/I18nContext';
 import { useToast } from '@/context/ToastContext';
+import { useNormativeProfile } from '@/context/NormativeProfileContext';
 import { AuthGuard } from '@/components/ui/AuthGuard';
-
-const NORMS = ['IEEE 80-2013 + IEEE 81-2012', 'IEC 60364 + IEC 61936', 'NFPA 70 + NFPA 780'];
 
 function SettingRow({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) {
   return (
@@ -61,14 +60,13 @@ function SettingsContent() {
   const { user }          = useAuth();
   const { locale, setLocale, t } = useI18n();
   const toast             = useToast();
+  const { profile, profileId, setProfileId, profiles } = useNormativeProfile();
 
-  const [activeNorm, setActiveNorm] = useState(NORMS[0]!);
   const [emailNotif, setEmailNotif] = useState(true);
   const [pdfAttach,  setPdfAttach]  = useState(false);
   const [saved, setSaved]           = useState(false);
 
   function save() {
-    localStorage.setItem('gdp_norm', activeNorm);
     localStorage.setItem('gdp_email_notif', String(emailNotif));
     localStorage.setItem('gdp_pdf_attach',  String(pdfAttach));
     setSaved(true);
@@ -124,11 +122,14 @@ function SettingsContent() {
 
         <SettingRow label={t('norm')} description={t('normDesc')}>
           <Select
-            value={activeNorm}
-            onChange={setActiveNorm}
-            options={NORMS.map(n => ({ value: n, label: n }))}
+            value={profileId}
+            onChange={setProfileId}
+            options={profiles.map(p => ({ value: p.id, label: p.label }))}
           />
         </SettingRow>
+        <div style={{ fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.5, marginTop: -6, marginBottom: 4 }}>
+          {profile.standard} — Rg crítico ≤ {profile.rgCritical} Ω · Rg general ≤ {profile.rgGeneral} Ω
+        </div>
       </section>
 
       {/* Notifications */}

@@ -559,6 +559,36 @@ function faultAnalysisSection(inputs: Record<string, unknown>): ReportSection {
   };
 }
 
+function normativeProfileSection(inputs: Record<string, unknown>): ReportSection {
+  const label = String(inputs['label']);
+  const standard = String(inputs['standard']);
+  const country = String(inputs['country']);
+  const rgCritical = Number(inputs['rgCritical']);
+  const rgGeneral = Number(inputs['rgGeneral']);
+  const touchVoltageMaxV = inputs['touchVoltageMaxV'] as number | undefined;
+  const notes = String(inputs['notes']);
+
+  return {
+    title: 'Perfil Normativo Aplicado al Proyecto',
+    norm: standard,
+    inputs: [
+      { label: 'País / norma', value: label, unit: '' },
+    ],
+    results: [
+      { label: 'Rg crítico de referencia (subestaciones AT)', value: rgCritical.toFixed(1), unit: 'Ω', highlight: true },
+      { label: 'Rg general de referencia (uso general)', value: rgGeneral.toFixed(1), unit: 'Ω' },
+      ...(touchVoltageMaxV ? [{ label: 'Tensión de contacto máxima admisible', value: touchVoltageMaxV.toFixed(0), unit: 'V' }] : []),
+    ],
+    pass: true,
+    passLabel: `Criterio de cumplimiento aplicado en este informe: ${label} (${country})`,
+    observations: [
+      `Este proyecto fue evaluado bajo el criterio de cumplimiento de ${label}. La física de las fórmulas de cálculo (Dwight, Sunde, Sverak, Schwarz, Laurent-Niemann) es universal y no cambia entre normas; lo que varía es el límite de referencia de resistencia de puesta a tierra (y/o la tensión de contacto admisible) contra el cual se evalúa el cumplimiento.`,
+      notes,
+      'Los badges de cumplimiento IEEE 1 Ω/5 Ω que aparecen en cada capítulo de diseño se mantienen como referencia técnica de la plataforma; el criterio de cumplimiento normativo vinculante para este proyecto es el de esta sección.',
+    ],
+  };
+}
+
 const ADAPTERS: Record<string, (i: Record<string, unknown>, o: Record<string, unknown>) => ReportSection> = {
   wenner:       wennerSection,
   grid:         gridSection,
@@ -573,6 +603,7 @@ const ADAPTERS: Record<string, (i: Record<string, unknown>, o: Record<string, un
   valorizacion: valorizacionSection,
   soilModel:    (i) => soilModelSection(i),
   faultAnalysis: (i) => faultAnalysisSection(i),
+  normativeProfile: (i) => normativeProfileSection(i),
 };
 
 // ─── Route ────────────────────────────────────────────────────────────────────

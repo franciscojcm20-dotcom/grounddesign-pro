@@ -10,6 +10,8 @@ import { BarCompareChart } from '@/components/ui/Charts';
 import { DiagnosisPanel, type ComplianceCheck } from '@/components/ui/DiagnosisPanel';
 import { FaultCurrentField } from '@/components/ui/FaultCurrentField';
 import { useFaultAnalysis } from '@/context/FaultAnalysisContext';
+import { useNormativeProfile } from '@/context/NormativeProfileContext';
+import { NormativeProfileSelector } from '@/components/ui/NormativeProfileSelector';
 
 // Defaults: malla 40×30 m, conductor 4/0 AWG (d equivalente), ρ=110, ρs=2500
 const DEFAULTS = {
@@ -19,6 +21,7 @@ const DEFAULTS = {
 
 export function VoltagesClient() {
   const faultAnalysis = useFaultAnalysis();
+  const { profile } = useNormativeProfile();
   const [form, setForm] = useState(DEFAULTS);
   const [result, setResult] = useState<VoltagesRealResult | null>(null);
   const [error, setError]   = useState<string | null>(null);
@@ -66,6 +69,11 @@ export function VoltagesClient() {
   const complianceChecks: ComplianceCheck[] = result ? [
     { label: 'Tensión de contacto (touch)', pass: result.compliance.touch.pass, detail: `Em = ${result.compliance.touch.real_V.toFixed(0)} V vs admisible ${result.eTouchAdm_V.toFixed(0)} V.` },
     { label: 'Tensión de paso (step)', pass: result.compliance.step.pass, detail: `Es = ${result.compliance.step.real_V.toFixed(0)} V vs admisible ${result.eStepAdm_V.toFixed(0)} V.` },
+    ...(profile.touchVoltageMaxV ? [{
+      label: `Ucontacto ≤ ${profile.touchVoltageMaxV} V — ${profile.label}`,
+      pass: result.compliance.touch.real_V <= profile.touchVoltageMaxV,
+      detail: `${profile.standard}. Em calculada = ${result.compliance.touch.real_V.toFixed(0)} V. A diferencia del criterio IEEE (admisible variable según Cs/t), esta norma fija un límite directo de tensión de contacto. ${profile.notes}`,
+    }] : []),
   ] : [];
   const diagnosis: string[] = [];
   const dataQuality: string[] = [];
@@ -87,6 +95,8 @@ export function VoltagesClient() {
         <p style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 18, lineHeight: 1.5 }}>
           IEEE Std 80-2013, Cl. 16.5 (Sverak simplificado)
         </p>
+
+        <NormativeProfileSelector />
 
         <SectionLabel>Parámetros de la malla</SectionLabel>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>

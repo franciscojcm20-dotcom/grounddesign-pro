@@ -169,6 +169,7 @@ export interface ReportMeta {
   engineer?: string;
   location?: string;
   date?: string;
+  norm?: string;
 }
 
 export async function downloadReport(

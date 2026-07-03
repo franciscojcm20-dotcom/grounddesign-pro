@@ -10,6 +10,7 @@ import { useToast } from '@/context/ToastContext';
 import { useSoilModel } from '@/context/SoilModelContext';
 import { useFaultAnalysis } from '@/context/FaultAnalysisContext';
 import { useI18n } from '@/context/I18nContext';
+import { useNormativeProfile } from '@/context/NormativeProfileContext';
 import { SectionLabel, StatCard, CompBanner, panelStyle, calcLayout, Field, inputStyle, Th, TdMono } from '@/components/ui/CalcShared';
 import { API_BASE as BASE } from '@/lib/apiBase';
 
@@ -141,6 +142,7 @@ export function ReportClient() {
   const soilModel = useSoilModel();
   const faultAnalysis = useFaultAnalysis();
   const { t } = useI18n();
+  const { profile: normativeProfile } = useNormativeProfile();
   const [projects, setProjects] = useState<Project[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [results, setResults] = useState<CalcResult[]>([]);
@@ -281,6 +283,7 @@ export function ReportClient() {
         projectCode: `GDP-${project.id.slice(0, 8).toUpperCase()}-VAL`,
         engineer: 'Ingeniero de proyecto',
         location: project.description ?? undefined,
+        norm: `${normativeProfile.label} — ${normativeProfile.standard}`,
       };
       await downloadValorizacionPdf(meta, cubicacion, precios, valorizacion);
       toast.success('Valorización económica exportada en PDF');
@@ -364,6 +367,7 @@ export function ReportClient() {
         projectCode: `GDP-${project.id.slice(0, 8).toUpperCase()}-${new Date().toISOString().slice(0, 10)}`,
         engineer: 'Ingeniero de proyecto',
         location: project.description ?? undefined,
+        norm: `${normativeProfile.label} — ${normativeProfile.standard}`,
       };
       // El informe oficial incluye solo el sistema fijado como elegido — las demás
       // topologías calculadas para comparar quedan excluidas de la memoria definitiva.
@@ -374,6 +378,20 @@ export function ReportClient() {
       // Capítulos sintéticos previos a cualquier diseño de malla, en el orden de ingeniería
       // profesional: 1) mediciones de terreno y modelo de suelo, 2) corriente de diseño.
       const prepend: typeof sections = [];
+      prepend.push({
+        module: 'normativeProfile',
+        inputs: {
+          label: normativeProfile.label,
+          standard: normativeProfile.standard,
+          country: normativeProfile.country,
+          rgCritical: normativeProfile.rgCritical,
+          rgGeneral: normativeProfile.rgGeneral,
+          ...(normativeProfile.touchVoltageMaxV ? { touchVoltageMaxV: normativeProfile.touchVoltageMaxV } : {}),
+          notes: normativeProfile.notes,
+        },
+        outputs: {},
+        norm: normativeProfile.standard,
+      });
       if (model) {
         prepend.push({
           module: 'soilModel',
