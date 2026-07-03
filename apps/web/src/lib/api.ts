@@ -299,6 +299,7 @@ export interface FaultAnalysisResult {
 // ─── Modelado del sistema — niveles de cortocircuito (calcula If) ──────────────
 
 export type ShortCircuitFaultType = 'trifasica' | 'monofasica_tierra';
+export type GroundingConfig = 'solido' | 'resistencia' | 'reactancia' | 'aislado' | 'desconocido';
 
 export interface SourceImpedanceInput {
   un: number; ikss3: number; xr: number; ik1?: number; c?: number;
@@ -311,13 +312,16 @@ export interface ShortCircuitInput {
   transformador?: TransformerImpedanceInput;
   tipoFalla: ShortCircuitFaultType;
   zn?: number;
+  aterramiento?: GroundingConfig;
   c?: number;
 }
 export interface ImpedanceRX { R: number; X: number; Z: number }
 export interface ShortCircuitResult {
   tipoFalla: ShortCircuitFaultType;
   Z1: ImpedanceRX; Z0: ImpedanceRX | null; z0Assumed: boolean;
-  If: number; un: number; memoria: string[]; norm: string;
+  If: number; un: number; memoria: string[];
+  recomendaciones: string[]; advertencias: string[];
+  confidence: 'alta' | 'media' | 'estimada'; norm: string;
 }
 
 // ─── Llamadas ─────────────────────────────────────────────────────────────────

@@ -448,15 +448,33 @@ const FAULT_TYPE_LABEL: Record<string, string> = {
   monofasica_tierra: 'Monofásica a tierra',
 };
 
+const GROUNDING_LABEL: Record<string, string> = {
+  solido: 'Sólidamente aterrizado',
+  resistencia: 'Aterrizado por resistencia',
+  reactancia: 'Aterrizado por reactancia',
+  aislado: 'Aislado (sin conexión a tierra)',
+  desconocido: 'No especificada',
+};
+
+const SC_CONFIDENCE_LABEL: Record<string, string> = {
+  alta: 'Alta — datos dentro de rangos típicos IEEE/IEC',
+  media: 'Media — hipótesis o datos atípicos a verificar',
+  estimada: 'Estimada — Z0 asumida y/o datos atípicos',
+};
+
 interface ShortCircuitTraceLike {
   tipoFalla: string;
   fuente: { un: number; ikss3: number; xr: number; ik1?: number };
   transformador?: { sn: number; un: number; vcc: number; xr: number; z0Factor?: number };
   zn?: number;
+  aterramiento?: string;
   Z1: { R: number; X: number; Z: number };
   Z0: { R: number; X: number; Z: number } | null;
   z0Assumed: boolean;
   memoria: string[];
+  recomendaciones?: string[];
+  advertencias?: string[];
+  confidence?: string;
 }
 
 function faultAnalysisSection(inputs: Record<string, unknown>): ReportSection {
@@ -476,6 +494,9 @@ function faultAnalysisSection(inputs: Record<string, unknown>): ReportSection {
 
   const scInputs = sc ? [
     { label: 'Tipo de falla modelada', value: FAULT_TYPE_LABEL[sc.tipoFalla] ?? sc.tipoFalla, unit: '' },
+    ...(sc.aterramiento && sc.aterramiento !== 'desconocido'
+      ? [{ label: 'Configuración de puesta a tierra del neutro', value: GROUNDING_LABEL[sc.aterramiento] ?? sc.aterramiento, unit: '' }]
+      : []),
     { label: 'Un — tensión en el punto de falla', value: sc.fuente.un, unit: 'kV' },
     { label: "I''kss3 — Icc trifásica de la red", value: sc.fuente.ikss3, unit: 'kA' },
     { label: 'X/R de la fuente', value: sc.fuente.xr, unit: '' },
@@ -519,6 +540,9 @@ function faultAnalysisSection(inputs: Record<string, unknown>): ReportSection {
       `Nivel de confiabilidad: ${CONFIDENCE_LABEL[confidence] ?? confidence}.`,
       ...(sc ? [
         `Modelado del sistema para determinar If: ${sc.memoria.join(' ')}`,
+        ...(sc.confidence ? [`Confiabilidad del modelo de cortocircuito: ${SC_CONFIDENCE_LABEL[sc.confidence] ?? sc.confidence}.`] : []),
+        ...(sc.advertencias ?? []).map(a => `Advertencia de plausibilidad del modelo: ${a}`),
+        ...(sc.recomendaciones ?? []).map(r => `Recomendación normativa: ${r}`),
         ...(sc.z0Assumed && sc.tipoFalla === 'monofasica_tierra'
           ? ['Nota de hipótesis: al no disponerse de la Icc monofásica de la red ni del factor Z0/Z1 de placa del transformador, se asumió conservadoramente Z0 ≈ Z1 — simplificación habitual para transformadores trifásicos de tres columnas con conexión Dyn; se recomienda verificar con datos de placa para proyectos críticos.']
           : []),

@@ -1325,11 +1325,14 @@ export function computeTransformerImpedance(p: TransformerImpedanceInput): Trans
 
 export type ShortCircuitFaultType = 'trifasica' | 'monofasica_tierra';
 
+export type GroundingConfig = 'solido' | 'resistencia' | 'reactancia' | 'aislado' | 'desconocido';
+
 export interface ShortCircuitInput {
   fuente:         SourceImpedanceInput;
   transformador?: TransformerImpedanceInput & { activo: boolean };
   tipoFalla:      ShortCircuitFaultType;
   zn?:            number;  // Ω — impedancia de puesta a tierra del neutro del transformador (0 = sólidamente aterrizado)
+  aterramiento?:  GroundingConfig; // configuración de puesta a tierra del neutro — solo orienta las recomendaciones, no altera el cálculo
   c?:             number;
 }
 
@@ -1340,7 +1343,22 @@ export interface ShortCircuitResult {
   z0Assumed: boolean;
   If: number;      // A — corriente de falla calculada, lista para usar en computeFaultAnalysis
   un: number;      // kV
-  memoria: string[]; // pasos de sustitución numérica, para trazabilidad en la memoria de cálculo
+  memoria: string[];        // pasos de sustitución numérica, para trazabilidad en la memoria de cálculo
+  recomendaciones: string[]; // orientación normativa sobre cómo usar/verificar el resultado
+  advertencias: string[];    // alertas de plausibilidad de los datos ingresados (fuera de rangos típicos IEEE/IEC)
+  confidence: 'alta' | 'media' | 'estimada'; // calidad del resultado según los datos disponibles y su plausibilidad
+}
+
+// Rangos típicos de referencia (IEEE/IEC), usados ÚNICAMENTE para generar advertencias
+// de plausibilidad de los datos ingresados — nunca para sustituir el valor del profesional.
+const XR_RED_TYPICAL = { min: 3, max: 30 };   // IEEE 141 (Red Book) — redes de la empresa distribuidora en el punto de conexión
+const XR_TRAFO_TYPICAL = { min: 4, max: 20 }; // IEEE C57.12.00 — transformadores de distribución y de poder
+
+/** Rango típico de Ucc% según potencia nominal — IEEE C57.12.00 / IEC 60076-5. */
+function typicalVccRange(snKva: number): { min: number; max: number } {
+  if (snKva <= 2500) return { min: 4.0, max: 6.5 };
+  if (snKva <= 10000) return { min: 5.5, max: 8.5 };
+  return { min: 7.0, max: 13.0 };
 }
 
 /**
@@ -1349,6 +1367,11 @@ export interface ShortCircuitResult {
  * por componentes simétricas. Z2 se asume igual a Z1 (elementos
  * estáticos — IEC 60909), práctica estándar para redes sin máquinas
  * rotativas significativas en el aporte de falla.
+ *
+ * Además del resultado numérico, entrega recomendaciones normativas y
+ * advertencias de plausibilidad de los datos — el modelado del sistema de
+ * potencia debe ser tan intuitivo y seguro de usar como confiable en su
+ * resultado, sin ocultar nunca al profesional una hipótesis o un dato atípico.
  */
 export function computeShortCircuit(p: ShortCircuitInput): ShortCircuitResult {
   const c = p.c ?? 1.1;
@@ -1359,18 +1382,45 @@ export function computeShortCircuit(p: ShortCircuitInput): ShortCircuitResult {
   const memoria: string[] = [
     `Z1 red = c·Un/(√3·I''kss3) = ${c}×${p.fuente.un} kV / (√3×${p.fuente.ikss3} kA) = ${src.Z1.Z.toFixed(4)} Ω (R=${src.Z1.R.toFixed(4)}, X=${src.Z1.X.toFixed(4)})`,
   ];
+  const advertencias: string[] = [];
+  if (p.fuente.xr < XR_RED_TYPICAL.min || p.fuente.xr > XR_RED_TYPICAL.max) {
+    advertencias.push(`X/R de la fuente (${p.fuente.xr}) fuera del rango típico ${XR_RED_TYPICAL.min}–${XR_RED_TYPICAL.max} para redes en el punto de conexión (IEEE 141 — Red Book). Verificar el dato con la empresa distribuidora/operador del sistema.`);
+  }
   if (p.transformador?.activo) {
     const t = computeTransformerImpedance(p.transformador);
     memoria.push(`Z1 transformador = (Ucc%/100)·(Un²·1000/Sn) = (${p.transformador.vcc}/100)×(${p.transformador.un}² × 1000 / ${p.transformador.sn}) = ${t.Z1.Z.toFixed(4)} Ω (R=${t.Z1.R.toFixed(4)}, X=${t.Z1.X.toFixed(4)})`);
     Z1 = addRX(Z1, t.Z1);
     Z0 = addRX(Z0, t.Z0);
     z0Assumed = z0Assumed || t.z0Assumed;
+    if (p.transformador.xr < XR_TRAFO_TYPICAL.min || p.transformador.xr > XR_TRAFO_TYPICAL.max) {
+      advertencias.push(`X/R del transformador (${p.transformador.xr}) fuera del rango típico ${XR_TRAFO_TYPICAL.min}–${XR_TRAFO_TYPICAL.max} (IEEE C57.12.00). Verificar el dato de placa.`);
+    }
+    const vccRange = typicalVccRange(p.transformador.sn);
+    if (p.transformador.vcc < vccRange.min || p.transformador.vcc > vccRange.max) {
+      advertencias.push(`Ucc = ${p.transformador.vcc}% fuera del rango típico ${vccRange.min}–${vccRange.max}% para un transformador de ${p.transformador.sn} kVA (IEEE C57.12.00 / IEC 60076-5). Verificar el dato de placa del transformador.`);
+    }
   }
+
+  const recomendaciones: string[] = [
+    'IEEE Std 80-2013 Cláusula 15.9 recomienda evaluar tanto la falla trifásica como la monofásica a tierra y usar, para el diseño de la malla, la condición que resulte en la mayor corriente de falla en el punto de interés — cambia el "Tipo de falla" y compara ambos resultados.',
+  ];
+  const aterramiento = p.aterramiento ?? 'desconocido';
+  if (aterramiento === 'solido' && p.tipoFalla === 'trifasica') {
+    recomendaciones.push('El sistema está declarado como sólidamente aterrizado — en esta configuración la falla monofásica a tierra suele aportar una corriente comparable o mayor a la malla que la trifásica; se recomienda calcular también con "Monofásica a tierra".');
+  }
+  if ((aterramiento === 'resistencia' || aterramiento === 'reactancia') && (p.zn ?? 0) === 0) {
+    recomendaciones.push(`El sistema está declarado como aterrizado por ${aterramiento === 'resistencia' ? 'resistencia' : 'reactancia'}, pero Zn = 0 (equivalente a sólidamente aterrizado). Ingresar la impedancia real del elemento de puesta a tierra del neutro para no sobrestimar If.`);
+  }
+  if (aterramiento === 'aislado' && p.tipoFalla === 'monofasica_tierra') {
+    recomendaciones.push('En sistemas aislados (sin conexión intencional a tierra), la corriente de falla monofásica a tierra depende de las capacitancias del sistema, no de este modelo de secuencias — la falla trifásica es la referencia más representativa para dimensionar la malla en este caso.');
+  }
+
   const un = p.fuente.un;
   if (p.tipoFalla === 'trifasica') {
     const If = (c * un * 1000) / (Math.sqrt(3) * Z1.Z);
     memoria.push(`Falla trifásica simétrica: If = c·Un/(√3·Z1) = ${c}×${un} kV / (√3×${Z1.Z.toFixed(4)} Ω) = ${(If / 1000).toFixed(3)} kA`);
-    return { tipoFalla: p.tipoFalla, Z1, Z0: null, z0Assumed: false, If, un, memoria };
+    const confidence: ShortCircuitResult['confidence'] = advertencias.length ? 'media' : 'alta';
+    return { tipoFalla: p.tipoFalla, Z1, Z0: null, z0Assumed: false, If, un, memoria, recomendaciones, advertencias, confidence };
   }
   const zn = p.zn ?? 0;
   const denom = 2 * Z1.Z + Z0.Z + 3 * zn;
@@ -1379,5 +1429,7 @@ export function computeShortCircuit(p: ShortCircuitInput): ShortCircuitResult {
   if (z0Assumed) {
     memoria.push('Z0 se asumió igual a Z1 por no disponerse de datos de secuencia cero de la red (Ik1) ni del transformador — hipótesis conservadora habitual para transformadores trifásicos de tres columnas con conexión Dyn; para mayor precisión, ingresar Ik1 de la red o el factor Z0/Z1 de placa del transformador.');
   }
-  return { tipoFalla: p.tipoFalla, Z1, Z0, z0Assumed, If, un, memoria };
+  const confidence: ShortCircuitResult['confidence'] =
+    z0Assumed ? (advertencias.length ? 'estimada' : 'media') : (advertencias.length ? 'media' : 'alta');
+  return { tipoFalla: p.tipoFalla, Z1, Z0, z0Assumed, If, un, memoria, recomendaciones, advertencias, confidence };
 }

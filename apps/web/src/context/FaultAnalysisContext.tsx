@@ -9,10 +9,14 @@ export interface ShortCircuitTrace {
   fuente: { un: number; ikss3: number; xr: number; ik1?: number };
   transformador?: { sn: number; un: number; vcc: number; xr: number; z0Factor?: number };
   zn?: number;
+  aterramiento?: 'solido' | 'resistencia' | 'reactancia' | 'aislado' | 'desconocido';
   Z1: { R: number; X: number; Z: number };
   Z0: { R: number; X: number; Z: number } | null;
   z0Assumed: boolean;
   memoria: string[];
+  recomendaciones: string[];
+  advertencias: string[];
+  confidence: 'alta' | 'media' | 'estimada';
 }
 
 export interface FaultAnalysisMaster {

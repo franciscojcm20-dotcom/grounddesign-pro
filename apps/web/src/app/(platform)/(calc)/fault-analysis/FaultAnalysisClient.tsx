@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { api, type FaultAnalysisResult, type SplitFactorMethod, type ShortCircuitResult, type ShortCircuitFaultType } from '@/lib/api';
+import { api, type FaultAnalysisResult, type SplitFactorMethod, type ShortCircuitResult, type ShortCircuitFaultType, type GroundingConfig } from '@/lib/api';
 import {
   Field, SectionLabel, StatCard, CompBanner, ExpertItem,
   FundBtn, calcLayout, inputStyle, panelStyle, Th, TdMono,
@@ -15,6 +15,21 @@ const SC_DEFAULTS = {
   trafoActivo: false, sn: 1000, vcc: 6, xrTrafo: 10, z0Factor: 0,
   tipoFalla: 'monofasica_tierra' as ShortCircuitFaultType,
   zn: 0,
+  aterramiento: 'desconocido' as GroundingConfig,
+};
+
+const GROUNDING_OPTIONS: { id: GroundingConfig; label: string }[] = [
+  { id: 'desconocido', label: 'No especificar' },
+  { id: 'solido', label: 'Sólidamente aterrizado' },
+  { id: 'resistencia', label: 'Aterrizado por resistencia' },
+  { id: 'reactancia', label: 'Aterrizado por reactancia' },
+  { id: 'aislado', label: 'Aislado (sin conexión a tierra)' },
+];
+
+const SC_CONFIDENCE_LABEL: Record<ShortCircuitResult['confidence'], string> = {
+  alta: 'Alta — datos dentro de rangos típicos IEEE/IEC',
+  media: 'Media — hipótesis o datos atípicos a verificar',
+  estimada: 'Estimada — Z0 asumida y/o datos atípicos',
 };
 
 const CONFIDENCE_LABEL: Record<FaultAnalysisResult['confidence'], string> = {
@@ -58,6 +73,7 @@ export function FaultAnalysisClient() {
         } : {}),
         tipoFalla: sc.tipoFalla,
         ...(sc.zn > 0 ? { zn: sc.zn } : {}),
+        aterramiento: sc.aterramiento,
       });
       setScResult(r);
       set('If', Math.round(r.If));
@@ -89,7 +105,9 @@ export function FaultAnalysisClient() {
           fuente: { un: sc.un, ikss3: sc.ikss3, xr: sc.xrRed, ...(sc.ik1 > 0 ? { ik1: sc.ik1 } : {}) },
           ...(sc.trafoActivo ? { transformador: { sn: sc.sn, un: sc.un, vcc: sc.vcc, xr: sc.xrTrafo, ...(sc.z0Factor > 0 ? { z0Factor: sc.z0Factor } : {}) } } : {}),
           ...(sc.zn > 0 ? { zn: sc.zn } : {}),
+          aterramiento: sc.aterramiento,
           Z1: scResult.Z1, Z0: scResult.Z0, z0Assumed: scResult.z0Assumed, memoria: scResult.memoria,
+          recomendaciones: scResult.recomendaciones, advertencias: scResult.advertencias, confidence: scResult.confidence,
         },
       } : {}),
       tFalla: form.tFalla, xr: form.xr, freq: form.freq,
@@ -168,6 +186,19 @@ export function FaultAnalysisClient() {
               </div>
             </Field>
 
+            <Field label="Configuración de puesta a tierra del neutro" unit="">
+              <select
+                style={inputStyle}
+                value={sc.aterramiento}
+                onChange={e => setSc_('aterramiento', e.target.value as GroundingConfig)}
+              >
+                {GROUNDING_OPTIONS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+              </select>
+            </Field>
+            <p style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: -6, marginBottom: 8, lineHeight: 1.5 }}>
+              Orienta las recomendaciones normativas del resultado — no altera el cálculo de If.
+            </p>
+
             <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--dim)', margin: '8px 0 4px' }}>Red aguas arriba</div>
             <Field label="Un — tensión en el punto de falla" unit="kV">
               <input style={inputStyle} type="number" step="0.1" value={sc.un} onChange={scNum('un')} />
@@ -219,12 +250,31 @@ export function FaultAnalysisClient() {
             }}>{scLoading ? 'Calculando…' : 'Calcular If del sistema'}</button>
             {scError && <div style={{ marginTop: 8, padding: '7px 9px', background: 'var(--danger-soft)', border: '1px solid var(--danger)', borderRadius: 3, fontSize: 9.5, color: 'var(--danger)' }}>{scError}</div>}
             {scResult && (
-              <div style={{ marginTop: 8, marginBottom: 10, padding: '8px 10px', background: 'var(--safe-soft)', border: '1px solid var(--safe)', borderRadius: 3, fontSize: 9.5, color: 'var(--safe)', lineHeight: 1.6 }}>
-                ✓ If = {(scResult.If / 1000).toFixed(3)} kA ({scResult.If.toFixed(0)} A) — aplicado al campo If.
-                {scResult.z0Assumed && sc.tipoFalla === 'monofasica_tierra' && (
-                  <div style={{ marginTop: 4, color: 'var(--dim)' }}>Z0 asumida ≈ Z1 (sin dato de Ik1/placa) — ver detalle en el desglose.</div>
-                )}
-              </div>
+              <>
+                <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--safe-soft)', border: '1px solid var(--safe)', borderRadius: 3, fontSize: 9.5, color: 'var(--safe)', lineHeight: 1.6 }}>
+                  ✓ If = {(scResult.If / 1000).toFixed(3)} kA ({scResult.If.toFixed(0)} A) — aplicado al campo If.
+                  {scResult.z0Assumed && sc.tipoFalla === 'monofasica_tierra' && (
+                    <div style={{ marginTop: 4, color: 'var(--dim)' }}>Z0 asumida ≈ Z1 (sin dato de Ik1/placa) — ver detalle en el desglose.</div>
+                  )}
+                </div>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, marginBottom: 8, fontSize: 9,
+                  color: scResult.confidence === 'alta' ? 'var(--safe)' : scResult.confidence === 'media' ? 'var(--copper)' : 'var(--danger)',
+                }}>
+                  <span style={{ fontWeight: 700 }}>Confiabilidad del modelo:</span>
+                  <span>{SC_CONFIDENCE_LABEL[scResult.confidence]}</span>
+                </div>
+                {scResult.advertencias.map((a, i) => (
+                  <div key={i} style={{ marginBottom: 6, padding: '6px 9px', background: 'var(--danger-soft)', border: '1px solid var(--danger)', borderRadius: 3, fontSize: 8.5, color: 'var(--danger)', lineHeight: 1.5 }}>
+                    ⚠ {a}
+                  </div>
+                ))}
+                {scResult.recomendaciones.map((r, i) => (
+                  <div key={i} style={{ marginBottom: 6, padding: '6px 9px', background: 'var(--panel3)', border: '1px solid var(--line)', borderRadius: 3, fontSize: 8.5, color: 'var(--dim)', lineHeight: 1.5 }}>
+                    💡 {r}
+                  </div>
+                ))}
+              </>
             )}
           </div>
         )}
@@ -353,8 +403,16 @@ export function FaultAnalysisClient() {
                 <div style={{ fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.7 }}>
                   {scResult.memoria.map((m, i) => <p key={i} style={{ margin: '0 0 6px' }}>{m}</p>)}
                 </div>
+                {scResult.advertencias.length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    {scResult.advertencias.map((a, i) => <ExpertItem key={i} type="warn">{a}</ExpertItem>)}
+                  </div>
+                )}
+                <div style={{ marginTop: 8 }}>
+                  {scResult.recomendaciones.map((r, i) => <ExpertItem key={i} type="info">{r}</ExpertItem>)}
+                </div>
                 <p style={{ fontSize: 9, color: 'var(--faint)', marginTop: 6, marginBottom: 0 }}>
-                  Método: componentes simétricas de Fortescue (1918), impedancia equivalente de cortocircuito según IEC 60909.
+                  Método: componentes simétricas de Fortescue (1918), impedancia equivalente de cortocircuito según IEC 60909. Confiabilidad del modelo: {SC_CONFIDENCE_LABEL[scResult.confidence]}.
                 </p>
               </div>
             )}
