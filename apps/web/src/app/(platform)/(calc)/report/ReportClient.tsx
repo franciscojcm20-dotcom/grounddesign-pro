@@ -109,6 +109,23 @@ function suggestBestId(results: CalcResult[]): string | null {
   return pool.reduce((best, cur) => (cur.s.headline < best.s.headline ? cur : best)).id;
 }
 
+/**
+ * Sugiere el sistema más económico entre los calculados — prioriza los que cumplen
+ * el límite normativo (nunca el más barato a costa de no cumplir) y, entre ellos,
+ * el de menor costo estimado. Es una sugerencia adicional e independiente de
+ * suggestBestId (menor resistencia): el profesional puede ver ambas señales —
+ * la más conservadora técnicamente y la más económica — antes de decidir.
+ */
+function suggestCheapestId(results: CalcResult[], costs: Record<string, number>): string | null {
+  const candidates = results
+    .map(r => ({ id: r.id, s: summarize(r.outputs), cost: costs[r.id] }))
+    .filter((x): x is { id: string; s: ReturnType<typeof summarize>; cost: number } => typeof x.cost === 'number');
+  if (!candidates.length) return null;
+  const compliant = candidates.filter(x => x.s.pass === true);
+  const pool = compliant.length > 0 ? compliant : candidates;
+  return pool.reduce((best, cur) => (cur.cost < best.cost ? cur : best)).id;
+}
+
 function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.floor(diff / 60000);
@@ -147,6 +164,10 @@ export function ReportClient() {
   // ── Sistema elegido (fija cuál topología, entre las calculadas, es la oficial del proyecto) ──
   const [chosenId, setChosenId] = useState<string | null>(null);
 
+  // ── Costo estimado por sistema, para comparar también económicamente ──
+  const [comparisonCosts, setComparisonCosts] = useState<Record<string, number>>({});
+  const [costsLoading, setCostsLoading] = useState(false);
+
   const loadProjects = useCallback(async () => {
     try {
       const res = await fetch(`${BASE}/api/v1/projects`, { credentials: 'include' });
@@ -184,6 +205,36 @@ export function ReportClient() {
   const chosenValid = Boolean(chosenId) && geometryResults.some(r => r.id === chosenId);
   const needsChoice = geometryResults.length > 1 && !chosenValid;
   const suggestedId = geometryResults.length > 1 ? suggestBestId(geometryResults) : null;
+  const cheapestId = geometryResults.length > 1 ? suggestCheapestId(geometryResults, comparisonCosts) : null;
+
+  // Calcula automáticamente el costo estimado (precios de referencia por defecto) de cada
+  // sistema calculado, para poder comparar también económicamente antes de elegir — no solo
+  // por resistencia/cumplimiento. Se recalcula cuando cambia el conjunto de sistemas del
+  // proyecto (por id, no por referencia de array, para no entrar en un loop de renders).
+  const geometryIds = geometryResults.map(r => r.id).join(',');
+  useEffect(() => {
+    if (geometryResults.length < 2) { setComparisonCosts({}); return; }
+    let cancelled = false;
+    setCostsLoading(true);
+    (async () => {
+      try {
+        const defaultPrecios = await api.valorizacion.preciosDefault();
+        const entries = await Promise.all(geometryResults.map(async r => {
+          try {
+            const cub = deriveCubicacion(r.module, r.inputs, r.outputs);
+            const v = await api.valorizacion.compute({ ...cub, precios: defaultPrecios });
+            return [r.id, v.total] as const;
+          } catch { return [r.id, undefined] as const; }
+        }));
+        if (cancelled) return;
+        const map: Record<string, number> = {};
+        for (const [id, total] of entries) if (total !== undefined) map[id] = total;
+        setComparisonCosts(map);
+      } finally { if (!cancelled) setCostsLoading(false); }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [geometryIds]);
 
   function chooseDesign(id: string) {
     if (!project) return;
@@ -695,8 +746,10 @@ export function ReportClient() {
                   <>
                     <div style={{ fontSize: 9.5, color: 'var(--faint)', marginBottom: 8, lineHeight: 1.5 }}>
                       Comparación de los {geometryResults.length} sistemas calculados para este proyecto
-                      {suggestedId && <> — <strong style={{ color: 'var(--safe)' }}>★ sugerido</strong> el de menor resistencia entre los que cumplen la norma</>}.
+                      {suggestedId && <> — <strong style={{ color: 'var(--safe)' }}>★ sugerido</strong> el de menor resistencia entre los que cumplen la norma</>}
+                      {cheapestId && <>, <strong style={{ color: 'var(--copper)' }}>💰 más económico</strong> el de menor costo estimado entre los que cumplen</>}.
                       Fija con &quot;Elegir&quot; cuál es el oficial para el informe.
+                      {costsLoading && <span style={{ marginLeft: 6 }}>Calculando costos…</span>}
                     </div>
                     <div style={panelStyle}>
                       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -709,6 +762,7 @@ export function ReportClient() {
                             <Th>ρ (Ω·m)</Th>
                             <Th>Conductor</Th>
                             <Th>Varillas</Th>
+                            <Th>Costo est. (CLP)</Th>
                             <Th>Cumple</Th>
                           </tr>
                         </thead>
@@ -718,7 +772,9 @@ export function ReportClient() {
                             const s = summarize(r.outputs);
                             const isChosen = chosenValid && r.id === chosenId;
                             const isSuggested = r.id === suggestedId;
+                            const isCheapest = r.id === cheapestId;
                             const cub = deriveCubicacion(r.module, r.inputs, r.outputs);
+                            const cost = comparisonCosts[r.id];
                             return (
                               <tr key={r.id} style={{ background: isChosen ? 'var(--copper-soft)' : undefined }}>
                                 <td style={{ padding: '6px 8px', borderBottom: '1px solid var(--line)' }}>
@@ -733,12 +789,14 @@ export function ReportClient() {
                                   {meta?.icon} {meta?.label ?? r.module}
                                   {isChosen && <span style={{ marginLeft: 6, fontSize: 8, color: 'var(--copper)', fontWeight: 700 }}>★ ELEGIDO</span>}
                                   {!isChosen && isSuggested && <span style={{ marginLeft: 6, fontSize: 8, color: 'var(--safe)', fontWeight: 700 }}>★ SUGERIDO</span>}
+                                  {!isChosen && isCheapest && <span style={{ marginLeft: 6, fontSize: 8, color: 'var(--copper)', fontWeight: 700 }}>💰 ECONÓMICO</span>}
                                 </td>
                                 <TdMono highlight={isSuggested}>{s.headline !== null ? s.headline.toFixed(3) : '—'}</TdMono>
                                 <TdMono>{s.gpr !== null ? (s.gpr / 1000).toFixed(2) : '—'}</TdMono>
                                 <TdMono>{s.rhoUsado !== null ? s.rhoUsado.toFixed(0) : '—'}</TdMono>
                                 <TdMono>{cub.conductorMetros ? `${cub.conductorMetros} m` : '—'}</TdMono>
                                 <TdMono>{cub.varillasCantidad || '—'}</TdMono>
+                                <TdMono highlight={isCheapest}>{cost !== undefined ? `$${Math.round(cost).toLocaleString('es-CL')}` : costsLoading ? '…' : '—'}</TdMono>
                                 <td style={{ padding: '6px 8px', borderBottom: '1px solid var(--line)' }}>
                                   {s.pass !== null && (
                                     <span style={{
@@ -755,6 +813,9 @@ export function ReportClient() {
                           })}
                         </tbody>
                       </table>
+                      <p style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 8, marginBottom: 0 }}>
+                        Costo estimado con precios de referencia editables (ver pestaña &quot;Cubicación y Valorización&quot;) — no reemplaza una cotización real de proveedores.
+                      </p>
                     </div>
                   </>
                 ) : (
