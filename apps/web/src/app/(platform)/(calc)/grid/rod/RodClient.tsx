@@ -15,6 +15,9 @@ import { ConductorPanel } from '@/components/ui/ConductorPanel';
 import { DiagnosisPanel, type ComplianceCheck } from '@/components/ui/DiagnosisPanel';
 import { FaultCurrentField } from '@/components/ui/FaultCurrentField';
 import { useFaultAnalysis } from '@/context/FaultAnalysisContext';
+import { useNormativeProfile } from '@/context/NormativeProfileContext';
+import { NormativeProfileSelector } from '@/components/ui/NormativeProfileSelector';
+import { evaluateRgCompliance } from '@gdp/engines-math';
 import type { GelParams } from '@/lib/api';
 
 const DEFAULTS = { rho: 110, L: 3, diamMm: 16, n: 4, spacing: 6, iFalla: 8500, tFalla: 0.5 };
@@ -53,6 +56,7 @@ function RodDiagram({ n, L }: { n: number; L: number }) {
 
 export function RodClient() {
   const faultAnalysis = useFaultAnalysis();
+  const { profile } = useNormativeProfile();
   const [form, setForm] = useState(DEFAULTS);
   const [gel, setGel] = useState<GelParams | null>(null);
   const [result, setResult] = useState<RodResult | null>(null);
@@ -109,6 +113,11 @@ export function RodClient() {
   const complianceChecks: ComplianceCheck[] = result ? [
     { label: 'Rn ≤ 1 Ω (subestaciones críticas)', pass: result.compliance.rg1, detail: `Rn calculada = ${result.Rn.toFixed(3)} Ω.` },
     { label: 'Rn ≤ 5 Ω (uso general)', pass: result.compliance.rg5, detail: `Rn calculada = ${result.Rn.toFixed(3)} Ω.` },
+    {
+      label: `Rn ≤ ${profile.rgGeneral} Ω — ${profile.label}`,
+      pass: evaluateRgCompliance(result.Rn, profile).rgGeneral,
+      detail: `${profile.standard}. ${profile.notes}`,
+    },
   ] : [];
   const diagnosis: string[] = [];
   const dataQuality: string[] = [];
@@ -134,6 +143,7 @@ export function RodClient() {
 
         <div style={panelStyle}>
           <SectionLabel>Electrodo</SectionLabel>
+          <NormativeProfileSelector />
           <SoilRhoField value={form.rho} onChange={v => setForm(f => ({ ...f, rho: v }))} />
           <Field label="Longitud de pica L (m)">
             <input style={inputStyle} type="number" value={form.L} step="0.5" onChange={set('L')} />

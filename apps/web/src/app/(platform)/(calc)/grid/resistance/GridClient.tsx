@@ -13,6 +13,9 @@ import { ConductorPanel } from '@/components/ui/ConductorPanel';
 import { DiagnosisPanel, type ComplianceCheck } from '@/components/ui/DiagnosisPanel';
 import { FaultCurrentField } from '@/components/ui/FaultCurrentField';
 import { useFaultAnalysis } from '@/context/FaultAnalysisContext';
+import { useNormativeProfile } from '@/context/NormativeProfileContext';
+import { NormativeProfileSelector } from '@/components/ui/NormativeProfileSelector';
+import { evaluateRgCompliance } from '@gdp/engines-math';
 import type { GelParams } from '@/lib/api';
 
 const GridScene3D = dynamic(() => import('@/components/ui/Topology3D').then(m => m.GridScene3D), { ssr: false });
@@ -97,6 +100,7 @@ function GridDiagram({ largo, ancho, nL, nW, nVarillas }: {
 
 export function GridClient() {
   const faultAnalysis = useFaultAnalysis();
+  const { profile } = useNormativeProfile();
   const [form, setForm] = useState(DEFAULTS);
   const [gel, setGel] = useState<GelParams | null>(null);
   const [conductor, setConductor] = useState<{ diamMm: number; calibre: string } | null>(null);
@@ -149,6 +153,11 @@ export function GridClient() {
       pass: result.compliance.rg5ohm.pass,
       detail: `Rg calculada = ${result.Rg.toFixed(3)} Ω, límite habitual para instalaciones de distribución MT.`,
     },
+    {
+      label: `Rg ≤ ${profile.rgGeneral} Ω — ${profile.label}`,
+      pass: evaluateRgCompliance(result.Rg, profile).rgGeneral,
+      detail: `${profile.standard}. ${profile.notes}`,
+    },
   ] : [];
 
   const diagnosis: string[] = [];
@@ -173,6 +182,8 @@ export function GridClient() {
         <p style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 14, lineHeight: 1.5 }}>
           Ecuación de Sverak · IEEE Std 80-2013, Cl. 14.2
         </p>
+
+        <NormativeProfileSelector />
 
         {/* Live grid diagram */}
         <div style={{ ...panelStyle, marginBottom: 16, padding: '10px 8px' }}>

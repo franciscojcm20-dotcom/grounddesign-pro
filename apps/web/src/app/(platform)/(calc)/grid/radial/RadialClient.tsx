@@ -15,6 +15,9 @@ import { ConductorPanel } from '@/components/ui/ConductorPanel';
 import { DiagnosisPanel, type ComplianceCheck } from '@/components/ui/DiagnosisPanel';
 import { FaultCurrentField } from '@/components/ui/FaultCurrentField';
 import { useFaultAnalysis } from '@/context/FaultAnalysisContext';
+import { useNormativeProfile } from '@/context/NormativeProfileContext';
+import { NormativeProfileSelector } from '@/components/ui/NormativeProfileSelector';
+import { evaluateRgCompliance } from '@gdp/engines-math';
 import type { GelParams } from '@/lib/api';
 
 const DEFAULTS = { rho: 110, L: 20, h: 0.6, diamMm: 10, n: 8, iFalla: 8500, tFalla: 0.5 };
@@ -47,6 +50,7 @@ function StarDiagram({ n, L }: { n: number; L: number }) {
 
 export function RadialClient() {
   const faultAnalysis = useFaultAnalysis();
+  const { profile } = useNormativeProfile();
   const [form, setForm] = useState(DEFAULTS);
   const [gel, setGel] = useState<GelParams | null>(null);
   const [result, setResult] = useState<RadialResult | null>(null);
@@ -100,6 +104,11 @@ export function RadialClient() {
   const complianceChecks: ComplianceCheck[] = result ? [
     { label: 'R★ ≤ 1 Ω (subestaciones críticas)', pass: result.compliance.rg1, detail: `R★ calculada = ${result.Rstar.toFixed(3)} Ω.` },
     { label: 'R★ ≤ 5 Ω (uso general)', pass: result.compliance.rg5, detail: `R★ calculada = ${result.Rstar.toFixed(3)} Ω.` },
+    {
+      label: `R★ ≤ ${profile.rgGeneral} Ω — ${profile.label}`,
+      pass: evaluateRgCompliance(result.Rstar, profile).rgGeneral,
+      detail: `${profile.standard}. ${profile.notes}`,
+    },
   ] : [];
   const diagnosis: string[] = [];
   const dataQuality: string[] = [];
@@ -118,6 +127,7 @@ export function RadialClient() {
 
         <div style={panelStyle}>
           <SectionLabel>Conductor radial</SectionLabel>
+          <NormativeProfileSelector />
           <SoilRhoField value={form.rho} onChange={v => setForm(f => ({ ...f, rho: v }))} />
           <Field label="Longitud de cada radial L (m)">
             <input style={inputStyle} type="number" value={form.L} step="5" onChange={set('L')} />

@@ -5,6 +5,7 @@ import { ToastProvider }     from '@/context/ToastContext';
 import { I18nProvider }      from '@/context/I18nContext';
 import { SoilModelProvider } from '@/context/SoilModelContext';
 import { FaultAnalysisProvider } from '@/context/FaultAnalysisContext';
+import { NormativeProfileProvider } from '@/context/NormativeProfileContext';
 import { ThemeProvider }     from './ThemeProvider';
 import { CommandPalette }    from './CommandPalette';
 
@@ -16,8 +17,10 @@ export function ClientProviders({ children }: { children: ReactNode }) {
           <ToastProvider>
             <SoilModelProvider>
               <FaultAnalysisProvider>
-                {children}
-                <CommandPalette />
+                <NormativeProfileProvider>
+                  {children}
+                  <CommandPalette />
+                </NormativeProfileProvider>
               </FaultAnalysisProvider>
             </SoilModelProvider>
           </ToastProvider>

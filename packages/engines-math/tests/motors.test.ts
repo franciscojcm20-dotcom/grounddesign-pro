@@ -26,6 +26,9 @@ import {
   computeConductor,
   CONDUCTOR_TABLE,
   computeMultipleRods,
+  NORMATIVE_PROFILES,
+  getNormativeProfile,
+  evaluateRgCompliance,
 } from '../src/index.ts';
 
 // ─── Tolerancia para comparaciones de punto flotante ─────────────────────────
@@ -199,6 +202,35 @@ const MALLA = {
   nVarillas: 12, longVarilla: 3,
   rho: 110, iFalla: 8500, tFalla: 0.5,
 };
+
+describe('Perfiles normativos (IEEE/RETIE/REBT/NBR)', () => {
+  it('hay al menos un perfil por cada norma esperada', () => {
+    const ids = NORMATIVE_PROFILES.map(p => p.id);
+    for (const expected of ['ieee80-sec-ric', 'retie-co', 'rebt-es', 'nbr-br']) {
+      assert.ok(ids.includes(expected), `falta perfil ${expected}`);
+    }
+  });
+
+  it('todos los perfiles tienen rgCritical <= rgGeneral', () => {
+    for (const p of NORMATIVE_PROFILES) {
+      assert.ok(p.rgCritical <= p.rgGeneral, `${p.id}: rgCritical=${p.rgCritical} > rgGeneral=${p.rgGeneral}`);
+    }
+  });
+
+  it('getNormativeProfile devuelve el perfil por id y cae al default si no existe', () => {
+    const retie = getNormativeProfile('retie-co');
+    assert.strictEqual(retie.country, 'Colombia');
+    const fallback = getNormativeProfile('no-existe');
+    assert.strictEqual(fallback.id, NORMATIVE_PROFILES[0]!.id);
+  });
+
+  it('evaluateRgCompliance respeta los umbrales del perfil seleccionado', () => {
+    const rebt = getNormativeProfile('rebt-es'); // rgCritical=15, rgGeneral=37
+    assert.deepStrictEqual(evaluateRgCompliance(10, rebt), { rgCritical: true, rgGeneral: true });
+    assert.deepStrictEqual(evaluateRgCompliance(20, rebt), { rgCritical: false, rgGeneral: true });
+    assert.deepStrictEqual(evaluateRgCompliance(40, rebt), { rgCritical: false, rgGeneral: false });
+  });
+});
 
 describe('Electrodos múltiples en paralelo — Sunde (resistencia mutua)', () => {
   const base = { rho: 150, L: 3, radius: 0.00465, n: 12, iFalla: 8500 };

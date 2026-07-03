@@ -15,6 +15,9 @@ import { ConductorPanel } from '@/components/ui/ConductorPanel';
 import { DiagnosisPanel, type ComplianceCheck } from '@/components/ui/DiagnosisPanel';
 import { FaultCurrentField } from '@/components/ui/FaultCurrentField';
 import { useFaultAnalysis } from '@/context/FaultAnalysisContext';
+import { useNormativeProfile } from '@/context/NormativeProfileContext';
+import { NormativeProfileSelector } from '@/components/ui/NormativeProfileSelector';
+import { evaluateRgCompliance } from '@gdp/engines-math';
 import type { GelParams } from '@/lib/api';
 
 const DEFAULTS = {
@@ -63,6 +66,7 @@ function CombinedDiagram({ largo, ancho, nL, nW, nRods }: { largo: number; ancho
 
 export function CombinedClient() {
   const faultAnalysis = useFaultAnalysis();
+  const { profile } = useNormativeProfile();
   const [form, setForm] = useState(DEFAULTS);
   const [gel, setGel] = useState<GelParams | null>(null);
   const [result, setResult] = useState<CombinedResult | null>(null);
@@ -132,6 +136,11 @@ export function CombinedClient() {
   const complianceChecks: ComplianceCheck[] = result ? [
     { label: 'Rc ≤ 1 Ω (subestaciones críticas)', pass: result.compliance.rg1, detail: `Rc calculada = ${result.Rc.toFixed(3)} Ω (mejora ${result.mejora.toFixed(1)}% vs malla sola).` },
     { label: 'Rc ≤ 5 Ω (uso general)', pass: result.compliance.rg5, detail: `Rc calculada = ${result.Rc.toFixed(3)} Ω.` },
+    {
+      label: `Rc ≤ ${profile.rgGeneral} Ω — ${profile.label}`,
+      pass: evaluateRgCompliance(result.Rc, profile).rgGeneral,
+      detail: `${profile.standard}. ${profile.notes}`,
+    },
   ] : [];
   const diagnosis: string[] = [];
   const dataQuality: string[] = [];
@@ -150,6 +159,7 @@ export function CombinedClient() {
 
         <div style={panelStyle}>
           <SectionLabel>Malla rectangular</SectionLabel>
+          <NormativeProfileSelector />
           <Field label="Largo (m)"><input style={inputStyle} type="number" value={form.largo} step="5" onChange={set('largo')} /></Field>
           <Field label="Ancho (m)"><input style={inputStyle} type="number" value={form.ancho} step="5" onChange={set('ancho')} /></Field>
           <Field label="Profundidad (m)"><input style={inputStyle} type="number" value={form.profundidad} step="0.1" onChange={set('profundidad')} /></Field>

@@ -15,6 +15,9 @@ import { ConductorPanel } from '@/components/ui/ConductorPanel';
 import { DiagnosisPanel, type ComplianceCheck } from '@/components/ui/DiagnosisPanel';
 import { FaultCurrentField } from '@/components/ui/FaultCurrentField';
 import { useFaultAnalysis } from '@/context/FaultAnalysisContext';
+import { useNormativeProfile } from '@/context/NormativeProfileContext';
+import { NormativeProfileSelector } from '@/components/ui/NormativeProfileSelector';
+import { evaluateRgCompliance } from '@gdp/engines-math';
 import type { GelParams } from '@/lib/api';
 
 const DEFAULTS = { rho: 110, largo: 30, ancho: 20, h: 0.6, diamMm: 10, iFalla: 8500, tFalla: 0.5 };
@@ -44,6 +47,7 @@ function RingDiagram({ largo, ancho }: { largo: number; ancho: number }) {
 
 export function RingClient() {
   const faultAnalysis = useFaultAnalysis();
+  const { profile } = useNormativeProfile();
   const [form, setForm] = useState(DEFAULTS);
   const [gel, setGel] = useState<GelParams | null>(null);
   const [result, setResult] = useState<RingResult | null>(null);
@@ -104,6 +108,11 @@ export function RingClient() {
   const complianceChecks: ComplianceCheck[] = result ? [
     { label: 'Rring ≤ 1 Ω (subestaciones críticas)', pass: result.compliance.rg1, detail: `Rring calculada = ${result.Rring.toFixed(3)} Ω.` },
     { label: 'Rring ≤ 5 Ω (uso general)', pass: result.compliance.rg5, detail: `Rring calculada = ${result.Rring.toFixed(3)} Ω.` },
+    {
+      label: `Rring ≤ ${profile.rgGeneral} Ω — ${profile.label}`,
+      pass: evaluateRgCompliance(result.Rring, profile).rgGeneral,
+      detail: `${profile.standard}. ${profile.notes}`,
+    },
   ] : [];
   const diagnosis: string[] = [];
   const dataQuality: string[] = [];
@@ -122,6 +131,7 @@ export function RingClient() {
 
         <div style={panelStyle}>
           <SectionLabel>Suelo y conductor</SectionLabel>
+          <NormativeProfileSelector />
           <SoilRhoField value={form.rho} onChange={v => setForm(f => ({ ...f, rho: v }))} />
           <Field label="Profundidad h (m)">
             <input style={inputStyle} type="number" value={form.h} step="0.1" onChange={set('h')} />

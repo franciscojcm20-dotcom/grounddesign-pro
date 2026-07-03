@@ -15,6 +15,9 @@ import { ConductorPanel } from '@/components/ui/ConductorPanel';
 import { DiagnosisPanel, type ComplianceCheck } from '@/components/ui/DiagnosisPanel';
 import { FaultCurrentField } from '@/components/ui/FaultCurrentField';
 import { useFaultAnalysis } from '@/context/FaultAnalysisContext';
+import { useNormativeProfile } from '@/context/NormativeProfileContext';
+import { NormativeProfileSelector } from '@/components/ui/NormativeProfileSelector';
+import { evaluateRgCompliance } from '@gdp/engines-math';
 import type { GelParams } from '@/lib/api';
 
 const DEFAULTS = { rho: 110, L: 50, h: 0.6, diamMm: 10, iFalla: 8500, tFalla: 0.5 };
@@ -42,6 +45,7 @@ function StripDiagram({ L, h }: { L: number; h: number }) {
 
 export function StripClient() {
   const faultAnalysis = useFaultAnalysis();
+  const { profile } = useNormativeProfile();
   const [form, setForm] = useState(DEFAULTS);
   const [gel, setGel] = useState<GelParams | null>(null);
   const [result, setResult] = useState<StripResult | null>(null);
@@ -94,6 +98,11 @@ export function StripClient() {
   const complianceChecks: ComplianceCheck[] = result ? [
     { label: 'Rh ≤ 1 Ω (subestaciones críticas)', pass: result.compliance.rg1, detail: `Rh calculada = ${result.Rh.toFixed(3)} Ω.` },
     { label: 'Rh ≤ 5 Ω (uso general)', pass: result.compliance.rg5, detail: `Rh calculada = ${result.Rh.toFixed(3)} Ω.` },
+    {
+      label: `Rh ≤ ${profile.rgGeneral} Ω — ${profile.label}`,
+      pass: evaluateRgCompliance(result.Rh, profile).rgGeneral,
+      detail: `${profile.standard}. ${profile.notes}`,
+    },
   ] : [];
   const diagnosis: string[] = [];
   const dataQuality: string[] = [];
@@ -112,6 +121,7 @@ export function StripClient() {
 
         <div style={panelStyle}>
           <SectionLabel>Conductor</SectionLabel>
+          <NormativeProfileSelector />
           <SoilRhoField value={form.rho} onChange={v => setForm(f => ({ ...f, rho: v }))} />
           <Field label="Longitud total L (m)">
             <input style={inputStyle} type="number" value={form.L} step="5" onChange={set('L')} />

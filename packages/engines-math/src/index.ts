@@ -1437,3 +1437,5 @@ export function computeShortCircuit(p: ShortCircuitInput): ShortCircuitResult {
     z0Assumed ? (advertencias.length ? 'estimada' : 'media') : (advertencias.length ? 'media' : 'alta');
   return { tipoFalla: p.tipoFalla, Z1, Z0, z0Assumed, If, un, memoria, recomendaciones, advertencias, confidence };
 }
+
+export * from "./normative.ts";
