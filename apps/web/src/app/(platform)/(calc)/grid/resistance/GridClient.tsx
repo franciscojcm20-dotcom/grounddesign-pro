@@ -15,9 +15,7 @@ import { FaultCurrentField } from '@/components/ui/FaultCurrentField';
 import { useFaultAnalysis } from '@/context/FaultAnalysisContext';
 import type { GelParams } from '@/lib/api';
 
-const Scene3D = dynamic(() => import('@/components/ui/Scene3D').then(m => m.Scene3D), { ssr: false });
-const Scene3DHint = dynamic(() => import('@/components/ui/Scene3D').then(m => m.Scene3DHint), { ssr: false });
-const Grid3D = dynamic(() => import('@/components/ui/Topology3D').then(m => m.Grid3D), { ssr: false });
+const GridScene3D = dynamic(() => import('@/components/ui/Topology3D').then(m => m.GridScene3D), { ssr: false });
 
 const DEFAULTS = {
   largo: 40, ancho: 30, profundidad: 0.6,
@@ -180,7 +178,7 @@ export function GridClient() {
         <div style={{ ...panelStyle, marginBottom: 16, padding: '10px 8px' }}>
           <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
             {([['2D', false], ['3D', true]] as const).map(([label, is3d]) => (
-              <button key={label} onClick={() => setView3d(is3d)} style={{
+              <button key={label} onClick={() => setView3d(is3d)} onMouseEnter={() => { if (is3d) import('@/components/ui/Topology3D'); }} style={{
                 flex: 1, padding: '5px 4px', borderRadius: 3, cursor: 'pointer', fontSize: 9.5, fontWeight: 700,
                 background: view3d === is3d ? 'var(--copper-soft)' : 'var(--bg)',
                 border: `1px solid ${view3d === is3d ? 'var(--copper)' : 'var(--line)'}`,
@@ -189,16 +187,11 @@ export function GridClient() {
             ))}
           </div>
           {view3d ? (
-            <>
-              <Scene3D size={Math.max(form.largo, form.ancho) * 1.4}>
-                <Grid3D
-                  largo={form.largo} ancho={form.ancho}
-                  nL={form.nConductoresL} nW={form.nConductoresW}
-                  profundidad={form.profundidad} nVarillas={form.nVarillas} longVarilla={form.longVarilla}
-                />
-              </Scene3D>
-              <Scene3DHint />
-            </>
+            <GridScene3D
+              largo={form.largo} ancho={form.ancho}
+              nL={form.nConductoresL} nW={form.nConductoresW}
+              profundidad={form.profundidad} nVarillas={form.nVarillas} longVarilla={form.longVarilla}
+            />
           ) : (
             <GridDiagram
               largo={form.largo} ancho={form.ancho}

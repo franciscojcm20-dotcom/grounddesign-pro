@@ -1,5 +1,5 @@
 'use client';
-import { Segment, JointMarker, COLOR_CONDUCTOR, COLOR_ROD } from './Scene3D';
+import { Segment, JointMarker, Scene3D, Scene3DHint, COLOR_CONDUCTOR, COLOR_ROD } from './Scene3D';
 
 // Todas las coordenadas usan metros reales de las mismas variables ya usadas en
 // el diagrama 2D de cada módulo — Y negativo representa profundidad bajo el
@@ -114,5 +114,76 @@ export function Combined3D({ largo, ancho, nL, nW, profundidad, nRods, rodLength
       largo={largo} ancho={ancho} nL={nL} nW={nW} profundidad={profundidad}
       nVarillas={nRods} longVarilla={rodLength}
     />
+  );
+}
+
+// ─── Vistas compuestas (Scene3D + topología + hint en un solo chunk) ───────
+// Cada módulo antes cargaba Scene3D, Scene3DHint y su topología con 3
+// dynamic() independientes (3 promesas de chunk por módulo). Al componerlas
+// aquí, el cliente hace un único import dinámico por módulo.
+
+export function GridScene3D(props: Parameters<typeof Grid3D>[0]) {
+  return (
+    <>
+      <Scene3D size={Math.max(props.largo, props.ancho) * 1.4}>
+        <Grid3D {...props} />
+      </Scene3D>
+      <Scene3DHint />
+    </>
+  );
+}
+
+export function RodScene3D(props: Parameters<typeof Rod3D>[0]) {
+  return (
+    <>
+      <Scene3D size={Math.max(props.n * props.spacing, props.L * 3)}>
+        <Rod3D {...props} />
+      </Scene3D>
+      <Scene3DHint />
+    </>
+  );
+}
+
+export function StripScene3D(props: Parameters<typeof Strip3D>[0]) {
+  return (
+    <>
+      <Scene3D size={props.L * 1.4}>
+        <Strip3D {...props} />
+      </Scene3D>
+      <Scene3DHint />
+    </>
+  );
+}
+
+export function RadialScene3D(props: Parameters<typeof Radial3D>[0]) {
+  return (
+    <>
+      <Scene3D size={props.L * 2.6}>
+        <Radial3D {...props} />
+      </Scene3D>
+      <Scene3DHint />
+    </>
+  );
+}
+
+export function RingScene3D(props: Parameters<typeof Ring3D>[0]) {
+  return (
+    <>
+      <Scene3D size={Math.max(props.largo, props.ancho) * 1.4}>
+        <Ring3D {...props} />
+      </Scene3D>
+      <Scene3DHint />
+    </>
+  );
+}
+
+export function CombinedScene3D(props: Parameters<typeof Combined3D>[0]) {
+  return (
+    <>
+      <Scene3D size={Math.max(props.largo, props.ancho) * 1.4}>
+        <Combined3D {...props} />
+      </Scene3D>
+      <Scene3DHint />
+    </>
   );
 }

@@ -7,9 +7,7 @@ import {
   calcLayout, inputStyle, panelStyle, Th, TdMono,
 } from '@/components/ui/CalcShared';
 
-const Scene3D = dynamic(() => import('@/components/ui/Scene3D').then(m => m.Scene3D), { ssr: false });
-const Scene3DHint = dynamic(() => import('@/components/ui/Scene3D').then(m => m.Scene3DHint), { ssr: false });
-const Ring3D = dynamic(() => import('@/components/ui/Topology3D').then(m => m.Ring3D), { ssr: false });
+const RingScene3D = dynamic(() => import('@/components/ui/Topology3D').then(m => m.RingScene3D), { ssr: false });
 import { ExportBar } from '@/components/ui/ExportBar';
 import { SoilRhoField } from '@/components/ui/SoilRhoField';
 import { GelPanel } from '@/components/ui/GelPanel';
@@ -168,7 +166,7 @@ export function RingClient() {
         <div style={panelStyle}>
           <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
             {([['2D', false], ['3D', true]] as const).map(([label, is3d]) => (
-              <button key={label} onClick={() => setView3d(is3d)} style={{
+              <button key={label} onClick={() => setView3d(is3d)} onMouseEnter={() => { if (is3d) import('@/components/ui/Topology3D'); }} style={{
                 flex: 1, padding: '5px 4px', borderRadius: 3, cursor: 'pointer', fontSize: 9.5, fontWeight: 700,
                 background: view3d === is3d ? 'var(--copper-soft)' : 'var(--bg)',
                 border: `1px solid ${view3d === is3d ? 'var(--copper)' : 'var(--line)'}`,
@@ -177,12 +175,7 @@ export function RingClient() {
             ))}
           </div>
           {view3d ? (
-            <>
-              <Scene3D size={Math.max(form.largo, form.ancho) * 1.4}>
-                <Ring3D largo={form.largo} ancho={form.ancho} h={form.h} />
-              </Scene3D>
-              <Scene3DHint />
-            </>
+            <RingScene3D largo={form.largo} ancho={form.ancho} h={form.h} />
           ) : (
             <RingDiagram largo={form.largo} ancho={form.ancho} />
           )}
