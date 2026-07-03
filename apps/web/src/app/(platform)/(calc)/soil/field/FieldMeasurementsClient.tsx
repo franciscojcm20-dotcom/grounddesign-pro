@@ -102,6 +102,8 @@ type WennerRow  = { a: string; r: string };
 export function FieldMeasurementsClient() {
   const soilModel = useSoilModel();
 
+  const [useSchlum, setUseSchlum] = useState(true);
+  const [useWenner, setUseWenner] = useState(true);
   const [schlumRows, setSchlumRows] = useState<SchlumRow[]>(DEFAULT_SCHLUM.map(v => ({ L: String(v.L), l: String(v.l), r: String(v.r) })));
   const [wennerRows, setWennerRows] = useState<WennerRow[]>(DEFAULT_WENNER.map(v => ({ a: String(v.a), r: String(v.r) })));
   const [loadedFromContext, setLoadedFromContext] = useState(false);
@@ -138,6 +140,8 @@ export function FieldMeasurementsClient() {
   }
 
   async function calculate() {
+    if (!useSchlum && !useWenner) { setError('Selecciona al menos un método (Schlumberger o Wenner).'); return; }
+
     const schlumReadings = schlumRows
       .map(r => ({ L: Number(r.L), l: Number(r.l), r: Number(r.r) }))
       .filter(r => r.L > 0 && r.l > 0 && r.r > 0);
@@ -145,23 +149,23 @@ export function FieldMeasurementsClient() {
       .map(r => ({ a: Number(r.a), r: Number(r.r) }))
       .filter(r => r.a > 0 && r.r > 0);
 
-    if (schlumReadings.length < 2) { setError('Se necesitan al menos 2 lecturas Schlumberger válidas.'); return; }
-    if (wennerReadings.length < 2)  { setError('Se necesitan al menos 2 lecturas Wenner válidas.'); return; }
+    if (useSchlum && schlumReadings.length < 2) { setError('Se necesitan al menos 2 lecturas Schlumberger válidas.'); return; }
+    if (useWenner && wennerReadings.length < 2)  { setError('Se necesitan al menos 2 lecturas Wenner válidas.'); return; }
 
     setLoading(true); setError(null);
     try {
       const [schlum, wenner] = await Promise.all([
-        api.soil.schlumberger(schlumReadings),
-        api.soil.wenner(wennerReadings),
+        useSchlum ? api.soil.schlumberger(schlumReadings) : Promise.resolve(null),
+        useWenner ? api.soil.wenner(wennerReadings) : Promise.resolve(null),
       ]);
       setSchlumResult(schlum);
       setWennerResult(wenner);
-      // Guarda las lecturas crudas — este es el único lugar donde se editan.
-      soilModel.setReadings(schlumReadings, wennerReadings);
-      // Schlumberger es el método principal: define el modelo activo.
-      soilModel.setFromSchlumberger(schlum.twoLayer);
-      // Wenner valida contra el modelo ya establecido.
-      soilModel.setFromWenner(wenner.twoLayer);
+      // Guarda las lecturas crudas de los métodos usados — este es el único lugar donde se editan.
+      soilModel.setReadings(useSchlum ? schlumReadings : [], useWenner ? wennerReadings : []);
+      // Si ambos métodos están activos, Schlumberger es el principal y Wenner valida contra él.
+      // Si solo uno está activo, ese método define el modelo directamente (ver SoilModelContext).
+      if (schlum) soilModel.setFromSchlumberger(schlum.twoLayer);
+      if (wenner) soilModel.setFromWenner(wenner.twoLayer);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error de conexión con la API');
     } finally { setLoading(false); }
@@ -175,9 +179,8 @@ export function FieldMeasurementsClient() {
         <h2 style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Mediciones de Campo</h2>
         <p style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 10, lineHeight: 1.6 }}>
           Punto de entrada único para las lecturas de terreno. El modelo de suelo (ρ1, ρ2, h) se calcula
-          automáticamente a partir de estas mediciones — no se elige una curva manualmente. Schlumberger es
-          el método principal; Wenner valida el resultado. Todos los módulos de diseño de malla usan este
-          mismo modelo.
+          automáticamente a partir de estas mediciones. No es obligatorio usar ambos métodos — elige el(los)
+          que hayas medido en terreno; si usas los dos, Schlumberger define el modelo principal y Wenner lo valida.
         </p>
         <div style={{
           fontSize: 9, color: 'var(--dim)', background: 'var(--panel3)', border: '1px solid var(--line)',
@@ -191,75 +194,103 @@ export function FieldMeasurementsClient() {
           (los 4 electrodos se desplazan igual, medición más simple pero más sensible a variaciones laterales).
         </div>
 
-        <SectionLabel>Schlumberger (L, l, R) — principal</SectionLabel>
-        <div style={{ ...panelStyle, padding: '8px', marginBottom: 10 }}>
-          <SchlumbergerLayoutDiagram />
-        </div>
-        {maxLlRatio > 5 && (
-          <div style={{
-            fontSize: 8.5, color: 'var(--warn)', background: 'var(--warn-soft)', border: '1px solid var(--warn)',
-            borderRadius: 3, padding: '5px 8px', marginBottom: 8, lineHeight: 1.4,
-          }}>
-            ⚠ L/l &gt; 5 en algunas lecturas (máx. {maxLlRatio.toFixed(1)}). IEEE Std 81-2012 recomienda aumentar l cuando esta razón se supera, para mantener una señal de potencial medible.
-          </div>
-        )}
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 8 }}>
-          <thead><tr><Th>L (m)</Th><Th>l (m)</Th><Th>R (Ω)</Th><Th></Th></tr></thead>
-          <tbody>
-            {schlumRows.map((row, i) => (
-              <tr key={i}>
-                {(['L', 'l', 'r'] as const).map(f => (
-                  <td key={f} style={{ padding: '2px 2px' }}>
-                    <input value={row[f]} onChange={e => updateSchlum(i, f, e.target.value)} style={{ ...inputStyle, padding: '4px 5px' }} placeholder="0" />
-                  </td>
+        <label style={{
+          display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, cursor: 'pointer',
+          padding: '6px 8px', border: `1px solid ${useSchlum ? 'var(--copper)' : 'var(--line)'}`,
+          borderRadius: 4, background: useSchlum ? 'var(--copper-soft)' : 'var(--bg)',
+        }}>
+          <input type="checkbox" checked={useSchlum} onChange={e => setUseSchlum(e.target.checked)} />
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: useSchlum ? 'var(--copper)' : 'var(--dim)' }}>
+            Usar Schlumberger {useSchlum && useWenner ? '(principal)' : ''}
+          </span>
+        </label>
+        {useSchlum && (
+          <>
+            <SectionLabel>Schlumberger (L, l, R)</SectionLabel>
+            <div style={{ ...panelStyle, padding: '8px', marginBottom: 10 }}>
+              <SchlumbergerLayoutDiagram />
+            </div>
+            {maxLlRatio > 5 && (
+              <div style={{
+                fontSize: 8.5, color: 'var(--warn)', background: 'var(--warn-soft)', border: '1px solid var(--warn)',
+                borderRadius: 3, padding: '5px 8px', marginBottom: 8, lineHeight: 1.4,
+              }}>
+                ⚠ L/l &gt; 5 en algunas lecturas (máx. {maxLlRatio.toFixed(1)}). IEEE Std 81-2012 recomienda aumentar l cuando esta razón se supera, para mantener una señal de potencial medible.
+              </div>
+            )}
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 8 }}>
+              <thead><tr><Th>L (m)</Th><Th>l (m)</Th><Th>R (Ω)</Th><Th></Th></tr></thead>
+              <tbody>
+                {schlumRows.map((row, i) => (
+                  <tr key={i}>
+                    {(['L', 'l', 'r'] as const).map(f => (
+                      <td key={f} style={{ padding: '2px 2px' }}>
+                        <input value={row[f]} onChange={e => updateSchlum(i, f, e.target.value)} style={{ ...inputStyle, padding: '4px 5px' }} placeholder="0" />
+                      </td>
+                    ))}
+                    <td><button onClick={() => setSchlumRows(p => p.filter((_, idx) => idx !== i))} style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: 12 }}>×</button></td>
+                  </tr>
                 ))}
-                <td><button onClick={() => setSchlumRows(p => p.filter((_, idx) => idx !== i))} style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: 12 }}>×</button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <button onClick={() => setSchlumRows(p => [...p, { L: '', l: '0.5', r: '' }])} style={{ width: '100%', background: 'none', border: '1px dashed var(--line)', color: 'var(--dim)', fontFamily: 'var(--font-mono)', fontSize: 10, padding: 6, borderRadius: 3, cursor: 'pointer', marginBottom: 18 }}>
-          + Agregar lectura Schlumberger
-        </button>
+              </tbody>
+            </table>
+            <button onClick={() => setSchlumRows(p => [...p, { L: '', l: '0.5', r: '' }])} style={{ width: '100%', background: 'none', border: '1px dashed var(--line)', color: 'var(--dim)', fontFamily: 'var(--font-mono)', fontSize: 10, padding: 6, borderRadius: 3, cursor: 'pointer', marginBottom: 18 }}>
+              + Agregar lectura Schlumberger
+            </button>
+          </>
+        )}
 
-        <SectionLabel purple>Wenner (a, R) — validación</SectionLabel>
-        <div style={{ ...panelStyle, padding: '8px', marginBottom: 10 }}>
-          <WennerLayoutDiagram />
-        </div>
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 8 }}>
-          <thead><tr><Th>a (m)</Th><Th>R (Ω)</Th><Th></Th></tr></thead>
-          <tbody>
-            {wennerRows.map((row, i) => (
-              <tr key={i}>
-                <td style={{ padding: '2px 3px' }}>
-                  <input value={row.a} onChange={e => updateWenner(i, 'a', e.target.value)} style={inputStyle} placeholder="0" />
-                </td>
-                <td style={{ padding: '2px 3px' }}>
-                  <input value={row.r} onChange={e => updateWenner(i, 'r', e.target.value)} style={inputStyle} placeholder="0" />
-                </td>
-                <td style={{ padding: '2px 3px' }}>
-                  <button onClick={() => setWennerRows(p => p.filter((_, idx) => idx !== i))} style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: 12 }}>×</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <button onClick={() => setWennerRows(p => [...p, { a: '', r: '' }])} style={{ width: '100%', background: 'none', border: '1px dashed var(--line)', color: 'var(--dim)', fontFamily: 'var(--font-mono)', fontSize: 10, padding: 6, borderRadius: 3, cursor: 'pointer', marginBottom: 20 }}>
-          + Agregar lectura Wenner
-        </button>
+        <label style={{
+          display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, cursor: 'pointer',
+          padding: '6px 8px', border: `1px solid ${useWenner ? 'var(--blue)' : 'var(--line)'}`,
+          borderRadius: 4, background: useWenner ? 'var(--panel3)' : 'var(--bg)',
+        }}>
+          <input type="checkbox" checked={useWenner} onChange={e => setUseWenner(e.target.checked)} />
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: useWenner ? 'var(--blue)' : 'var(--dim)' }}>
+            Usar Wenner {useSchlum && useWenner ? '(validación)' : ''}
+          </span>
+        </label>
+        {useWenner && (
+          <>
+            <SectionLabel purple>Wenner (a, R)</SectionLabel>
+            <div style={{ ...panelStyle, padding: '8px', marginBottom: 10 }}>
+              <WennerLayoutDiagram />
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 8 }}>
+              <thead><tr><Th>a (m)</Th><Th>R (Ω)</Th><Th></Th></tr></thead>
+              <tbody>
+                {wennerRows.map((row, i) => (
+                  <tr key={i}>
+                    <td style={{ padding: '2px 3px' }}>
+                      <input value={row.a} onChange={e => updateWenner(i, 'a', e.target.value)} style={inputStyle} placeholder="0" />
+                    </td>
+                    <td style={{ padding: '2px 3px' }}>
+                      <input value={row.r} onChange={e => updateWenner(i, 'r', e.target.value)} style={inputStyle} placeholder="0" />
+                    </td>
+                    <td style={{ padding: '2px 3px' }}>
+                      <button onClick={() => setWennerRows(p => p.filter((_, idx) => idx !== i))} style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: 12 }}>×</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <button onClick={() => setWennerRows(p => [...p, { a: '', r: '' }])} style={{ width: '100%', background: 'none', border: '1px dashed var(--line)', color: 'var(--dim)', fontFamily: 'var(--font-mono)', fontSize: 10, padding: 6, borderRadius: 3, cursor: 'pointer', marginBottom: 20 }}>
+              + Agregar lectura Wenner
+            </button>
+          </>
+        )}
 
-        <button onClick={calculate} disabled={loading} style={{ width: '100%', background: 'var(--copper)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 11, padding: 10, borderRadius: 3, cursor: 'pointer', opacity: loading ? 0.6 : 1 }}>
+        <button onClick={calculate} disabled={loading || (!useSchlum && !useWenner)} style={{ width: '100%', background: 'var(--copper)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 11, padding: 10, borderRadius: 3, cursor: 'pointer', opacity: (loading || (!useSchlum && !useWenner)) ? 0.6 : 1 }}>
           {loading ? 'Calculando…' : 'Calcular modelo de suelo'}
         </button>
         {error && <div style={{ marginTop: 12, padding: '8px 10px', background: 'var(--danger-soft)', border: '1px solid var(--danger)', borderRadius: 3, fontSize: 10, color: 'var(--danger)' }}>{error}</div>}
       </aside>
 
       <section style={{ overflowY: 'auto', padding: '18px 24px 40px', background: 'var(--bg)' }}>
-        {!schlumResult || !wennerResult ? (
+        {!schlumResult && !wennerResult ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12 }}>
             <div style={{ fontSize: 32 }}>🌐</div>
             <div style={{ color: 'var(--faint)', fontSize: 11, textAlign: 'center', maxWidth: 340 }}>
-              Ingresa las lecturas de ambos métodos y presiona Calcular.
+              Ingresa las lecturas del/los método(s) elegido(s) y presiona Calcular.
               {model && (
                 <div style={{ marginTop: 12, fontSize: 10, color: 'var(--copper)' }}>
                   Ya existe un modelo de suelo activo (fuente: {model.source}) — puedes seguir usándolo en los módulos de diseño mientras recalculas.
@@ -269,84 +300,100 @@ export function FieldMeasurementsClient() {
           </div>
         ) : (
           <>
-            <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-              <StatCard label="ρ1 (superior)" value={schlumResult.twoLayer.rho1.toFixed(0)} unit="Ω·m" primary />
-              <StatCard label="ρ2 (inferior)" value={schlumResult.twoLayer.rho2.toFixed(0)} unit="Ω·m" primary />
-              <StatCard label="h (profundidad)" value={schlumResult.twoLayer.h.toFixed(1)} unit="m" />
-              <StatCard
-                label="ρ uniforme equiv."
-                value={model ? model.rhoUniform.toFixed(0) : '—'}
-                unit="Ω·m"
-                ok
-              />
-            </div>
+            {(() => {
+              const primary = schlumResult ?? wennerResult!;
+              return (
+                <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+                  <StatCard label="ρ1 (superior)" value={primary.twoLayer.rho1.toFixed(0)} unit="Ω·m" primary />
+                  <StatCard label="ρ2 (inferior)" value={primary.twoLayer.rho2.toFixed(0)} unit="Ω·m" primary />
+                  <StatCard label="h (profundidad)" value={primary.twoLayer.h.toFixed(1)} unit="m" />
+                  <StatCard
+                    label="ρ uniforme equiv."
+                    value={model ? model.rhoUniform.toFixed(0) : '—'}
+                    unit="Ω·m"
+                    ok
+                  />
+                </div>
+              );
+            })()}
 
             <CompBanner
               pass={!model?.validatedBy || model.validatedBy.deltaPct <= 15}
               norm="IEEE Std 81-2012, Cl. 8 (Schlumberger) / Cl. 8.3 (Wenner, validación)"
               msg={model?.validatedBy
                 ? `Modelo de suelo activo: ρ1=${model.rho1.toFixed(0)} Ω·m, ρ2=${model.rho2.toFixed(0)} Ω·m, h≈${model.h}m — validado contra Wenner con ${model.validatedBy.deltaPct.toFixed(1)}% de diferencia`
-                : 'Modelo de suelo activo calculado — pendiente de validación'}
+                : `Modelo de suelo activo calculado con ${schlumResult && wennerResult ? 'ambos métodos' : schlumResult ? 'Schlumberger únicamente' : 'Wenner únicamente'}${schlumResult && !wennerResult ? ' — sin validación cruzada' : ''}`}
             />
 
-            <div style={{ ...panelStyle, marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
-                <div style={{ fontSize: 11, fontWeight: 700 }}>Comparación de curvas de sondeo — escala log-log</div>
-                <div style={{ fontSize: 8, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>convención estándar VES (IEEE Std 81-2012)</div>
+            {schlumResult && wennerResult && (
+              <div style={{ ...panelStyle, marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700 }}>Comparación de curvas de sondeo — escala log-log</div>
+                  <div style={{ fontSize: 8, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>convención estándar VES (IEEE Std 81-2012)</div>
+                </div>
+                <div style={{ fontSize: 9.5, color: 'var(--dim)', marginBottom: 10, lineHeight: 1.5 }}>
+                  Ambos ejes en escala logarítmica: el espaciamiento y la resistividad varían en varios órdenes de magnitud,
+                  y esta escala linealiza el comportamiento típico de la curva, facilitando comparar la forma entre métodos.
+                  Si el terreno es consistente, ambas curvas deben tener una forma similar (mismo número de quiebres/capas).
+                </div>
+                <SoundingComparisonChart
+                  series={[
+                    {
+                      label: 'Schlumberger (AB/2 = L/2) ★',
+                      color: 'var(--chart-1)',
+                      points: schlumResult.points.map(p => ({ x: p.L / 2, y: p.rhoA })),
+                    },
+                    {
+                      label: 'Wenner (a)',
+                      color: 'var(--chart-2)',
+                      dashed: true,
+                      points: wennerResult.points.map(p => ({ x: p.a, y: p.rhoA })),
+                    },
+                  ]}
+                />
               </div>
-              <div style={{ fontSize: 9.5, color: 'var(--dim)', marginBottom: 10, lineHeight: 1.5 }}>
-                Ambos ejes en escala logarítmica: el espaciamiento y la resistividad varían en varios órdenes de magnitud,
-                y esta escala linealiza el comportamiento típico de la curva, facilitando comparar la forma entre métodos.
-                Si el terreno es consistente, ambas curvas deben tener una forma similar (mismo número de quiebres/capas).
-              </div>
-              <SoundingComparisonChart
-                series={[
-                  {
-                    label: 'Schlumberger (AB/2 = L/2) ★',
-                    color: 'var(--chart-1)',
-                    points: schlumResult.points.map(p => ({ x: p.L / 2, y: p.rhoA })),
-                  },
-                  {
-                    label: 'Wenner (a)',
-                    color: 'var(--chart-2)',
-                    dashed: true,
-                    points: wennerResult.points.map(p => ({ x: p.a, y: p.rhoA })),
-                  },
-                ]}
-              />
-            </div>
+            )}
 
             <details style={{ marginBottom: 16 }}>
               <summary style={{ cursor: 'pointer', fontSize: 10, color: 'var(--faint)', marginBottom: 8 }}>
-                Ver curvas individuales con ajuste de 2 capas (ρ1/ρ2/h)
+                Ver curva(s) individuales con ajuste de 2 capas (ρ1/ρ2/h)
               </summary>
-              <div style={{ ...panelStyle, marginTop: 8 }}>
-                <div style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 8 }}>Schlumberger — ρa vs. semidistancia L (m) — método principal</div>
-                <ChartRho
-                  points={schlumResult.points.map(p => ({ a: p.L, rhoA: p.rhoA }))}
-                  rho1={schlumResult.twoLayer.rho1}
-                  rho2={schlumResult.twoLayer.rho2}
-                  h={schlumResult.twoLayer.h}
-                  xLabel="L (m)"
-                />
-              </div>
-              <div style={panelStyle}>
-                <div style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 8 }}>Wenner — ρa vs. espaciamiento a (m) — validación</div>
-                <ChartRho
-                  points={wennerResult.points.map(p => ({ a: p.a, rhoA: p.rhoA }))}
-                  rho1={wennerResult.twoLayer.rho1}
-                  rho2={wennerResult.twoLayer.rho2}
-                  h={wennerResult.twoLayer.h}
-                  xLabel="a (m)"
-                />
-              </div>
+              {schlumResult && (
+                <div style={{ ...panelStyle, marginTop: 8 }}>
+                  <div style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 8 }}>Schlumberger — ρa vs. semidistancia L (m){wennerResult ? ' — método principal' : ''}</div>
+                  <ChartRho
+                    points={schlumResult.points.map(p => ({ a: p.L, rhoA: p.rhoA }))}
+                    rho1={schlumResult.twoLayer.rho1}
+                    rho2={schlumResult.twoLayer.rho2}
+                    h={schlumResult.twoLayer.h}
+                    xLabel="L (m)"
+                  />
+                </div>
+              )}
+              {wennerResult && (
+                <div style={panelStyle}>
+                  <div style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 8 }}>Wenner — ρa vs. espaciamiento a (m){schlumResult ? ' — validación' : ''}</div>
+                  <ChartRho
+                    points={wennerResult.points.map(p => ({ a: p.a, rhoA: p.rhoA }))}
+                    rho1={wennerResult.twoLayer.rho1}
+                    rho2={wennerResult.twoLayer.rho2}
+                    h={wennerResult.twoLayer.h}
+                    xLabel="a (m)"
+                  />
+                </div>
+              )}
             </details>
 
             <SectionLabel purple>Sistema Experto</SectionLabel>
-            <ExpertItem type="info">
-              El modelo de suelo activo (ρ1={schlumResult.twoLayer.rho1.toFixed(0)} Ω·m, ρ2={schlumResult.twoLayer.rho2.toFixed(0)} Ω·m, h≈{schlumResult.twoLayer.h}m)
-              queda disponible automáticamente en Resistencia de malla, Picas, Horizontal, Radial, Anillo, Malla+Picas y Gel Químico.
-            </ExpertItem>
+            {(() => {
+              const primary = schlumResult ?? wennerResult!;
+              return (
+                <ExpertItem type="info">
+                  El modelo de suelo activo (ρ1={primary.twoLayer.rho1.toFixed(0)} Ω·m, ρ2={primary.twoLayer.rho2.toFixed(0)} Ω·m, h≈{primary.twoLayer.h}m)
+                  queda disponible automáticamente en Resistencia de malla, Picas, Horizontal, Radial, Anillo, Malla+Picas y Gel Químico.
+                </ExpertItem>
+              );
+            })()}
             {model?.validatedBy && (
               <ExpertItem type={model.validatedBy.deltaPct > 15 ? 'warn' : 'ok'}>
                 Diferencia Schlumberger vs Wenner: {model.validatedBy.deltaPct.toFixed(1)}%.
@@ -355,24 +402,38 @@ export function FieldMeasurementsClient() {
                   : ' Concordancia adecuada entre ambos métodos de medición.'}
               </ExpertItem>
             )}
+            {schlumResult && !wennerResult && (
+              <ExpertItem type="warn">
+                Solo se usó Schlumberger — sin validación cruzada de Wenner. Considera activar Wenner si quieres confirmar el modelo con un segundo método independiente.
+              </ExpertItem>
+            )}
+            {wennerResult && !schlumResult && (
+              <ExpertItem type="warn">
+                Solo se usó Wenner — sin validación cruzada de Schlumberger. Considera activar Schlumberger, especialmente en terrenos estratificados, para mayor resolución por capa.
+              </ExpertItem>
+            )}
 
             <div style={panelStyle}>
               <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 10 }}>Resumen de lecturas</div>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead><tr><Th>Método</Th><Th>Lecturas</Th><Th>ρ promedio</Th><Th>ρ1 / ρ2</Th></tr></thead>
                 <tbody>
-                  <tr>
-                    <td style={{ padding: '5px 8px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--dim)' }}>Schlumberger ★</td>
-                    <TdMono>{schlumResult.points.length}</TdMono>
-                    <TdMono highlight>{schlumResult.rhoAvg.toFixed(0)} Ω·m</TdMono>
-                    <TdMono>{schlumResult.twoLayer.rho1.toFixed(0)} / {schlumResult.twoLayer.rho2.toFixed(0)}</TdMono>
-                  </tr>
-                  <tr>
-                    <td style={{ padding: '5px 8px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--dim)' }}>Wenner (validación)</td>
-                    <TdMono>{wennerResult.points.length}</TdMono>
-                    <TdMono>{wennerResult.rhoAvg.toFixed(0)} Ω·m</TdMono>
-                    <TdMono>{wennerResult.twoLayer.rho1.toFixed(0)} / {wennerResult.twoLayer.rho2.toFixed(0)}</TdMono>
-                  </tr>
+                  {schlumResult && (
+                    <tr>
+                      <td style={{ padding: '5px 8px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--dim)' }}>Schlumberger{wennerResult ? ' ★' : ''}</td>
+                      <TdMono>{schlumResult.points.length}</TdMono>
+                      <TdMono highlight>{schlumResult.rhoAvg.toFixed(0)} Ω·m</TdMono>
+                      <TdMono>{schlumResult.twoLayer.rho1.toFixed(0)} / {schlumResult.twoLayer.rho2.toFixed(0)}</TdMono>
+                    </tr>
+                  )}
+                  {wennerResult && (
+                    <tr>
+                      <td style={{ padding: '5px 8px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--dim)' }}>Wenner{schlumResult ? ' (validación)' : ''}</td>
+                      <TdMono>{wennerResult.points.length}</TdMono>
+                      <TdMono highlight={!schlumResult}>{wennerResult.rhoAvg.toFixed(0)} Ω·m</TdMono>
+                      <TdMono>{wennerResult.twoLayer.rho1.toFixed(0)} / {wennerResult.twoLayer.rho2.toFixed(0)}</TdMono>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
