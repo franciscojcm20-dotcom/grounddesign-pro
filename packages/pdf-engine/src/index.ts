@@ -58,7 +58,7 @@ const C = {
 
 function hex(h: string): [number, number, number] {
   const n = parseInt(h.slice(1), 16);
-  return [(n >> 16) / 255, ((n >> 8) & 0xff) / 255, (n & 0xff) / 255];
+  return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
 }
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
