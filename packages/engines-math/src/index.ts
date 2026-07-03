@@ -580,8 +580,12 @@ export interface MultipleRodsResult {
  */
 export function computeMultipleRods(p: MultipleRodsInput): MultipleRodsResult {
   const R1 = rodResistanceDwight(p.rho, p.L, p.radius);
-  // Resistencia mutua entre dos picas: Rm = (ρ/2πL)·[ln(2L/s) - 1]
-  const Rm = (p.rho / (2 * Math.PI * p.L)) * (Math.log(2 * p.L / p.spacing) - 1);
+  // Resistencia mutua entre dos picas (Sunde 1949, forma exacta):
+  // Rm = (ρ/2πL)·[ln((L+√(L²+s²))/s) + (√(L²+s²)-s)/L]
+  // La aproximación ln(2L/s)-1 diverge a valores negativos para s > ~0.74L
+  // (fuera de su rango de validez); esta forma es monótona y siempre ≥ 0.
+  const hyp = Math.sqrt(p.L * p.L + p.spacing * p.spacing);
+  const Rm = (p.rho / (2 * Math.PI * p.L)) * (Math.log((p.L + hyp) / p.spacing) + (hyp - p.spacing) / p.L);
   // Para n picas en fila: R_n = (R1 + (n-1)·Rm) / n²  (Sunde)
   const Rn = p.n === 1 ? R1 : (R1 + (p.n - 1) * Rm) / p.n;
   const gpr = Rn * p.iFalla;

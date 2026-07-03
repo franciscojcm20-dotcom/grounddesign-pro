@@ -25,6 +25,7 @@ import {
   onderdonkArea,
   computeConductor,
   CONDUCTOR_TABLE,
+  computeMultipleRods,
 } from '../src/index.ts';
 
 // ─── Tolerancia para comparaciones de punto flotante ─────────────────────────
@@ -198,6 +199,38 @@ const MALLA = {
   nVarillas: 12, longVarilla: 3,
   rho: 110, iFalla: 8500, tFalla: 0.5,
 };
+
+describe('Electrodos múltiples en paralelo — Sunde (resistencia mutua)', () => {
+  const base = { rho: 150, L: 3, radius: 0.00465, n: 12, iFalla: 8500 };
+
+  it('Rm es siempre no-negativa, incluso con s >= 2L (rango antes roto)', () => {
+    for (const spacing of [1, 2, 3, 4.5, 6, 9, 12]) {
+      const { Rm } = computeMultipleRods({ ...base, spacing });
+      assert.ok(Rm >= 0, `Rm=${Rm} negativa con spacing=${spacing}`);
+    }
+  });
+
+  it('Rn (n picas) es siempre no-negativa y no supera R1 de una sola pica', () => {
+    for (const spacing of [1, 2, 3, 4.5, 6, 9, 12]) {
+      const { Rn, R1 } = computeMultipleRods({ ...base, spacing });
+      assert.ok(Rn >= 0, `Rn=${Rn} negativa con spacing=${spacing}`);
+      assert.ok(Rn <= R1, `Rn=${Rn} > R1=${R1} con spacing=${spacing}`);
+    }
+  });
+
+  it('Rm decrece monótonamente a medida que aumenta la separación', () => {
+    const spacings = [1, 2, 3, 4.5, 6, 9, 12];
+    const Rms = spacings.map(spacing => computeMultipleRods({ ...base, spacing }).Rm);
+    for (let i = 1; i < Rms.length; i++) {
+      assert.ok(Rms[i] < Rms[i - 1], `Rm no decrece de s=${spacings[i - 1]} a s=${spacings[i]}`);
+    }
+  });
+
+  it('n=1 devuelve Rn = R1 (sin acoplamiento mutuo)', () => {
+    const { Rn, R1 } = computeMultipleRods({ ...base, n: 1, spacing: 6 });
+    assert.strictEqual(Rn, R1);
+  });
+});
 
 describe('Resistencia de malla — Sverak (geometría de muestra 40×30 m)', () => {
   it('longitud total de conductor calculada correctamente', () => {
