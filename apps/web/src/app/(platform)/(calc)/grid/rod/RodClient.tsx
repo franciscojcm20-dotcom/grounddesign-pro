@@ -1,10 +1,15 @@
 'use client';
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { api, type RodResult, type RodOptimizeResult } from '@/lib/api';
 import {
   Field, SectionLabel, StatCard, CompBanner, ExpertItem, FundBtn,
   calcLayout, inputStyle, panelStyle, Th, TdMono,
 } from '@/components/ui/CalcShared';
+
+const Scene3D = dynamic(() => import('@/components/ui/Scene3D').then(m => m.Scene3D), { ssr: false });
+const Scene3DHint = dynamic(() => import('@/components/ui/Scene3D').then(m => m.Scene3DHint), { ssr: false });
+const Rod3D = dynamic(() => import('@/components/ui/Topology3D').then(m => m.Rod3D), { ssr: false });
 import { ExportBar } from '@/components/ui/ExportBar';
 import { SoilRhoField } from '@/components/ui/SoilRhoField';
 import { GelPanel } from '@/components/ui/GelPanel';
@@ -58,6 +63,7 @@ export function RodClient() {
   const [optimizing, setOptimizing] = useState(false);
   const [optimizeResult, setOptimizeResult] = useState<RodOptimizeResult | null>(null);
   const [showFund, setShowFund] = useState(false);
+  const [view3d, setView3d] = useState(false);
 
   const set = (k: keyof typeof DEFAULTS) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [k]: parseFloat(e.target.value) || 0 }));
@@ -171,7 +177,26 @@ export function RodClient() {
       {/* ── RIGHT: results ── */}
       <main style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         <div style={panelStyle}>
-          <RodDiagram n={form.n} L={form.L} />
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+            {([['2D', false], ['3D', true]] as const).map(([label, is3d]) => (
+              <button key={label} onClick={() => setView3d(is3d)} style={{
+                flex: 1, padding: '5px 4px', borderRadius: 3, cursor: 'pointer', fontSize: 9.5, fontWeight: 700,
+                background: view3d === is3d ? 'var(--copper-soft)' : 'var(--bg)',
+                border: `1px solid ${view3d === is3d ? 'var(--copper)' : 'var(--line)'}`,
+                color: view3d === is3d ? 'var(--copper)' : 'var(--dim)',
+              }}>{label}</button>
+            ))}
+          </div>
+          {view3d ? (
+            <>
+              <Scene3D size={Math.max(form.n * form.spacing, form.L * 3)}>
+                <Rod3D n={form.n} L={form.L} spacing={form.spacing} />
+              </Scene3D>
+              <Scene3DHint />
+            </>
+          ) : (
+            <RodDiagram n={form.n} L={form.L} />
+          )}
         </div>
 
         {result && (

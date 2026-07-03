@@ -1,5 +1,6 @@
 'use client';
 import { useState, type ReactElement } from 'react';
+import dynamic from 'next/dynamic';
 import { api, type GridResult, type MallaOptimizeResult } from '@/lib/api';
 import {
   Field, SectionLabel, StatCard, CompBanner, ExpertItem,
@@ -13,6 +14,10 @@ import { DiagnosisPanel, type ComplianceCheck } from '@/components/ui/DiagnosisP
 import { FaultCurrentField } from '@/components/ui/FaultCurrentField';
 import { useFaultAnalysis } from '@/context/FaultAnalysisContext';
 import type { GelParams } from '@/lib/api';
+
+const Scene3D = dynamic(() => import('@/components/ui/Scene3D').then(m => m.Scene3D), { ssr: false });
+const Scene3DHint = dynamic(() => import('@/components/ui/Scene3D').then(m => m.Scene3DHint), { ssr: false });
+const Grid3D = dynamic(() => import('@/components/ui/Topology3D').then(m => m.Grid3D), { ssr: false });
 
 const DEFAULTS = {
   largo: 40, ancho: 30, profundidad: 0.6,
@@ -101,6 +106,7 @@ export function GridClient() {
   const [error, setError]   = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showFund, setShowFund] = useState(false);
+  const [view3d, setView3d] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
   const [optimizeResult, setOptimizeResult] = useState<MallaOptimizeResult | null>(null);
 
@@ -172,11 +178,34 @@ export function GridClient() {
 
         {/* Live grid diagram */}
         <div style={{ ...panelStyle, marginBottom: 16, padding: '10px 8px' }}>
-          <GridDiagram
-            largo={form.largo} ancho={form.ancho}
-            nL={form.nConductoresL} nW={form.nConductoresW}
-            nVarillas={form.nVarillas}
-          />
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+            {([['2D', false], ['3D', true]] as const).map(([label, is3d]) => (
+              <button key={label} onClick={() => setView3d(is3d)} style={{
+                flex: 1, padding: '5px 4px', borderRadius: 3, cursor: 'pointer', fontSize: 9.5, fontWeight: 700,
+                background: view3d === is3d ? 'var(--copper-soft)' : 'var(--bg)',
+                border: `1px solid ${view3d === is3d ? 'var(--copper)' : 'var(--line)'}`,
+                color: view3d === is3d ? 'var(--copper)' : 'var(--dim)',
+              }}>{label}</button>
+            ))}
+          </div>
+          {view3d ? (
+            <>
+              <Scene3D size={Math.max(form.largo, form.ancho) * 1.4}>
+                <Grid3D
+                  largo={form.largo} ancho={form.ancho}
+                  nL={form.nConductoresL} nW={form.nConductoresW}
+                  profundidad={form.profundidad} nVarillas={form.nVarillas} longVarilla={form.longVarilla}
+                />
+              </Scene3D>
+              <Scene3DHint />
+            </>
+          ) : (
+            <GridDiagram
+              largo={form.largo} ancho={form.ancho}
+              nL={form.nConductoresL} nW={form.nConductoresW}
+              nVarillas={form.nVarillas}
+            />
+          )}
         </div>
 
         <SectionLabel>Geometría de la malla</SectionLabel>

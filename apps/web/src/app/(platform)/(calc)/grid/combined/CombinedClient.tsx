@@ -1,10 +1,15 @@
 'use client';
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { api, type CombinedResult, type CombinedOptimizeResult } from '@/lib/api';
 import {
   Field, SectionLabel, StatCard, CompBanner, ExpertItem, FundBtn,
   calcLayout, inputStyle, panelStyle, Th, TdMono,
 } from '@/components/ui/CalcShared';
+
+const Scene3D = dynamic(() => import('@/components/ui/Scene3D').then(m => m.Scene3D), { ssr: false });
+const Scene3DHint = dynamic(() => import('@/components/ui/Scene3D').then(m => m.Scene3DHint), { ssr: false });
+const Combined3D = dynamic(() => import('@/components/ui/Topology3D').then(m => m.Combined3D), { ssr: false });
 import { ExportBar } from '@/components/ui/ExportBar';
 import { SoilRhoField } from '@/components/ui/SoilRhoField';
 import { GelPanel } from '@/components/ui/GelPanel';
@@ -68,6 +73,7 @@ export function CombinedClient() {
   const [optimizing, setOptimizing] = useState(false);
   const [optimizeResult, setOptimizeResult] = useState<CombinedOptimizeResult | null>(null);
   const [showFund, setShowFund] = useState(false);
+  const [view3d, setView3d] = useState(false);
 
   const set = (k: keyof typeof DEFAULTS) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [k]: parseFloat(e.target.value) || 0 }));
@@ -182,7 +188,29 @@ export function CombinedClient() {
 
       <main style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         <div style={panelStyle}>
-          <CombinedDiagram largo={form.largo} ancho={form.ancho} nL={form.nConductoresL} nW={form.nConductoresW} nRods={form.nRods} />
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+            {([['2D', false], ['3D', true]] as const).map(([label, is3d]) => (
+              <button key={label} onClick={() => setView3d(is3d)} style={{
+                flex: 1, padding: '5px 4px', borderRadius: 3, cursor: 'pointer', fontSize: 9.5, fontWeight: 700,
+                background: view3d === is3d ? 'var(--copper-soft)' : 'var(--bg)',
+                border: `1px solid ${view3d === is3d ? 'var(--copper)' : 'var(--line)'}`,
+                color: view3d === is3d ? 'var(--copper)' : 'var(--dim)',
+              }}>{label}</button>
+            ))}
+          </div>
+          {view3d ? (
+            <>
+              <Scene3D size={Math.max(form.largo, form.ancho) * 1.4}>
+                <Combined3D
+                  largo={form.largo} ancho={form.ancho} nL={form.nConductoresL} nW={form.nConductoresW}
+                  profundidad={form.profundidad} nRods={form.nRods} rodLength={form.rodLength}
+                />
+              </Scene3D>
+              <Scene3DHint />
+            </>
+          ) : (
+            <CombinedDiagram largo={form.largo} ancho={form.ancho} nL={form.nConductoresL} nW={form.nConductoresW} nRods={form.nRods} />
+          )}
         </div>
 
         {result && (
