@@ -92,6 +92,23 @@ function summarize(outputs: Record<string, unknown>) {
   return { pass, headlineKey, headline, gpr, rhoUsado, gelActivo: Boolean(gelInfo?.activo) };
 }
 
+/**
+ * Sugiere el mejor sistema, entre los calculados, para el resumen comparativo: prioriza los
+ * que cumplen el límite normativo y, entre ellos, el de menor resistencia de puesta a tierra
+ * (más conservador). Si ninguno cumple, sugiere igualmente el de menor resistencia — pero
+ * queda marcado como "revisar", nunca se oculta el incumplimiento. Es solo una sugerencia de
+ * partida: la decisión final la fija el profesional con el selector "Elegir".
+ */
+function suggestBestId(results: CalcResult[]): string | null {
+  const candidates = results
+    .map(r => ({ id: r.id, s: summarize(r.outputs) }))
+    .filter((x): x is { id: string; s: ReturnType<typeof summarize> & { headline: number } } => x.s.headline !== null);
+  if (!candidates.length) return null;
+  const compliant = candidates.filter(x => x.s.pass === true);
+  const pool = compliant.length > 0 ? compliant : candidates;
+  return pool.reduce((best, cur) => (cur.s.headline < best.s.headline ? cur : best)).id;
+}
+
 function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.floor(diff / 60000);
@@ -166,6 +183,7 @@ export function ReportClient() {
   const dxfResults = results.filter(r => GEOMETRY_MODULES.has(r.module));
   const chosenValid = Boolean(chosenId) && geometryResults.some(r => r.id === chosenId);
   const needsChoice = geometryResults.length > 1 && !chosenValid;
+  const suggestedId = geometryResults.length > 1 ? suggestBestId(geometryResults) : null;
 
   function chooseDesign(id: string) {
     if (!project) return;
@@ -673,65 +691,116 @@ export function ReportClient() {
             {['Suelo', 'Malla', 'Sistema', 'Otros'].filter(g => grouped[g]?.length).map(group => (
               <div key={group} style={{ marginBottom: 20 }}>
                 <SectionLabel>{group}</SectionLabel>
-                {group === 'Malla' && geometryResults.length > 1 && (
-                  <div style={{ fontSize: 9.5, color: 'var(--faint)', marginBottom: 8, lineHeight: 1.5 }}>
-                    Hay varios sistemas calculados para comparar — fija cuál es el elegido para el informe oficial del proyecto.
-                  </div>
-                )}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {grouped[group]!.map(r => {
-                    const meta = MODULE_META[r.module];
-                    const s = summarize(r.outputs);
-                    const isGeometry = GEOMETRY_MODULES.has(r.module);
-                    const isChosen = isGeometry && chosenValid && r.id === chosenId;
-                    return (
-                      <div key={r.id} style={{
-                        ...panelStyle, marginBottom: 0, display: 'flex', alignItems: 'center', gap: 12,
-                        border: isChosen ? '1px solid var(--copper)' : panelStyle.border,
-                      }}>
-                        {isGeometry && geometryResults.length > 1 && (
-                          <label
-                            title="Fijar como sistema elegido del proyecto"
-                            style={{
-                              display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, cursor: 'pointer',
-                              fontSize: 9, fontWeight: 700, color: isChosen ? 'var(--copper)' : 'var(--faint)',
-                            }}
-                          >
-                            <input type="radio" name="chosenDesign" checked={isChosen} onChange={() => chooseDesign(r.id)} />
-                            {isChosen ? '★ Elegido' : 'Elegir'}
-                          </label>
-                        )}
-                        <div style={{ fontSize: 18, flexShrink: 0 }}>{meta?.icon ?? '📄'}</div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 11.5, fontWeight: 700 }}>{meta?.label ?? r.module}</div>
-                          <div style={{ fontSize: 9, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>
-                            {r.norm ?? 'IEEE'} · {timeAgo(r.created_at)}
-                            {s.rhoUsado !== null && ` · ρ=${s.rhoUsado.toFixed(0)} Ω·m${s.gelActivo ? ' (gel)' : ''}`}
+                {group === 'Malla' && geometryResults.length > 1 ? (
+                  <>
+                    <div style={{ fontSize: 9.5, color: 'var(--faint)', marginBottom: 8, lineHeight: 1.5 }}>
+                      Comparación de los {geometryResults.length} sistemas calculados para este proyecto
+                      {suggestedId && <> — <strong style={{ color: 'var(--safe)' }}>★ sugerido</strong> el de menor resistencia entre los que cumplen la norma</>}.
+                      Fija con &quot;Elegir&quot; cuál es el oficial para el informe.
+                    </div>
+                    <div style={panelStyle}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr>
+                            <Th></Th>
+                            <Th>Sistema</Th>
+                            <Th>R (Ω)</Th>
+                            <Th>GPR (kV)</Th>
+                            <Th>ρ (Ω·m)</Th>
+                            <Th>Conductor</Th>
+                            <Th>Varillas</Th>
+                            <Th>Cumple</Th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {grouped[group]!.map(r => {
+                            const meta = MODULE_META[r.module];
+                            const s = summarize(r.outputs);
+                            const isChosen = chosenValid && r.id === chosenId;
+                            const isSuggested = r.id === suggestedId;
+                            const cub = deriveCubicacion(r.module, r.inputs, r.outputs);
+                            return (
+                              <tr key={r.id} style={{ background: isChosen ? 'var(--copper-soft)' : undefined }}>
+                                <td style={{ padding: '6px 8px', borderBottom: '1px solid var(--line)' }}>
+                                  <label
+                                    title="Fijar como sistema elegido del proyecto"
+                                    style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+                                  >
+                                    <input type="radio" name="chosenDesign" checked={isChosen} onChange={() => chooseDesign(r.id)} />
+                                  </label>
+                                </td>
+                                <td style={{ padding: '6px 8px', borderBottom: '1px solid var(--line)', fontSize: 10.5, whiteSpace: 'nowrap' }}>
+                                  {meta?.icon} {meta?.label ?? r.module}
+                                  {isChosen && <span style={{ marginLeft: 6, fontSize: 8, color: 'var(--copper)', fontWeight: 700 }}>★ ELEGIDO</span>}
+                                  {!isChosen && isSuggested && <span style={{ marginLeft: 6, fontSize: 8, color: 'var(--safe)', fontWeight: 700 }}>★ SUGERIDO</span>}
+                                </td>
+                                <TdMono highlight={isSuggested}>{s.headline !== null ? s.headline.toFixed(3) : '—'}</TdMono>
+                                <TdMono>{s.gpr !== null ? (s.gpr / 1000).toFixed(2) : '—'}</TdMono>
+                                <TdMono>{s.rhoUsado !== null ? s.rhoUsado.toFixed(0) : '—'}</TdMono>
+                                <TdMono>{cub.conductorMetros ? `${cub.conductorMetros} m` : '—'}</TdMono>
+                                <TdMono>{cub.varillasCantidad || '—'}</TdMono>
+                                <td style={{ padding: '6px 8px', borderBottom: '1px solid var(--line)' }}>
+                                  {s.pass !== null && (
+                                    <span style={{
+                                      fontSize: 9, fontWeight: 700, padding: '3px 8px', borderRadius: 10,
+                                      background: s.pass ? 'var(--safe-soft)' : 'var(--danger-soft)',
+                                      color: s.pass ? 'var(--safe)' : 'var(--danger)',
+                                    }}>
+                                      {s.pass ? '✓ CUMPLE' : '✗ REVISAR'}
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {grouped[group]!.map(r => {
+                      const meta = MODULE_META[r.module];
+                      const s = summarize(r.outputs);
+                      const isGeometry = GEOMETRY_MODULES.has(r.module);
+                      const isChosen = isGeometry && chosenValid && r.id === chosenId;
+                      return (
+                        <div key={r.id} style={{
+                          ...panelStyle, marginBottom: 0, display: 'flex', alignItems: 'center', gap: 12,
+                          border: isChosen ? '1px solid var(--copper)' : panelStyle.border,
+                        }}>
+                          <div style={{ fontSize: 18, flexShrink: 0 }}>{meta?.icon ?? '📄'}</div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 11.5, fontWeight: 700 }}>{meta?.label ?? r.module}</div>
+                            <div style={{ fontSize: 9, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>
+                              {r.norm ?? 'IEEE'} · {timeAgo(r.created_at)}
+                              {s.rhoUsado !== null && ` · ρ=${s.rhoUsado.toFixed(0)} Ω·m${s.gelActivo ? ' (gel)' : ''}`}
+                            </div>
                           </div>
-                        </div>
-                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          {s.headline !== null && (
-                            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--copper)', fontFamily: 'var(--font-mono)' }}>
-                              {s.headlineKey === 'areaMm2' ? `${s.headline.toFixed(1)} mm²` : `${s.headline.toFixed(3)} Ω`}
+                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                            {s.headline !== null && (
+                              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--copper)', fontFamily: 'var(--font-mono)' }}>
+                                {s.headlineKey === 'areaMm2' ? `${s.headline.toFixed(1)} mm²` : `${s.headline.toFixed(3)} Ω`}
+                              </div>
+                            )}
+                            {s.gpr !== null && (
+                              <div style={{ fontSize: 9, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>GPR {(s.gpr / 1000).toFixed(2)} kV</div>
+                            )}
+                          </div>
+                          {s.pass !== null && (
+                            <div style={{
+                              fontSize: 9, fontWeight: 700, padding: '3px 8px', borderRadius: 10, flexShrink: 0,
+                              background: s.pass ? 'var(--safe-soft)' : 'var(--danger-soft)',
+                              color: s.pass ? 'var(--safe)' : 'var(--danger)',
+                            }}>
+                              {s.pass ? '✓ CUMPLE' : '✗ REVISAR'}
                             </div>
                           )}
-                          {s.gpr !== null && (
-                            <div style={{ fontSize: 9, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>GPR {(s.gpr / 1000).toFixed(2)} kV</div>
-                          )}
                         </div>
-                        {s.pass !== null && (
-                          <div style={{
-                            fontSize: 9, fontWeight: 700, padding: '3px 8px', borderRadius: 10, flexShrink: 0,
-                            background: s.pass ? 'var(--safe-soft)' : 'var(--danger-soft)',
-                            color: s.pass ? 'var(--safe)' : 'var(--danger)',
-                          }}>
-                            {s.pass ? '✓ CUMPLE' : '✗ REVISAR'}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             ))}
           </>
