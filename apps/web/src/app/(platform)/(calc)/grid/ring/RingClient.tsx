@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { api, type RingResult, type RingOptimizeResult } from '@/lib/api';
 import {
-  Field, SectionLabel, StatCard, CompBanner,
+  Field, SectionLabel, StatCard, CompBanner, ExpertItem, FundBtn,
   calcLayout, inputStyle, panelStyle, Th, TdMono,
 } from '@/components/ui/CalcShared';
 import { ExportBar } from '@/components/ui/ExportBar';
@@ -48,6 +48,7 @@ export function RingClient() {
   const [error, setError] = useState('');
   const [optimizing, setOptimizing] = useState(false);
   const [optimizeResult, setOptimizeResult] = useState<RingOptimizeResult | null>(null);
+  const [showFund, setShowFund] = useState(false);
 
   const set = (k: keyof typeof DEFAULTS) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [k]: parseFloat(e.target.value) || 0 }));
@@ -194,6 +195,11 @@ export function RingClient() {
               </div>
             )}
 
+            <ExpertItem type="info">
+              GPR = Rring × Ifalla = {result.Rring.toFixed(3)} × {form.iFalla} A = {result.gpr.toFixed(0)} V ({(result.gpr / 1000).toFixed(2)} kV).
+              Este valor alimenta el cálculo de tensiones de paso y contacto.
+            </ExpertItem>
+
             <DiagnosisPanel
               checks={complianceChecks}
               diagnosis={diagnosis}
@@ -205,6 +211,17 @@ export function RingClient() {
               targetLabel={result.compliance.rg1 ? 'Rring ≤ 1 Ω' : 'Rring ≤ 5 Ω'}
               methodNote="El motor prueba, en orden de menor costo, ampliar el perímetro del anillo, luego la profundidad, luego la sección del conductor — reteniendo solo cambios que reducen Rring. Al aplicar la sugerencia, largo y ancho se escalan proporcionalmente para alcanzar el nuevo perímetro."
             />
+
+            <FundBtn show={showFund} onToggle={() => setShowFund(f => !f)} label="Sunde — Anillo perimetral (conductor circular equivalente)">
+              <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--copper)', marginBottom: 10, fontSize: 11 }}>
+                r = P/2π &nbsp;·&nbsp; Rring = (ρ/2π²r) · [ln(8r/a) + ln(2r/h) − 2]
+              </div>
+              <p><strong style={{ color: 'var(--text)' }}>Variables:</strong> P = perímetro del anillo (m), r = radio de un círculo equivalente de igual perímetro (m),
+              ρ = resistividad del suelo (Ω·m), a = radio del conductor (m), h = profundidad de enterramiento (m).</p>
+              <p style={{ marginTop: 8 }}><strong style={{ color: 'var(--text)' }}>Interpretación:</strong> el anillo (perimetral, sin conductores internos) se modela como un lazo circular de radio equivalente r — geometría clásica de Sunde para toroides conductores enterrados. Es apropiado para proteger el perímetro de una instalación (cercos, patios de subestación) sin necesidad de una malla interior completa, cuando el área encerrada no requiere puntos de conexión intermedios.</p>
+              <p style={{ marginTop: 8 }}><strong style={{ color: 'var(--text)' }}>Límites típicos:</strong> Rring ≤ 1 Ω para instalaciones críticas, ≤ 5 Ω para uso general (IEEE 80). La verificación definitiva es el cumplimiento de tensiones de paso y contacto.</p>
+              <p style={{ marginTop: 12, fontSize: 9, color: 'var(--faint)' }}>Sunde, E.D. (1949) — Earth Conduction Effects in Transmission Systems · IEEE Std 80-2013 §14.3</p>
+            </FundBtn>
           </>
         )}
       </main>

@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { api, type StripResult, type StripOptimizeResult } from '@/lib/api';
 import {
-  Field, SectionLabel, StatCard, CompBanner,
+  Field, SectionLabel, StatCard, CompBanner, ExpertItem, FundBtn,
   calcLayout, inputStyle, panelStyle, Th, TdMono,
 } from '@/components/ui/CalcShared';
 import { ExportBar } from '@/components/ui/ExportBar';
@@ -46,6 +46,7 @@ export function StripClient() {
   const [error, setError] = useState('');
   const [optimizing, setOptimizing] = useState(false);
   const [optimizeResult, setOptimizeResult] = useState<StripOptimizeResult | null>(null);
+  const [showFund, setShowFund] = useState(false);
 
   const set = (k: keyof typeof DEFAULTS) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [k]: parseFloat(e.target.value) || 0 }));
@@ -171,6 +172,11 @@ export function StripClient() {
               </div>
             )}
 
+            <ExpertItem type="info">
+              GPR = Rh × Ifalla = {result.Rh.toFixed(3)} × {form.iFalla} A = {result.gpr.toFixed(0)} V ({(result.gpr / 1000).toFixed(2)} kV).
+              Este valor alimenta el cálculo de tensiones de paso y contacto.
+            </ExpertItem>
+
             <DiagnosisPanel
               checks={complianceChecks}
               diagnosis={diagnosis}
@@ -182,6 +188,17 @@ export function StripClient() {
               targetLabel={result.compliance.rg1 ? 'Rh ≤ 1 Ω' : 'Rh ≤ 5 Ω'}
               methodNote="El motor prueba, en orden de menor costo, ampliar la longitud del conductor, luego la profundidad de enterramiento, luego la sección — reteniendo solo cambios que reducen Rh."
             />
+
+            <FundBtn show={showFund} onToggle={() => setShowFund(f => !f)} label="Dwight — Conductor horizontal enterrado">
+              <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--copper)', marginBottom: 10, fontSize: 11 }}>
+                Rh = (ρ/πL) · [ln(2L²/(a·h)) − 1]
+              </div>
+              <p><strong style={{ color: 'var(--text)' }}>Variables:</strong> ρ = resistividad del suelo (Ω·m), L = longitud total del conductor (m),
+              a = radio del conductor (m), h = profundidad de enterramiento (m).</p>
+              <p style={{ marginTop: 8 }}><strong style={{ color: 'var(--text)' }}>Interpretación:</strong> a diferencia de la malla (Sverak), que se beneficia del área que encierra, un conductor horizontal recto solo dispersa corriente a lo largo de su longitud — por eso Rh depende casi enteramente de L, y necesita tramos mucho más largos que una malla equivalente para alcanzar la misma resistencia. Es el método adecuado para alimentadores, líneas de contrapeso o cuando el terreno disponible no permite una huella de malla.</p>
+              <p style={{ marginTop: 8 }}><strong style={{ color: 'var(--text)' }}>Límites típicos:</strong> Rh ≤ 1 Ω para instalaciones críticas, ≤ 5 Ω para uso general (IEEE 80). La verificación definitiva es el cumplimiento de tensiones de paso y contacto.</p>
+              <p style={{ marginTop: 12, fontSize: 9, color: 'var(--faint)' }}>Dwight, H.B. (1936) — Calculation of Resistances to Ground · IEEE Std 80-2013 Annex B.3</p>
+            </FundBtn>
           </>
         )}
       </main>

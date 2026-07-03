@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { api, type RadialResult, type RadialOptimizeResult } from '@/lib/api';
 import {
-  Field, SectionLabel, StatCard, CompBanner,
+  Field, SectionLabel, StatCard, CompBanner, ExpertItem, FundBtn,
   calcLayout, inputStyle, panelStyle, Th, TdMono,
 } from '@/components/ui/CalcShared';
 import { ExportBar } from '@/components/ui/ExportBar';
@@ -51,6 +51,7 @@ export function RadialClient() {
   const [error, setError] = useState('');
   const [optimizing, setOptimizing] = useState(false);
   const [optimizeResult, setOptimizeResult] = useState<RadialOptimizeResult | null>(null);
+  const [showFund, setShowFund] = useState(false);
 
   const set = (k: keyof typeof DEFAULTS) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [k]: parseFloat(e.target.value) || 0 }));
@@ -202,6 +203,11 @@ export function RadialClient() {
               </div>
             )}
 
+            <ExpertItem type="info">
+              GPR = R★ × Ifalla = {result.Rstar.toFixed(3)} × {form.iFalla} A = {result.gpr.toFixed(0)} V ({(result.gpr / 1000).toFixed(2)} kV).
+              Este valor alimenta el cálculo de tensiones de paso y contacto.
+            </ExpertItem>
+
             <DiagnosisPanel
               checks={complianceChecks}
               diagnosis={diagnosis}
@@ -213,6 +219,17 @@ export function RadialClient() {
               targetLabel={result.compliance.rg1 ? 'R★ ≤ 1 Ω' : 'R★ ≤ 5 Ω'}
               methodNote="El motor prueba, en orden de menor costo, agregar radiales, luego alargarlos, luego aumentar la profundidad — reteniendo solo cambios que reducen R★."
             />
+
+            <FundBtn show={showFund} onToggle={() => setShowFund(f => !f)} label="Laurent-Niemann — Sistema radial / estrella">
+              <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--copper)', marginBottom: 10, fontSize: 11 }}>
+                R₁ = (ρ/πL)·[ln(2L²/(a·h)) − 1] &nbsp;·&nbsp; R★ = (ρ/πnL)·[ln(2L²/(a·h)) − 1 + (n−1)·h/L]
+              </div>
+              <p><strong style={{ color: 'var(--text)' }}>Variables:</strong> ρ = resistividad del suelo (Ω·m), L = longitud de cada radial (m),
+              a = radio del conductor (m), h = profundidad de enterramiento (m), n = número de radiales con igual separación angular.</p>
+              <p style={{ marginTop: 8 }}><strong style={{ color: 'var(--text)' }}>Interpretación:</strong> cada radial se comporta como un conductor horizontal individual (mismo término que Dwight), pero al converger todos en el punto central compiten por el mismo volumen de suelo — el término (n−1)·h/L de Niemann penaliza ese acoplamiento mutuo. Es el método natural cuando la geometría del sitio favorece una configuración en estrella (torres, postes, estructuras puntuales) antes que una malla rectangular.</p>
+              <p style={{ marginTop: 8 }}><strong style={{ color: 'var(--text)' }}>Límites típicos:</strong> R★ ≤ 1 Ω para instalaciones críticas, ≤ 5 Ω para uso general (IEEE 80). La verificación definitiva es el cumplimiento de tensiones de paso y contacto.</p>
+              <p style={{ marginTop: 12, fontSize: 9, color: 'var(--faint)' }}>Laurent, P. — Niemann, H. (1952) · IEEE Std 80-2013 Annex B</p>
+            </FundBtn>
           </>
         )}
       </main>

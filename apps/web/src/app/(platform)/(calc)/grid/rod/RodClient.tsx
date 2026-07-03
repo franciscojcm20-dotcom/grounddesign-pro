@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { api, type RodResult, type RodOptimizeResult } from '@/lib/api';
 import {
-  Field, SectionLabel, StatCard, CompBanner,
+  Field, SectionLabel, StatCard, CompBanner, ExpertItem, FundBtn,
   calcLayout, inputStyle, panelStyle, Th, TdMono,
 } from '@/components/ui/CalcShared';
 import { ExportBar } from '@/components/ui/ExportBar';
@@ -57,6 +57,7 @@ export function RodClient() {
   const [error, setError] = useState('');
   const [optimizing, setOptimizing] = useState(false);
   const [optimizeResult, setOptimizeResult] = useState<RodOptimizeResult | null>(null);
+  const [showFund, setShowFund] = useState(false);
 
   const set = (k: keyof typeof DEFAULTS) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [k]: parseFloat(e.target.value) || 0 }));
@@ -228,6 +229,11 @@ export function RodClient() {
               </table>
             </div>
 
+            <ExpertItem type="info">
+              GPR = Rn × Ifalla = {result.Rn.toFixed(3)} × {form.iFalla} A = {result.gpr.toFixed(0)} V ({(result.gpr / 1000).toFixed(2)} kV).
+              Este valor alimenta el cálculo de tensiones de paso y contacto.
+            </ExpertItem>
+
             <DiagnosisPanel
               checks={complianceChecks}
               diagnosis={diagnosis}
@@ -239,6 +245,17 @@ export function RodClient() {
               targetLabel={result.compliance.rg1 ? 'Rn ≤ 1 Ω' : 'Rn ≤ 5 Ω'}
               methodNote="El motor prueba, en orden de menor costo, agregar picas, luego alargarlas, luego aumentar la separación entre ellas (reduce el acoplamiento mutuo Rm) — reteniendo solo cambios que efectivamente reducen Rn."
             />
+
+            <FundBtn show={showFund} onToggle={() => setShowFund(f => !f)} label="Dwight / Sunde — Electrodos verticales en paralelo">
+              <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--copper)', marginBottom: 10, fontSize: 11 }}>
+                R₁ = (ρ/2πL)·(ln(8L/d) − 1) &nbsp;·&nbsp; Rm = (ρ/2πL)·(ln(2L/s) − 1) &nbsp;·&nbsp; Rₙ = (R₁ + (n−1)·Rm) / n
+              </div>
+              <p><strong style={{ color: 'var(--text)' }}>Variables:</strong> ρ = resistividad del suelo (Ω·m), L = longitud de la pica (m),
+              d = diámetro de la pica (m), s = separación entre picas (m), n = número de picas en paralelo.</p>
+              <p style={{ marginTop: 8 }}><strong style={{ color: 'var(--text)' }}>Interpretación:</strong> R₁ es la resistencia de una sola pica (Dwight, 1936). Rm es la resistencia mutua entre dos picas adyacentes (Sunde, 1949) — cuantifica cuánto se solapan sus zonas de disipación de corriente. Rₙ combina ambas: agregar picas reduce Rn, pero el beneficio decrece si la separación s es pequeña frente a L, porque Rm crece y limita el efecto de paralelo ideal (que sería R₁/n).</p>
+              <p style={{ marginTop: 8 }}><strong style={{ color: 'var(--text)' }}>Límites típicos:</strong> Rn ≤ 1 Ω para instalaciones críticas, ≤ 5 Ω para uso general (IEEE 80). Al igual que en malla, la verificación definitiva es el cumplimiento de tensiones de paso y contacto.</p>
+              <p style={{ marginTop: 12, fontSize: 9, color: 'var(--faint)' }}>Dwight, H.B. (1936) — Calculation of Resistances to Ground · Sunde, E.D. (1949) — Earth Conduction Effects in Transmission Systems · IEEE Std 80-2013 Annex B.1</p>
+            </FundBtn>
           </>
         )}
       </main>
