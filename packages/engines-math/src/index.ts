@@ -266,62 +266,106 @@ function forwardCurveNLayer(spacings: number[], rhos: number[], hs: number[]): R
   return spacings.map(a => ({ a, rho: rhos.length === 1 ? rhos[0]! : wennerApparentNLayer(a, rhos, hs) }));
 }
 
+function relResiduals(theoretical: RhoPoint[], measured: RhoPoint[]): number[] {
+  return measured.map((m, i) => (theoretical[i]!.rho - m.rho) / m.rho);
+}
+
+function rmsFromResiduals(residuals: number[]): number {
+  return Math.sqrt(residuals.reduce((s, r) => s + r * r, 0) / residuals.length);
+}
+
 function rmsRelError(theoretical: RhoPoint[], measured: RhoPoint[]): number {
-  let sum = 0;
-  for (let i = 0; i < measured.length; i++) {
-    const m = measured[i]!.rho;
-    const t = theoretical[i]!.rho;
-    const rel = (t - m) / m;
-    sum += rel * rel;
+  return rmsFromResiduals(relResiduals(theoretical, measured));
+}
+
+/** Jacobiano numérico por diferencias finitas centradas (sin derivadas analíticas). */
+function numericalJacobian(params: number[], residuals: (p: number[]) => number[], base: number[]): number[][] {
+  const m = base.length, n = params.length;
+  const J: number[][] = Array.from({ length: m }, () => new Array(n).fill(0));
+  for (let j = 0; j < n; j++) {
+    const h = Math.max(Math.abs(params[j]!) * 1e-5, 1e-6);
+    const trial = [...params];
+    trial[j] = params[j]! + h;
+    const rTrial = residuals(trial);
+    for (let i = 0; i < m; i++) J[i]![j] = (rTrial[i]! - base[i]!) / h;
   }
-  return Math.sqrt(sum / measured.length);
+  return J;
+}
+
+/** Resuelve A·x = b para una matriz densa pequeña (n≤7) por eliminación gaussiana con pivoteo parcial. */
+function solveLinearSystem(A: number[][], b: number[]): number[] | null {
+  const n = b.length;
+  const M = A.map((row, i) => [...row, b[i]!]);
+  for (let col = 0; col < n; col++) {
+    let pivot = col;
+    for (let r = col + 1; r < n; r++) if (Math.abs(M[r]![col]!) > Math.abs(M[pivot]![col]!)) pivot = r;
+    if (Math.abs(M[pivot]![col]!) < 1e-14) return null;
+    [M[col], M[pivot]] = [M[pivot]!, M[col]!];
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue;
+      const factor = M[r]![col]! / M[col]![col]!;
+      for (let c = col; c <= n; c++) M[r]![c] = M[r]![c]! - factor * M[col]![c]!;
+    }
+  }
+  return M.map((row, i) => row[n]! / row[i]!);
 }
 
 /**
- * Búsqueda local tipo Hooke-Jeeves (patrón multiplicativo) en el espacio de
- * parámetros positivos (ρ's y h's). Sin dependencias externas de optimización:
- * en cada pasada prueba, para cada parámetro, un conjunto de factores de escala
- * y conserva el que más reduce el error; converge cuando ninguna pasada mejora.
+ * Levenberg-Marquardt (Gauss-Newton amortiguado — familia Newton-Raphson) para
+ * mínimos cuadrados no lineales. En cada iteración calcula el Jacobiano
+ * numérico de los residuos, resuelve (JᵀJ + λ·diag(JᵀJ))·δ = −Jᵀr y dа un paso
+ * directo hacia el mínimo; λ crece si el paso empeora (más conservador, tipo
+ * descenso de gradiente) y decrece si mejora (más agresivo, tipo Newton puro).
+ * Converge en muchas menos iteraciones y con más precisión que una búsqueda
+ * por patrones, sin depender de librerías externas de optimización.
  */
-function refineParams(seed: number[], objective: (p: number[]) => number, passes = 25): number[] {
-  let best = [...seed];
-  let bestErr = objective(best);
-  // Rondas sucesivas con factores cada vez más finos alrededor de 1 — equivalente
-  // a un patrón de búsqueda que se va acercando (Hooke-Jeeves con paso decreciente).
-  const factorSets = [
-    [0.5, 0.7, 0.85, 0.93, 1, 1.08, 1.18, 1.4, 2],
-    [0.9, 0.95, 0.98, 1, 1.02, 1.05, 1.1],
-    [0.97, 0.99, 1, 1.01, 1.03],
-    [0.995, 0.998, 1, 1.002, 1.005],
-  ];
-  for (const factors of factorSets) {
-    for (let pass = 0; pass < passes; pass++) {
-      let improved = false;
-      for (let i = 0; i < best.length; i++) {
-        let localBest = best[i]!;
-        let localBestErr = bestErr;
-        for (const f of factors) {
-          const trial = [...best];
-          trial[i] = best[i]! * f;
-          const err = objective(trial);
-          if (err < localBestErr) { localBestErr = err; localBest = trial[i]!; }
-        }
-        if (localBestErr < bestErr) { best[i] = localBest; bestErr = localBestErr; improved = true; }
+function levenbergMarquardt(seed: number[], residuals: (p: number[]) => number[], maxIter = 60): number[] {
+  const n = seed.length;
+  let params = [...seed];
+  let lambda = 1e-3;
+  let r = residuals(params);
+  let cost = r.reduce((s, v) => s + v * v, 0);
+
+  for (let iter = 0; iter < maxIter; iter++) {
+    const J = numericalJacobian(params, residuals, r);
+    const JtJ: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
+    const Jtr: number[] = new Array(n).fill(0);
+    for (let i = 0; i < r.length; i++) {
+      for (let a = 0; a < n; a++) {
+        Jtr[a] = Jtr[a]! + J[i]![a]! * r[i]!;
+        for (let b = 0; b < n; b++) JtJ[a]![b] = JtJ[a]![b]! + J[i]![a]! * J[i]![b]!;
       }
-      if (!improved) break;
     }
+    let improved = false;
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const A = JtJ.map((row, a) => row.map((v, b) => (a === b ? v * (1 + lambda) : v)));
+      const delta = solveLinearSystem(A, Jtr.map(v => -v));
+      if (!delta) { lambda *= 10; continue; }
+      // Mantiene los parámetros positivos (ρ's y h's) — un paso que los volvería
+      // negativos se recorta a un valor pequeño positivo en vez de aceptarse.
+      const trial = params.map((p, i) => Math.max(p + delta[i]!, p * 0.05));
+      const rTrial = residuals(trial);
+      const costTrial = rTrial.reduce((s, v) => s + v * v, 0);
+      if (costTrial < cost) {
+        params = trial; r = rTrial; cost = costTrial; lambda = Math.max(lambda / 10, 1e-8);
+        improved = true;
+        break;
+      }
+      lambda *= 10;
+    }
+    if (!improved) break; // convergió (ningún paso amortiguado mejora más)
   }
-  return best;
+  return params;
 }
 
-/** Refina varias semillas independientes y conserva la que converge al menor error — mitiga mínimos locales. */
-function bestOfSeeds(seeds: number[][], objective: (p: number[]) => number): number[] {
+/** Refina varias semillas independientes con Levenberg-Marquardt y conserva la que converge al menor error — mitiga mínimos locales. */
+function bestOfSeeds(seeds: number[][], residuals: (p: number[]) => number[]): number[] {
   let best = seeds[0]!;
-  let bestErr = Infinity;
+  let bestCost = Infinity;
   for (const seed of seeds) {
-    const refined = refineParams(seed, objective);
-    const err = objective(refined);
-    if (err < bestErr) { bestErr = err; best = refined; }
+    const refined = levenbergMarquardt(seed, residuals);
+    const cost = rmsFromResiduals(residuals(refined));
+    if (cost < bestCost) { bestCost = cost; best = refined; }
   }
   return best;
 }
@@ -340,24 +384,24 @@ export function fitLayeredEarthModel(measured: RhoPoint[]): LayerFitResult {
   const logMean = sorted.reduce((s, p) => s + Math.log(p.rho), 0) / sorted.length;
   const c1 = evalModel([Math.exp(logMean)], []);
 
-  // n = 2: semilla por método de asíntotas (ya usado en Wenner/Schlumberger), refinada localmente.
+  // n = 2: semilla por método de asíntotas (ya usado en Wenner/Schlumberger), refinada con Levenberg-Marquardt.
   const seed2 = estimateTwoLayerFromCurve(sorted);
-  const objective2 = (p: number[]) => rmsRelError(forwardCurveNLayer(spacings, [p[0]!, p[1]!], [p[2]!]), sorted);
-  const p2 = refineParams([seed2.rho1, seed2.rho2, seed2.h], objective2);
+  const residuals2 = (p: number[]) => relResiduals(forwardCurveNLayer(spacings, [p[0]!, p[1]!], [p[2]!]), sorted);
+  const p2 = levenbergMarquardt([seed2.rho1, seed2.rho2, seed2.h], residuals2);
   const c2 = evalModel([p2[0]!, p2[1]!], [p2[2]!]);
 
   // n = 3: extiende la solución de 2 capas insertando un tercer estrato en profundidad.
   // Se prueban varias semillas para h2/ρ3 (mínimos locales distintos) y se conserva la mejor.
   const lastRho = sorted[sorted.length - 1]!.rho;
-  const objective3 = (p: number[]) => rmsRelError(forwardCurveNLayer(spacings, [p[0]!, p[1]!, p[2]!], [p[3]!, p[4]!]), sorted);
+  const residuals3 = (p: number[]) => relResiduals(forwardCurveNLayer(spacings, [p[0]!, p[1]!, p[2]!], [p[3]!, p[4]!]), sorted);
   const seeds3 = [1.5, 3, 6].map(mult => [c2.rhos[0]!, c2.rhos[1]!, lastRho, c2.hs[0]!, c2.hs[0]! * mult]);
-  const p3 = bestOfSeeds(seeds3, objective3);
+  const p3 = bestOfSeeds(seeds3, residuals3);
   const c3 = evalModel([p3[0]!, p3[1]!, p3[2]!], [p3[3]!, p3[4]!]);
 
   // n = 4: extiende la solución de 3 capas insertando un cuarto estrato.
-  const objective4 = (p: number[]) => rmsRelError(forwardCurveNLayer(spacings, [p[0]!, p[1]!, p[2]!, p[3]!], [p[4]!, p[5]!, p[6]!]), sorted);
+  const residuals4 = (p: number[]) => relResiduals(forwardCurveNLayer(spacings, [p[0]!, p[1]!, p[2]!, p[3]!], [p[4]!, p[5]!, p[6]!]), sorted);
   const seeds4 = [1.5, 3, 6].map(mult => [c3.rhos[0]!, c3.rhos[1]!, c3.rhos[2]!, lastRho, c3.hs[0]!, c3.hs[1]!, c3.hs[1]! * mult]);
-  const p4 = bestOfSeeds(seeds4, objective4);
+  const p4 = bestOfSeeds(seeds4, residuals4);
   const c4 = evalModel([p4[0]!, p4[1]!, p4[2]!, p4[3]!], [p4[4]!, p4[5]!, p4[6]!]);
 
   const candidates = [c1, c2, c3, c4];
