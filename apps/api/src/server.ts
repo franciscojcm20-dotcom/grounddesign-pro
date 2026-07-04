@@ -24,6 +24,14 @@ const PORT       = Number(process.env.PORT ?? 3001);
 const HOST       = process.env.HOST ?? '127.0.0.1';
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-in-production';
 
+// El fallback de JWT_SECRET es público (está en este archivo) — si el proceso
+// escucha más allá de localhost sin haber configurado JWT_SECRET, cualquiera
+// podría forjar tokens válidos. Se rehúsa a arrancar en ese caso en vez de
+// exponerse en silencio con un secreto conocido.
+if (HOST !== '127.0.0.1' && !process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET debe configurarse explícitamente cuando HOST no es 127.0.0.1 (despliegue expuesto).');
+}
+
 const app = Fastify({ logger: { level: 'info' } });
 
 const DEFAULT_WEB_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000'];
@@ -32,6 +40,20 @@ await app.register(cors, {
   credentials: true,
 });
 await app.register(cookie);
+
+// Preserva el cuerpo crudo (Buffer) en req.rawBody además de parsear el JSON
+// normalmente — lo necesita el webhook de Stripe (billing.ts) para verificar
+// la firma HMAC contra los bytes exactos recibidos, no contra el objeto ya
+// parseado/re-serializado (que no coincidiría byte a byte con lo que Stripe firmó).
+app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
+  (req as unknown as { rawBody?: Buffer }).rawBody = body as Buffer;
+  if ((body as Buffer).length === 0) { done(null, undefined); return; }
+  try {
+    done(null, JSON.parse((body as Buffer).toString('utf8')));
+  } catch (err) {
+    done(err as Error, undefined);
+  }
+});
 await app.register(rateLimit, {
   global: true,
   max: 100,

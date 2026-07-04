@@ -75,7 +75,11 @@ function circle(layer: string, cx: number, cy: number, r: number): string[] {
 }
 
 function text(layer: string, x: number, y: number, height: number, value: string): string[] {
-  return ['0', 'TEXT', '8', layer, '10', x.toFixed(3), '20', y.toFixed(3), '30', '0.0', '40', height.toFixed(3), '1', value];
+  // Cada registro DXF ocupa exactamente 2 líneas (código de grupo + valor); un
+  // salto de línea dentro del valor (p. ej. en un nombre de proyecto ingresado
+  // por el usuario) rompería esa estructura al unir las líneas del documento.
+  const safeValue = value.replace(/[\r\n]+/g, ' ');
+  return ['0', 'TEXT', '8', layer, '10', x.toFixed(3), '20', y.toFixed(3), '30', '0.0', '40', height.toFixed(3), '1', safeValue];
 }
 
 function assembleDxf(entities: string[]): string {

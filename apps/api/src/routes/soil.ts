@@ -81,6 +81,12 @@ export async function routesSoil(app: FastifyInstance): Promise<void> {
       if (points.length < 3) {
         return reply.code(400).send({ error: 'Se necesitan al menos 3 lecturas de campo (Wenner y/o Schlumberger) para ajustar el modelo de N capas.' });
       }
+      // Una lectura con resistencia cero/negativa (instrumento en mal estado, error de
+      // digitación) da ρ ≤ 0, lo que propaga NaN/Infinity en el ajuste (división por ρ en
+      // el residuo relativo) en vez de un error claro para el usuario.
+      if (points.some(p => !(p.rho > 0))) {
+        return reply.code(400).send({ error: 'Una o más lecturas producen resistividad aparente cero o negativa — revisa las lecturas R en Mediciones de Campo.' });
+      }
       const fit = fitLayeredEarthModel(points);
       return { ...fit, measured: points, norm: 'Wait (1954) · Orellana & Mooney (1966) · IEEE Std 81-2012' };
     }
