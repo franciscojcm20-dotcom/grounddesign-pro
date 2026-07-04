@@ -7,14 +7,28 @@ export interface AuthUser {
   plan: 'community' | 'individual' | 'professional';
 }
 
+export class ApiError extends Error {
+  /** Código HTTP de la respuesta, o undefined si la petición nunca llegó al servidor (red caída, servidor no disponible). */
+  status?: number;
+  constructor(message: string, status?: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-    ...init,
-  });
-  const data = await res.json() as T & { error?: string };
-  if (!res.ok) throw new Error((data as { error?: string }).error ?? 'Error');
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...init?.headers },
+      ...init,
+    });
+  } catch {
+    throw new ApiError('No se pudo conectar con el servidor. Verifica tu conexión e inténtalo de nuevo.');
+  }
+  const data = await res.json().catch(() => ({})) as T & { error?: string };
+  if (!res.ok) throw new ApiError((data as { error?: string }).error ?? 'Error', res.status);
   return data;
 }
 
