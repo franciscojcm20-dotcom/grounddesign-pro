@@ -1,25 +1,18 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
+import Link from 'next/link';
 import {
   SectionLabel, StatCard, ExpertItem, FundBtn,
-  calcLayout, inputStyle, panelStyle, Th, TdMono, Field,
+  calcLayout, panelStyle, Th, TdMono,
 } from '@/components/ui/CalcShared';
 import { ExportBar } from '@/components/ui/ExportBar';
-import { ChartRho }  from '@/components/ui/ChartRho';
+import { SoundingComparisonChart } from '@/components/ui/Charts';
+import { useSoilModel } from '@/context/SoilModelContext';
 import { API_BASE as BASE } from '@/lib/apiBase';
 
-interface CurvePoint   { a: number; rhoA: number }
-interface NLayerResult { curve: CurvePoint[]; rhos: number[]; hs: number[]; norm: string }
-interface PatternPoint { t: number; ratio: number }
-interface PatternResult { k: number; curve: PatternPoint[] }
-
-const DEFAULT_LAYERS = [
-  { rho: 1214, h: 4    },
-  { rho: 1537, h: 8    },
-  { rho: 3200, h: 15   },
-  { rho:  800, h: null },
-];
-const DEFAULT_SPACINGS = [0.5, 1, 2, 4, 8, 16, 32, 64];
+interface RhoPoint       { a: number; rho: number }
+interface LayerCandidate { nLayers: number; rhos: number[]; hs: number[]; rmsError: number; curve: RhoPoint[] }
+interface FitResult       { best: LayerCandidate; candidates: LayerCandidate[]; measured: RhoPoint[]; norm: string }
 
 /* ── Layer cross-section diagram ──────────────────────────────────── */
 function LayerDiagram({ rhos, hs }: { rhos: number[]; hs: (number | null)[] }) {
@@ -41,7 +34,7 @@ function LayerDiagram({ rhos, hs }: { rhos: number[]; hs: (number | null)[] }) {
             <rect x={PAD} y={y} width={W - PAD * 2} height={barH}
               fill="var(--copper)" fillOpacity={opacity} rx="1" />
             <text x={W / 2} y={y + barH / 2 + 3.5} fill="var(--text)" fontSize="8.5" textAnchor="middle" fontFamily="var(--font-mono)">
-              ρ{i + 1} = {rho} Ω·m {hs[i] !== null ? `· h${i + 1} = ${hs[i]} m` : '(semi-espacio)'}
+              ρ{i + 1} = {rho.toFixed(0)} Ω·m {hs[i] !== null ? `· h${i + 1} = ${hs[i]!.toFixed(1)} m` : '(semi-espacio)'}
             </text>
             {i < rhos.length - 1 && (
               <line x1={PAD} y1={y + barH} x2={W - PAD} y2={y + barH}
@@ -52,213 +45,149 @@ function LayerDiagram({ rhos, hs }: { rhos: number[]; hs: (number | null)[] }) {
         y += barH;
         return el;
       })}
-      {/* Surface label */}
       <text x={PAD + 4} y={PAD - 2} fill="var(--faint)" fontSize="7">Superficie</text>
     </svg>
   );
 }
 
 export function NLayerClient() {
-  const [layers,    setLayers]    = useState(DEFAULT_LAYERS);
-  const [tableMode, setTableMode] = useState(true);
-  const [spacings,  setSpacings]  = useState(DEFAULT_SPACINGS.join(', '));
-  const [patternK,  setPatternK]  = useState('10');
-
-  const [result,   setResult]   = useState<NLayerResult | null>(null);
-  const [pattern,  setPattern]  = useState<PatternResult | null>(null);
-  const [error,    setError]    = useState<string | null>(null);
-  const [loading,  setLoading]  = useState(false);
+  const soilModel = useSoilModel();
+  const [result,  setResult]  = useState<FitResult | null>(null);
+  const [error,   setError]   = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const [showFund, setShowFund] = useState(false);
 
-  function parseNums(s: string) { return s.split(',').map(v => Number(v.trim())).filter(n => !isNaN(n) && n > 0); }
-
-  function updateLayer(i: number, field: 'rho' | 'h', val: string) {
-    setLayers(prev => prev.map((l, idx) =>
-      idx === i ? { ...l, [field]: field === 'h' && idx === prev.length - 1 ? null : Number(val) || null } : l
-    ));
-  }
-  function addLayer() {
-    setLayers(prev => {
-      const updated = prev.map((l, i) => i === prev.length - 1 ? { ...l, h: 5 } : l);
-      return [...updated, { rho: 500, h: null }];
-    });
-  }
-  function removeLayer(i: number) {
-    if (layers.length <= 2) return;
-    setLayers(prev => {
-      const next = prev.filter((_, idx) => idx !== i);
-      return next.map((l, idx) => idx === next.length - 1 ? { ...l, h: null } : l);
-    });
-  }
-
-  const { rhos, hs } = useMemo(() => ({
-    rhos: layers.map(l => l.rho),
-    hs:   layers.slice(0, -1).map(l => l.h ?? 5),
-  }), [layers]);
+  const hasReadings = soilModel.schlumbergerReadings.length > 0 || soilModel.wennerReadings.length > 0;
 
   async function calculate() {
-    const sp = parseNums(spacings);
-    if (rhos.length < 1) { setError('Ingresa al menos 1 capa.'); return; }
     setLoading(true); setError(null);
     try {
-      const [nlRes, patRes] = await Promise.all([
-        fetch(`${BASE}/api/v1/soil/nlayer`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ spacings: sp, rhos, hs }),
-        }).then(async r => { if (!r.ok) throw new Error((await r.json() as {error:string}).error); return r.json() as Promise<NLayerResult>; }),
-        fetch(`${BASE}/api/v1/soil/pattern?k=${patternK}&pts=60`)
-          .then(r => r.json() as Promise<PatternResult>),
-      ]);
-      setResult(nlRes);
-      setPattern(patRes);
+      const res = await fetch(`${BASE}/api/v1/soil/nlayer/fit`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wenner: soilModel.wennerReadings,
+          schlumberger: soilModel.schlumbergerReadings,
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json() as { error: string }).error);
+      setResult(await res.json() as FitResult);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error de conexión');
     } finally { setLoading(false); }
   }
 
-  const rhoMin = result ? Math.min(...result.curve.map(p => p.rhoA)) : 0;
-  const rhoMax = result ? Math.max(...result.curve.map(p => p.rhoA)) : 0;
+  const best = result?.best;
 
   return (
     <div style={calcLayout}>
       <aside style={{ borderRight: '1px solid var(--line)', overflowY: 'auto', background: 'var(--panel)', padding: '18px 16px 40px' }}>
         <h2 style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Modelo N capas</h2>
-        <p style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 14, lineHeight: 1.5 }}>
-          Kernel recursivo de Wait (1954) · Curvas Orellana-Mooney
+        <p style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 14, lineHeight: 1.6 }}>
+          La estratificación no se ingresa manualmente: se determina ajustando el universo de
+          curvas patrón (Orellana &amp; Mooney, 1966 — evaluadas de forma exacta vía el kernel de
+          Wait) contra la curva ρa(a) medida en terreno, probando de 1 a 4 estratos.
         </p>
 
-        {/* Live layer diagram */}
-        <div style={{ ...panelStyle, marginBottom: 14, padding: '8px' }}>
-          <LayerDiagram rhos={rhos} hs={[...layers.slice(0, -1).map(l => l.h), null]} />
-        </div>
-
-        <SectionLabel>
-          Capas del modelo
-          <button onClick={() => setTableMode(m => !m)} style={{
-            marginLeft: 8, fontSize: 8.5, color: 'var(--copper)', background: 'none',
-            border: '1px solid var(--copper)', borderRadius: 2, padding: '1px 6px', cursor: 'pointer',
+        <SectionLabel>Lecturas de campo</SectionLabel>
+        {hasReadings ? (
+          <div style={{
+            display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 16,
+            fontSize: 9.5, color: 'var(--dim)', fontFamily: 'var(--font-mono)',
           }}>
-            {tableMode ? 'texto' : 'tabla'}
-          </button>
-        </SectionLabel>
-
-        {tableMode ? (
-          <>
-            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 6 }}>
-              <thead><tr><Th>#</Th><Th>ρ (Ω·m)</Th><Th>h (m)</Th><Th></Th></tr></thead>
-              <tbody>
-                {layers.map((l, i) => (
-                  <tr key={i}>
-                    <td style={{ padding: '3px 4px', fontSize: 9.5, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>{i + 1}</td>
-                    <td style={{ padding: '2px 3px' }}>
-                      <input value={l.rho} onChange={e => updateLayer(i, 'rho', e.target.value)}
-                        style={{ ...inputStyle, padding: '4px 5px' }} type="number" />
-                    </td>
-                    <td style={{ padding: '2px 3px' }}>
-                      {i < layers.length - 1 ? (
-                        <input value={l.h ?? ''} onChange={e => updateLayer(i, 'h', e.target.value)}
-                          style={{ ...inputStyle, padding: '4px 5px' }} type="number" />
-                      ) : (
-                        <span style={{ fontSize: 9, color: 'var(--faint)', padding: '0 4px' }}>∞</span>
-                      )}
-                    </td>
-                    <td style={{ padding: '2px 3px' }}>
-                      <button onClick={() => removeLayer(i)} disabled={layers.length <= 2}
-                        style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: 12, opacity: layers.length <= 2 ? 0.3 : 1 }}>×</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <button onClick={addLayer} style={{ width: '100%', background: 'none', border: '1px dashed var(--line)', color: 'var(--dim)', fontFamily: 'var(--font-mono)', fontSize: 10, padding: 5, borderRadius: 3, cursor: 'pointer', marginBottom: 16 }}>
-              + Agregar capa
-            </button>
-          </>
+            {soilModel.schlumbergerReadings.length > 0 && (
+              <div>📡 Schlumberger: {soilModel.schlumbergerReadings.length} lecturas</div>
+            )}
+            {soilModel.wennerReadings.length > 0 && (
+              <div>〰 Wenner: {soilModel.wennerReadings.length} lecturas</div>
+            )}
+            <Link href="/soil/field" style={{ color: 'var(--copper)', marginTop: 2 }}>
+              Editar lecturas en Mediciones de Campo →
+            </Link>
+          </div>
         ) : (
-          <>
-            <Field label="Resistividades ρ₁…ρN" unit="Ω·m (separadas por coma)">
-              <input style={inputStyle} value={rhos.join(', ')} onChange={e => {
-                const vals = parseNums(e.target.value);
-                setLayers(vals.map((r, i) => ({ rho: r, h: i < vals.length - 1 ? (layers[i]?.h ?? 5) : null })));
-              }} placeholder="ej. 1214, 1537, 800" />
-            </Field>
-            <Field label="Espesores h₁…h(N-1)" unit="m (separados por coma)">
-              <input style={inputStyle} value={hs.join(', ')} onChange={e => {
-                const vals = parseNums(e.target.value);
-                setLayers(prev => prev.map((l, i) => ({ ...l, h: i < prev.length - 1 ? (vals[i] ?? 5) : null })));
-              }} placeholder="ej. 4, 8" />
-            </Field>
-          </>
+          <div style={{
+            fontSize: 9.5, color: 'var(--faint)', marginBottom: 16, lineHeight: 1.5,
+            background: 'var(--panel3)', border: '1px solid var(--line)', borderRadius: 4, padding: '8px 10px',
+          }}>
+            Sin lecturas de campo aún —{' '}
+            <Link href="/soil/field" style={{ color: 'var(--copper)' }}>ingrésalas en Mediciones de Campo</Link>.
+            El ajuste de N capas se calcula directamente desde esas lecturas.
+          </div>
         )}
 
-        <SectionLabel>Espaciamientos</SectionLabel>
-        <Field label="Valores de a" unit="m (separados por coma)">
-          <input style={inputStyle} value={spacings} onChange={e => setSpacings(e.target.value)} />
-        </Field>
-
-        <SectionLabel>Curva patrón Orellana-Mooney</SectionLabel>
-        <Field label="Ratio k = ρ2/ρ1" unit="">
-          <input style={inputStyle} type="number" value={patternK} onChange={e => setPatternK(e.target.value)} />
-        </Field>
-
-        <button onClick={calculate} disabled={loading} style={{ width: '100%', background: 'var(--copper)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 11, padding: 10, borderRadius: 3, cursor: 'pointer', opacity: loading ? 0.6 : 1 }}>
-          {loading ? 'Calculando…' : 'Calcular'}
+        <button onClick={calculate} disabled={loading || !hasReadings} style={{
+          width: '100%', background: 'var(--copper)', border: 'none', color: '#fff', fontWeight: 700,
+          fontSize: 11, padding: 10, borderRadius: 3, cursor: 'pointer',
+          opacity: (loading || !hasReadings) ? 0.6 : 1,
+        }}>
+          {loading ? 'Ajustando…' : 'Ajustar modelo de N capas'}
         </button>
         {error && <div style={{ marginTop: 12, padding: '8px 10px', background: 'var(--danger-soft)', border: '1px solid var(--danger)', borderRadius: 3, fontSize: 10, color: 'var(--danger)' }}>{error}</div>}
       </aside>
 
       <section style={{ overflowY: 'auto', padding: '18px 24px 40px', background: 'var(--bg)' }}>
-        {!result ? (
+        {!result || !best ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12 }}>
             <div style={{ fontSize: 32 }}>🌍</div>
-            <div style={{ color: 'var(--faint)', fontSize: 11 }}>Configura el modelo y presiona Calcular</div>
+            <div style={{ color: 'var(--faint)', fontSize: 11 }}>Presiona "Ajustar modelo de N capas" para procesar las lecturas de campo</div>
           </div>
         ) : (
           <>
             <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-              <StatCard label="Capas" value={String(result.rhos.length)} unit="capas" primary />
-              <StatCard label="ρa mín." value={rhoMin.toFixed(0)} unit="Ω·m" />
-              <StatCard label="ρa máx." value={rhoMax.toFixed(0)} unit="Ω·m" />
-              {pattern && <StatCard label="Curva k" value={String(pattern.k)} unit="Orellana" />}
+              <StatCard label="Estratos ajustados" value={String(best.nLayers)} unit="capas" primary />
+              <StatCard label="Error de ajuste (RMS)" value={`${(best.rmsError * 100).toFixed(1)}`} unit="%" ok={best.rmsError <= 0.05} />
+              <StatCard label="ρ1 (superior)" value={best.rhos[0]!.toFixed(0)} unit="Ω·m" />
+              <StatCard label="ρN (semi-espacio)" value={best.rhos[best.rhos.length - 1]!.toFixed(0)} unit="Ω·m" />
             </div>
 
             <SectionLabel purple>Sistema Experto</SectionLabel>
-            {result.rhos[0] !== undefined && result.rhos[result.rhos.length - 1] !== undefined &&
-              result.rhos[0] > (result.rhos[result.rhos.length - 1] ?? 0) ? (
-              <ExpertItem type="warn">
-                Perfil tipo H o Q: la capa profunda es más conductiva que la superficial. La malla enterrada estará en una zona de menor resistividad — favorable para reducir Rg.
+            <ExpertItem type={best.rmsError <= 0.05 ? 'ok' : 'warn'}>
+              {best.rmsError <= 0.05
+                ? `El modelo de ${best.nLayers} estrato${best.nLayers !== 1 ? 's' : ''} ajusta las lecturas de campo con ${(best.rmsError * 100).toFixed(1)}% de error RMS — dentro de la precisión habitual de un ensayo VES.`
+                : `El mejor ajuste disponible (${best.nLayers} estratos) tiene ${(best.rmsError * 100).toFixed(1)}% de error RMS, por sobre el 5% esperado — revisa que las lecturas de Mediciones de Campo no tengan errores de escala o ruido de medición.`}
+            </ExpertItem>
+            {best.rhos[0]! > best.rhos[best.rhos.length - 1]! ? (
+              <ExpertItem type="info">
+                Perfil tipo H o Q: la capa profunda es más conductiva que la superficial — favorable para reducir Rg si la malla alcanza esa profundidad.
               </ExpertItem>
             ) : (
               <ExpertItem type="info">
-                Perfil tipo K o A: la resistividad aumenta en profundidad. Diseñar la malla dentro de la capa superior (h={result.hs[0] ?? '—'} m).
+                Perfil tipo K o A: la resistividad aumenta en profundidad — conviene diseñar la malla dentro de la capa superior{best.hs[0] ? ` (h≈${best.hs[0].toFixed(1)} m)` : ''}.
               </ExpertItem>
             )}
 
-            {/* Main curve */}
-            <div style={{ ...panelStyle, marginBottom: 16 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 8 }}>Curva ρa(a) — N capas (Wait)</div>
-              <ChartRho points={result.curve} height={180} />
+            {/* Cross-section */}
+            <div style={{ ...panelStyle, marginBottom: 16, padding: '10px 8px' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 6, paddingLeft: 4 }}>Estratificación ajustada</div>
+              <LayerDiagram rhos={best.rhos} hs={[...best.hs, null]} />
             </div>
 
-            {/* Pattern curve */}
-            {pattern && (
-              <div style={{ ...panelStyle, marginBottom: 16 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 8 }}>Curva patrón Orellana-Mooney — k = {pattern.k}</div>
-                <ChartRho
-                  points={pattern.curve.map(p => ({ a: p.t, rhoA: p.ratio }))}
-                  yLabel="ρa/ρ1" xLabel="t = a/h₁" height={160}
-                />
-              </div>
-            )}
+            {/* Curve overlay: measured vs fitted */}
+            <div style={{ ...panelStyle, marginBottom: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 8 }}>Curva ρa(a) — medido vs. ajuste de {best.nLayers} estrato{best.nLayers !== 1 ? 's' : ''}</div>
+              <SoundingComparisonChart
+                series={[
+                  { label: 'Medido (campo)', color: 'var(--chart-1)', points: result.measured.map(p => ({ x: p.a, y: p.rho })) },
+                  { label: `Ajuste N capas (${best.nLayers})`, color: 'var(--chart-2)', dashed: true, points: best.curve.map(p => ({ x: p.a, y: p.rho })) },
+                ]}
+              />
+            </div>
 
-            {/* Table */}
+            {/* Candidate comparison table — transparency on why nLayers was chosen */}
             <div style={panelStyle}>
-              <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 10 }}>Tabla ρa por espaciamiento</div>
+              <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 10 }}>Universo de curvas patrón evaluadas (1 a 4 estratos)</div>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead><tr><Th>a (m)</Th><Th>ρa calculada (Ω·m)</Th></tr></thead>
+                <thead><tr><Th>Estratos</Th><Th>ρ (Ω·m)</Th><Th>h (m)</Th><Th>Error RMS</Th></tr></thead>
                 <tbody>
-                  {result.curve.map((pt, i) => (
-                    <tr key={i}><TdMono>{pt.a}</TdMono><TdMono highlight>{pt.rhoA.toFixed(1)}</TdMono></tr>
+                  {result.candidates.map(c => (
+                    <tr key={c.nLayers} style={{ background: c.nLayers === best.nLayers ? 'var(--copper-soft)' : undefined }}>
+                      <td style={{ padding: '5px 8px', borderBottom: '1px solid var(--line)', fontSize: 10, color: c.nLayers === best.nLayers ? 'var(--copper)' : 'var(--dim)', fontWeight: c.nLayers === best.nLayers ? 700 : 400 }}>
+                        {c.nLayers} {c.nLayers === best.nLayers && '★'}
+                      </td>
+                      <TdMono>{c.rhos.map(r => r.toFixed(0)).join(' / ')}</TdMono>
+                      <TdMono>{c.hs.length ? c.hs.map(h => h.toFixed(1)).join(' / ') : '—'}</TdMono>
+                      <TdMono highlight={c.nLayers === best.nLayers}>{(c.rmsError * 100).toFixed(1)}%</TdMono>
+                    </tr>
                   ))}
                 </tbody>
               </table>
@@ -266,18 +195,18 @@ export function NLayerClient() {
 
             <ExportBar
               module="nlayer"
-              inputs={{ rhos: result.rhos, hs: result.hs, spacings: parseNums(spacings) }}
-              outputs={{ curve: result.curve }}
+              inputs={{ measured: result.measured }}
+              outputs={{ nLayers: best.nLayers, rhos: best.rhos, hs: best.hs, rmsError: best.rmsError, curve: best.curve }}
               norm={result.norm}
             />
 
-            <FundBtn show={showFund} onToggle={() => setShowFund(f => !f)} label="Kernel de Wait (1954)">
-              <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--copper)', marginBottom: 10, fontSize: 11 }}>
+            <FundBtn show={showFund} onToggle={() => setShowFund(f => !f)} label="Ajuste automático de N capas (Wait 1954 / Orellana-Mooney 1966)">
+              <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--copper)', marginBottom: 8, fontSize: 11 }}>
                 ρa = ρ1·[1 + 2·∫₀^∞ (T₁(u/a)/ρ1 − 1)·J₁(u)·u·du]
               </div>
-              <p><strong style={{ color: 'var(--text)' }}>Kernel recursivo T:</strong> calculado desde la capa inferior hacia arriba, usando <code style={{ color: 'var(--copper)', fontFamily: 'var(--font-mono)', fontSize: 9 }}>tanh(λ·h)</code> para cada interfaz.</p>
-              <p style={{ marginTop: 8 }}><strong style={{ color: 'var(--text)' }}>J₁(x):</strong> Bessel de primera especie orden 1, aproximado por polinomios de Abramowitz & Stegun §9.4.1.</p>
-              <p style={{ marginTop: 12, fontSize: 9, color: 'var(--faint)' }}>Wait (1954) · Orellana & Mooney (1966) · IEEE Std 81-2012</p>
+              <p><strong style={{ color: 'var(--text)' }}>Kernel recursivo T:</strong> calculado desde la capa inferior hacia arriba, usando <code style={{ color: 'var(--copper)', fontFamily: 'var(--font-mono)', fontSize: 9 }}>tanh(λ·h)</code> para cada interfaz — esta es la misma teoría que da origen a las curvas patrón impresas de Orellana &amp; Mooney, aquí evaluada de forma exacta en vez de leída de tablas.</p>
+              <p style={{ marginTop: 8 }}><strong style={{ color: 'var(--text)' }}>Ajuste:</strong> para cada número de estratos (1 a 4) se busca, mediante refinamiento local multi-semilla, el conjunto de ρ/h que minimiza el error cuadrático medio relativo contra las lecturas de campo. Se adopta el modelo más simple cuyo error ya está dentro de la precisión habitual de un ensayo VES (5% RMS) — evita interpretar ruido de medición como estratos ficticios.</p>
+              <p style={{ marginTop: 12, fontSize: 9, color: 'var(--faint)' }}>Wait (1954) · Orellana &amp; Mooney (1966) · IEEE Std 81-2012</p>
             </FundBtn>
           </>
         )}

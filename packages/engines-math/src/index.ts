@@ -241,6 +241,139 @@ export function wennerApparentNLayer(a: number, rhos: number[], hs: number[]): n
   return rho1 * (1 + 2 * integral);
 }
 
+// ─── AJUSTE AUTOMÁTICO DE MODELO DE SUELO N CAPAS (inversión, sin capas manuales) ──
+//
+// El número de capas y sus ρ/h NO se ingresan manualmente: se determinan
+// ajustando el universo de curvas patrón de Orellana & Mooney (1966) — aquí
+// evaluadas de forma exacta vía el kernel de Wait en vez de tablas impresas —
+// contra la curva ρa(a) medida en terreno (Wenner o Schlumberger), probando de
+// 1 a 4 estratos y adoptando el modelo con mejor contraste contra la medición,
+// con penalización por capas adicionales que no mejoren significativamente el
+// ajuste (parsimonia — evita convertir ruido de medición en estratos ficticios).
+
+export interface LayeredEarthModel { rhos: number[]; hs: number[] }
+export interface LayerFitCandidate extends LayeredEarthModel {
+  nLayers: number;
+  rmsError: number;
+  curve: RhoPoint[];
+}
+export interface LayerFitResult {
+  best: LayerFitCandidate;
+  candidates: LayerFitCandidate[];
+}
+
+function forwardCurveNLayer(spacings: number[], rhos: number[], hs: number[]): RhoPoint[] {
+  return spacings.map(a => ({ a, rho: rhos.length === 1 ? rhos[0]! : wennerApparentNLayer(a, rhos, hs) }));
+}
+
+function rmsRelError(theoretical: RhoPoint[], measured: RhoPoint[]): number {
+  let sum = 0;
+  for (let i = 0; i < measured.length; i++) {
+    const m = measured[i]!.rho;
+    const t = theoretical[i]!.rho;
+    const rel = (t - m) / m;
+    sum += rel * rel;
+  }
+  return Math.sqrt(sum / measured.length);
+}
+
+/**
+ * Búsqueda local tipo Hooke-Jeeves (patrón multiplicativo) en el espacio de
+ * parámetros positivos (ρ's y h's). Sin dependencias externas de optimización:
+ * en cada pasada prueba, para cada parámetro, un conjunto de factores de escala
+ * y conserva el que más reduce el error; converge cuando ninguna pasada mejora.
+ */
+function refineParams(seed: number[], objective: (p: number[]) => number, passes = 25): number[] {
+  let best = [...seed];
+  let bestErr = objective(best);
+  // Rondas sucesivas con factores cada vez más finos alrededor de 1 — equivalente
+  // a un patrón de búsqueda que se va acercando (Hooke-Jeeves con paso decreciente).
+  const factorSets = [
+    [0.5, 0.7, 0.85, 0.93, 1, 1.08, 1.18, 1.4, 2],
+    [0.9, 0.95, 0.98, 1, 1.02, 1.05, 1.1],
+    [0.97, 0.99, 1, 1.01, 1.03],
+    [0.995, 0.998, 1, 1.002, 1.005],
+  ];
+  for (const factors of factorSets) {
+    for (let pass = 0; pass < passes; pass++) {
+      let improved = false;
+      for (let i = 0; i < best.length; i++) {
+        let localBest = best[i]!;
+        let localBestErr = bestErr;
+        for (const f of factors) {
+          const trial = [...best];
+          trial[i] = best[i]! * f;
+          const err = objective(trial);
+          if (err < localBestErr) { localBestErr = err; localBest = trial[i]!; }
+        }
+        if (localBestErr < bestErr) { best[i] = localBest; bestErr = localBestErr; improved = true; }
+      }
+      if (!improved) break;
+    }
+  }
+  return best;
+}
+
+/** Refina varias semillas independientes y conserva la que converge al menor error — mitiga mínimos locales. */
+function bestOfSeeds(seeds: number[][], objective: (p: number[]) => number): number[] {
+  let best = seeds[0]!;
+  let bestErr = Infinity;
+  for (const seed of seeds) {
+    const refined = refineParams(seed, objective);
+    const err = objective(refined);
+    if (err < bestErr) { bestErr = err; best = refined; }
+  }
+  return best;
+}
+
+/** Ajusta el universo de curvas patrón de 1 a 4 estratos contra una curva ρa(a) medida en terreno. */
+export function fitLayeredEarthModel(measured: RhoPoint[]): LayerFitResult {
+  const sorted = [...measured].sort((a, b) => a.a - b.a);
+  const spacings = sorted.map(p => p.a);
+
+  function evalModel(rhos: number[], hs: number[]): LayerFitCandidate {
+    const curve = forwardCurveNLayer(spacings, rhos, hs);
+    return { nLayers: rhos.length, rhos, hs, rmsError: rmsRelError(curve, sorted), curve };
+  }
+
+  // n = 1: suelo homogéneo — la media geométrica minimiza el error relativo cuadrático medio.
+  const logMean = sorted.reduce((s, p) => s + Math.log(p.rho), 0) / sorted.length;
+  const c1 = evalModel([Math.exp(logMean)], []);
+
+  // n = 2: semilla por método de asíntotas (ya usado en Wenner/Schlumberger), refinada localmente.
+  const seed2 = estimateTwoLayerFromCurve(sorted);
+  const objective2 = (p: number[]) => rmsRelError(forwardCurveNLayer(spacings, [p[0]!, p[1]!], [p[2]!]), sorted);
+  const p2 = refineParams([seed2.rho1, seed2.rho2, seed2.h], objective2);
+  const c2 = evalModel([p2[0]!, p2[1]!], [p2[2]!]);
+
+  // n = 3: extiende la solución de 2 capas insertando un tercer estrato en profundidad.
+  // Se prueban varias semillas para h2/ρ3 (mínimos locales distintos) y se conserva la mejor.
+  const lastRho = sorted[sorted.length - 1]!.rho;
+  const objective3 = (p: number[]) => rmsRelError(forwardCurveNLayer(spacings, [p[0]!, p[1]!, p[2]!], [p[3]!, p[4]!]), sorted);
+  const seeds3 = [1.5, 3, 6].map(mult => [c2.rhos[0]!, c2.rhos[1]!, lastRho, c2.hs[0]!, c2.hs[0]! * mult]);
+  const p3 = bestOfSeeds(seeds3, objective3);
+  const c3 = evalModel([p3[0]!, p3[1]!, p3[2]!], [p3[3]!, p3[4]!]);
+
+  // n = 4: extiende la solución de 3 capas insertando un cuarto estrato.
+  const objective4 = (p: number[]) => rmsRelError(forwardCurveNLayer(spacings, [p[0]!, p[1]!, p[2]!, p[3]!], [p[4]!, p[5]!, p[6]!]), sorted);
+  const seeds4 = [1.5, 3, 6].map(mult => [c3.rhos[0]!, c3.rhos[1]!, c3.rhos[2]!, lastRho, c3.hs[0]!, c3.hs[1]!, c3.hs[1]! * mult]);
+  const p4 = bestOfSeeds(seeds4, objective4);
+  const c4 = evalModel([p4[0]!, p4[1]!, p4[2]!, p4[3]!], [p4[4]!, p4[5]!, p4[6]!]);
+
+  const candidates = [c1, c2, c3, c4];
+
+  // Parsimonia: se adopta el modelo más simple cuyo error ya está dentro de una tolerancia
+  // razonable para mediciones de campo (5% RMS relativo); solo se suman estratos adicionales
+  // si el modelo más simple aún no alcanza esa tolerancia — evita ajustar ruido de medición
+  // como estratos ficticios, que es el defecto de comparar solo mejoras relativas entre
+  // modelos anidados (un modelo con más parámetros nunca ajusta peor que uno más simple).
+  const GOOD_ENOUGH_RMS = 0.05;
+  let best = candidates.find(c => c.rmsError <= GOOD_ENOUGH_RMS)
+    ?? candidates.reduce((a, b) => (b.rmsError < a.rmsError ? b : a));
+
+  return { best, candidates };
+}
+
 // ─── GEL QUÍMICO (Dwight / Sunde) ────────────────────────────────────────────
 
 /** Resistencia de varilla vertical: R = (ρ / (2πL)) · (ln(8L/d) − 1) */

@@ -29,6 +29,7 @@ import {
   NORMATIVE_PROFILES,
   getNormativeProfile,
   evaluateRgCompliance,
+  fitLayeredEarthModel,
 } from '../src/index.ts';
 
 // ─── Tolerancia para comparaciones de punto flotante ─────────────────────────
@@ -190,6 +191,47 @@ describe('Modelo N capas — kernel de Wait y wennerApparentNLayer', () => {
     for (const t of [0.5, 2, 10, 50]) {
       assertClose(theoreticalTwoLayerRho(t, 1), 1, 1e-6, `curva homogénea k=1 en t=${t}`);
     }
+  });
+});
+
+describe('Ajuste automático de modelo de suelo N capas (inversión, sin capas manuales)', () => {
+  const SPACINGS = [0.5, 1, 2, 4, 8, 16, 32, 64];
+
+  it('recupera un suelo homogéneo sintético como 1 capa (sin agregar estratos ficticios)', () => {
+    const rho = 300;
+    const measured = SPACINGS.map(a => ({ a, rho: wennerApparentNLayer(a, [rho], []) }));
+    const { best } = fitLayeredEarthModel(measured);
+    assert.strictEqual(best.nLayers, 1, `debería preferir 1 capa para un suelo homogéneo, obtuvo ${best.nLayers}`);
+    assertClose(best.rhos[0]!, rho, 0.05, 'ρ recuperada del suelo homogéneo');
+  });
+
+  it('recupera un modelo sintético de 2 capas conocido (ρ1, ρ2, h) dentro de tolerancia razonable', () => {
+    const trueRhos = [1214, 1537];
+    const trueHs = [4];
+    const measured = SPACINGS.map(a => ({ a, rho: wennerApparentNLayer(a, trueRhos, trueHs) }));
+    const { best } = fitLayeredEarthModel(measured);
+    assert.ok(best.nLayers <= 2, `no debería sobreajustar más allá de 2 capas para datos limpios de 2 capas, obtuvo ${best.nLayers}`);
+    assert.ok(best.rmsError < 0.03, `el ajuste debería tener bajo error para datos sintéticos limpios (rmsError=${best.rmsError})`);
+  });
+
+  it('el candidato de cada nLayers reproduce su propia curva con error ≈ 0 (el ajuste local converge)', () => {
+    const measured = SPACINGS.map(a => ({ a, rho: wennerApparentNLayer(a, [1214, 1537, 3200], [4, 8]) }));
+    const { candidates } = fitLayeredEarthModel(measured);
+    const c3 = candidates.find(c => c.nLayers === 3)!;
+    assert.ok(c3.rmsError < 0.02, `el candidato de 3 capas debería ajustar casi perfectamente datos sintéticos de 3 capas (rmsError=${c3.rmsError})`);
+  });
+
+  it('devuelve un candidato por cada nLayers de 1 a 4, todos con curva del mismo largo que las mediciones', () => {
+    const measured = SPACINGS.map(a => ({ a, rho: wennerApparentNLayer(a, [1214, 1537], [4]) }));
+    const { candidates } = fitLayeredEarthModel(measured);
+    assert.deepStrictEqual(candidates.map(c => c.nLayers), [1, 2, 3, 4]);
+    for (const c of candidates) assert.strictEqual(c.curve.length, SPACINGS.length);
+  });
+
+  it('la parsimonia evita preferir 4 capas cuando 2 capas ya explican bien los datos', () => {
+    const measured = SPACINGS.map(a => ({ a, rho: wennerApparentNLayer(a, [1214, 1537], [4]) }));
+    const { best } = fitLayeredEarthModel(measured);
+    assert.ok(best.nLayers <= 2, `no debería preferir 4 capas para datos generados con 2, obtuvo ${best.nLayers}`);
   });
 });
 

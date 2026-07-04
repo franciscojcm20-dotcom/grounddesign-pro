@@ -6,7 +6,9 @@ import {
   estimateTwoLayerSchlumberger,
   wennerApparentNLayer,
   theoreticalTwoLayerRho,
+  fitLayeredEarthModel,
   type Reading,
+  type RhoPoint,
 } from '@gdp/engines-math';
 
 export async function routesSoil(app: FastifyInstance): Promise<void> {
@@ -63,6 +65,24 @@ export async function routesSoil(app: FastifyInstance): Promise<void> {
         rhoA: wennerApparentNLayer(a, rhos, hs),
       }));
       return { curve, rhos, hs, norm: 'Wait (1954), IEEE Std 81-2012' };
+    }
+  );
+
+  // POST /api/v1/soil/nlayer/fit
+  // Body: { wenner?: {a,r}[], schlumberger?: {L,l,r}[] }
+  // El modelo de N capas NO se ingresa manualmente: se determina ajustando el
+  // universo de curvas patrón (1 a 4 estratos) contra las lecturas reales de campo.
+  app.post<{ Body: { wenner?: Reading[]; schlumberger?: { L: number; l: number; r: number }[] } }>(
+    '/nlayer/fit', async (req, reply) => {
+      const { wenner, schlumberger } = req.body;
+      const points: RhoPoint[] = [];
+      if (Array.isArray(wenner)) points.push(...wenner.map(({ a, r }) => ({ a, rho: wennerApparent(a, r) })));
+      if (Array.isArray(schlumberger)) points.push(...schlumberger.map(({ L, l, r }) => ({ a: L / 2, rho: schlumbergerApparent(L, l, r) })));
+      if (points.length < 3) {
+        return reply.code(400).send({ error: 'Se necesitan al menos 3 lecturas de campo (Wenner y/o Schlumberger) para ajustar el modelo de N capas.' });
+      }
+      const fit = fitLayeredEarthModel(points);
+      return { ...fit, measured: points, norm: 'Wait (1954) · Orellana & Mooney (1966) · IEEE Std 81-2012' };
     }
   );
 
