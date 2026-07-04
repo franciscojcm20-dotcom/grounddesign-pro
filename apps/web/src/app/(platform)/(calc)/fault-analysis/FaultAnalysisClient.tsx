@@ -7,6 +7,7 @@ import {
 } from '@/components/ui/CalcShared';
 import { useFaultAnalysis, type FaultAnalysisMaster } from '@/context/FaultAnalysisContext';
 import { useToast } from '@/context/ToastContext';
+import { usePersistedState } from '@/lib/usePersistedState';
 
 const DEFAULTS = { If: 12000, tFalla: 0.5, xr: 15, freq: 50 };
 
@@ -41,18 +42,18 @@ const CONFIDENCE_LABEL: Record<FaultAnalysisResult['confidence'], string> = {
 export function FaultAnalysisClient() {
   const toast = useToast();
   const faultAnalysis = useFaultAnalysis();
-  const [form, setForm] = useState(DEFAULTS);
-  const [method, setMethod] = useState<SplitFactorMethod>('conservative');
-  const [manualSf, setManualSf] = useState(0.6);
-  const [nPaths, setNPaths] = useState(2);
+  const [form, setForm] = usePersistedState('gdp-form-fault-analysis', DEFAULTS);
+  const [method, setMethod] = usePersistedState<SplitFactorMethod>('gdp-form-fault-analysis-method', 'conservative');
+  const [manualSf, setManualSf] = usePersistedState('gdp-form-fault-analysis-manualSf', 0.6);
+  const [nPaths, setNPaths] = usePersistedState('gdp-form-fault-analysis-nPaths', 2);
   const [result, setResult] = useState<FaultAnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showWhy, setShowWhy] = useState(false);
   const [showFund, setShowFund] = useState(false);
 
-  const [ifOrigin, setIfOrigin] = useState<'manual' | 'calculado'>('manual');
-  const [sc, setSc] = useState(SC_DEFAULTS);
+  const [ifOrigin, setIfOrigin] = usePersistedState<'manual' | 'calculado'>('gdp-form-fault-analysis-ifOrigin', 'manual');
+  const [sc, setSc] = usePersistedState('gdp-form-fault-analysis-sc', SC_DEFAULTS);
   const [scResult, setScResult] = useState<ShortCircuitResult | null>(null);
   const [scLoading, setScLoading] = useState(false);
   const [scError, setScError] = useState<string | null>(null);

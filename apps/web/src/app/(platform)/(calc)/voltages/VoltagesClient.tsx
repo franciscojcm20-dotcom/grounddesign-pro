@@ -12,6 +12,7 @@ import { FaultCurrentField } from '@/components/ui/FaultCurrentField';
 import { useFaultAnalysis } from '@/context/FaultAnalysisContext';
 import { useNormativeProfile } from '@/context/NormativeProfileContext';
 import { NormativeProfileSelector } from '@/components/ui/NormativeProfileSelector';
+import { usePersistedState } from '@/lib/usePersistedState';
 
 // Defaults: malla 40×30 m, conductor 4/0 AWG (d equivalente), ρ=110, ρs=2500
 const DEFAULTS = {
@@ -22,7 +23,7 @@ const DEFAULTS = {
 export function VoltagesClient() {
   const faultAnalysis = useFaultAnalysis();
   const { profile } = useNormativeProfile();
-  const [form, setForm] = useState(DEFAULTS);
+  const [form, setForm] = usePersistedState('gdp-form-voltages', DEFAULTS);
   const [result, setResult] = useState<VoltagesRealResult | null>(null);
   const [error, setError]   = useState<string | null>(null);
   const [loading, setLoading] = useState(false);

@@ -16,6 +16,7 @@ import { useFaultAnalysis } from '@/context/FaultAnalysisContext';
 import { useNormativeProfile } from '@/context/NormativeProfileContext';
 import { NormativeProfileSelector } from '@/components/ui/NormativeProfileSelector';
 import { evaluateRgCompliance } from '@gdp/engines-math';
+import { usePersistedState } from '@/lib/usePersistedState';
 import type { GelParams } from '@/lib/api';
 
 const GridScene3D = dynamic(() => import('@/components/ui/Topology3D').then(m => m.GridScene3D), { ssr: false });
@@ -101,7 +102,7 @@ function GridDiagram({ largo, ancho, nL, nW, nVarillas }: {
 export function GridClient() {
   const faultAnalysis = useFaultAnalysis();
   const { profile } = useNormativeProfile();
-  const [form, setForm] = useState(DEFAULTS);
+  const [form, setForm] = usePersistedState('gdp-form-grid', DEFAULTS);
   const [gel, setGel] = useState<GelParams | null>(null);
   const [conductor, setConductor] = useState<{ diamMm: number; calibre: string } | null>(null);
   const [result, setResult] = useState<GridResult | null>(null);

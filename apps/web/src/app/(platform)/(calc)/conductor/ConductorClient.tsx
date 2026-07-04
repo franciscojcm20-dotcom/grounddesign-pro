@@ -4,12 +4,13 @@ import { api, type ConductorResult, type ConductorEntry } from '@/lib/api';
 import { Field, SectionLabel, StatCard, CompBanner, ExpertItem, FundBtn, calcLayout, inputStyle, panelStyle } from '@/components/ui/CalcShared';
 import { ExportBar } from '@/components/ui/ExportBar';
 import { useI18n } from '@/context/I18nContext';
+import { usePersistedState } from '@/lib/usePersistedState';
 
 const DEFAULTS = { iFalla: 8500, tFalla: 0.5, tempAmbiente: 40, tempMaxFusion: 450 };
 
 export function ConductorClient() {
   const { t } = useI18n();
-  const [form, setForm] = useState({ ...DEFAULTS, calibreSeleccionado: '' });
+  const [form, setForm] = usePersistedState('gdp-form-conductor', { ...DEFAULTS, calibreSeleccionado: '' });
   const [result, setResult] = useState<ConductorResult | null>(null);
   const [table, setTable]   = useState<ConductorEntry[]>([]);
   const [error, setError]   = useState<string | null>(null);

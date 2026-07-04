@@ -18,6 +18,7 @@ import { useFaultAnalysis } from '@/context/FaultAnalysisContext';
 import { useNormativeProfile } from '@/context/NormativeProfileContext';
 import { NormativeProfileSelector } from '@/components/ui/NormativeProfileSelector';
 import { evaluateRgCompliance } from '@gdp/engines-math';
+import { usePersistedState } from '@/lib/usePersistedState';
 import type { GelParams } from '@/lib/api';
 
 const DEFAULTS = {
@@ -67,7 +68,7 @@ function CombinedDiagram({ largo, ancho, nL, nW, nRods }: { largo: number; ancho
 export function CombinedClient() {
   const faultAnalysis = useFaultAnalysis();
   const { profile } = useNormativeProfile();
-  const [form, setForm] = useState(DEFAULTS);
+  const [form, setForm] = usePersistedState('gdp-form-combined', DEFAULTS);
   const [gel, setGel] = useState<GelParams | null>(null);
   const [result, setResult] = useState<CombinedResult | null>(null);
   const [loading, setLoading] = useState(false);

@@ -7,6 +7,7 @@ import {
 import { ExportBar } from '@/components/ui/ExportBar';
 import { SoilRhoField } from '@/components/ui/SoilRhoField';
 import { API_BASE as BASE } from '@/lib/apiBase';
+import { usePersistedState } from '@/lib/usePersistedState';
 
 function GelSensitivity({ result, rhoGel, radioVarilla, longVarilla, currentR2 }: {
   result: GelResult; rhoGel: number; radioVarilla: number; longVarilla: number; currentR2: number;
@@ -102,7 +103,7 @@ const DEFAULTS = {
 };
 
 export function GelClient() {
-  const [form, setForm] = useState(DEFAULTS);
+  const [form, setForm] = usePersistedState('gdp-form-gel', DEFAULTS);
   const [result, setResult] = useState<GelResult | null>(null);
   const [error,  setError]  = useState<string | null>(null);
   const [loading, setLoading] = useState(false);

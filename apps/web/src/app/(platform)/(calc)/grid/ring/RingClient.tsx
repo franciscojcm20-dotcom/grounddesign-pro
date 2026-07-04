@@ -18,6 +18,7 @@ import { useFaultAnalysis } from '@/context/FaultAnalysisContext';
 import { useNormativeProfile } from '@/context/NormativeProfileContext';
 import { NormativeProfileSelector } from '@/components/ui/NormativeProfileSelector';
 import { evaluateRgCompliance } from '@gdp/engines-math';
+import { usePersistedState } from '@/lib/usePersistedState';
 import type { GelParams } from '@/lib/api';
 
 const DEFAULTS = { rho: 110, largo: 30, ancho: 20, h: 0.6, diamMm: 10, iFalla: 8500, tFalla: 0.5 };
@@ -48,7 +49,7 @@ function RingDiagram({ largo, ancho }: { largo: number; ancho: number }) {
 export function RingClient() {
   const faultAnalysis = useFaultAnalysis();
   const { profile } = useNormativeProfile();
-  const [form, setForm] = useState(DEFAULTS);
+  const [form, setForm] = usePersistedState('gdp-form-ring', DEFAULTS);
   const [gel, setGel] = useState<GelParams | null>(null);
   const [result, setResult] = useState<RingResult | null>(null);
   const [loading, setLoading] = useState(false);
