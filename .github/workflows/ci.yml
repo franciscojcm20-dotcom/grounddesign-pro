@@ -22,6 +22,39 @@ jobs:
       - name: Test
         run: pnpm --filter @gdp/engines-math test
 
+  # ── API integration tests (auth, proyectos, admin, billing) ──────────────────
+  test-api:
+    name: Integration tests — api
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: grounddesing
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Apply schema
+        run: psql "postgres://postgres:postgres@localhost:5432/grounddesing" -f apps/api/src/db/schema.sql
+      - name: Test
+        run: pnpm --filter @gdp/api test
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/grounddesing
+
   # ── TypeScript ───────────────────────────────────────────────────────────────
   typecheck:
     name: TypeScript — web + api

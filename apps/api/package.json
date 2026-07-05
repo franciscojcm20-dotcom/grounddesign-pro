@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node --watch --experimental-strip-types src/server.ts",
     "start": "node --experimental-strip-types src/server.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/api.test.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
