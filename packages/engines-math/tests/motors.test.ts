@@ -24,6 +24,7 @@ import {
   stepVoltageReal,
   onderdonkArea,
   computeConductor,
+  applyMinConductorSection,
   CONDUCTOR_TABLE,
   computeMultipleRods,
   NORMATIVE_PROFILES,
@@ -459,6 +460,25 @@ describe('Conductor — Onderdonk (Ifalla=8500 A, t=0.5 s, Ta=40°C, Tm=450°C)'
   it('margen (%) = (mm2_seleccionado − mm2_mínimo) / mm2_mínimo × 100', () => {
     const res = computeConductor(CONDUCTOR);
     assertClose(res.margen, ((res.seleccionado.mm2 - res.areaMm2) / res.areaMm2) * 100, 1e-10, 'fórmula del margen');
+  });
+
+  it('applyMinConductorSection sube el calibre cuando el mínimo normativo supera el térmico', () => {
+    const res = computeConductor(CONDUCTOR); // sugerido = 2/0 AWG (67.4 mm²)
+    const bumped = applyMinConductorSection(res, 100);
+    assert.ok(bumped.seleccionado.mm2 >= 100, `debería subir a ≥100 mm², obtuvo ${bumped.seleccionado.mm2}`);
+    assert.strictEqual(bumped.esSeleccionManual, false);
+  });
+
+  it('applyMinConductorSection no cambia nada si el térmico ya supera el mínimo normativo', () => {
+    const res = computeConductor(CONDUCTOR); // 67.4 mm²
+    const unchanged = applyMinConductorSection(res, 50);
+    assert.strictEqual(unchanged.seleccionado.calibre, res.seleccionado.calibre);
+  });
+
+  it('applyMinConductorSection es no-op sin mínimo definido', () => {
+    const res = computeConductor(CONDUCTOR);
+    const unchanged = applyMinConductorSection(res, undefined);
+    assert.strictEqual(unchanged, res);
   });
 
   it('la tabla de conductores está ordenada ascendentemente por mm2', () => {

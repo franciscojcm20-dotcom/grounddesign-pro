@@ -23,6 +23,14 @@ export interface NormativeProfile {
   bodyWeightKg: 50 | 70;
   /** V — tensión de contacto máxima admisible, cuando la norma la fija directamente (p.ej. REBT). */
   touchVoltageMaxV?: number;
+  /**
+   * mm² — sección mínima de conductor de cobre desnudo exigida por la norma para el
+   * conductor de puesta a tierra enterrado, independiente del resultado térmico de
+   * Onderdonk (protección mecánica/corrosión a largo plazo, no solo capacidad de
+   * falla). Solo se fija cuando hay una cifra normativa concreta y verificable —
+   * de lo contrario queda sin definir en vez de adivinar un valor.
+   */
+  minConductorMm2?: number;
   notes: string;
 }
 
@@ -47,7 +55,8 @@ export const NORMATIVE_PROFILES: NormativeProfile[] = [
     rgGeneral: 10,
     bodyResistanceOhm: 1000,
     bodyWeightKg: 70,
-    notes: 'El Art. 15 del RETIE fija 10 Ω como referencia para sistemas de distribución y remite a IEEE 80, IEC 60364-4-442, NTC 2050 y NTC 4552 para el cálculo completo de tensiones de paso, contacto y transferidas — el cumplimiento de la resistencia no exime de verificar esas tensiones.',
+    minConductorMm2: 50,
+    notes: 'El Art. 15 del RETIE fija 10 Ω como referencia para sistemas de distribución y remite a IEEE 80, IEC 60364-4-442, NTC 2050 y NTC 4552 para el cálculo completo de tensiones de paso, contacto y transferidas — el cumplimiento de la resistencia no exime de verificar esas tensiones. Sección mínima de conductor de puesta a tierra: 50 mm² de cobre para instalaciones industriales/alta tensión (RETIE Art. 15, Tabla 250-95 de NTC 2050) — verifica la tabla exacta según la corriente del dispositivo de protección del proyecto específico.',
   },
   {
     id: 'rebt-es',
@@ -59,7 +68,8 @@ export const NORMATIVE_PROFILES: NormativeProfile[] = [
     bodyResistanceOhm: 1000,
     bodyWeightKg: 70,
     touchVoltageMaxV: 50,
-    notes: 'El REBT no fija un valor único de resistencia: exige que la tensión de contacto no supere 50 V (locales secos) o 24 V (locales húmedos/conductores). Los valores 15 Ω (con pararrayos) y 37 Ω (sin pararrayos) son los prescriptivos de la ITC-BT-26 para viviendas; instalaciones mayores deben verificarse por tensión de contacto (R ≤ U/I_diferencial).',
+    minConductorMm2: 25,
+    notes: 'El REBT no fija un valor único de resistencia: exige que la tensión de contacto no supere 50 V (locales secos) o 24 V (locales húmedos/conductores). Los valores 15 Ω (con pararrayos) y 37 Ω (sin pararrayos) son los prescriptivos de la ITC-BT-26 para viviendas; instalaciones mayores deben verificarse por tensión de contacto (R ≤ U/I_diferencial). Sección mínima de conductor de tierra: 25 mm² de cobre enterrado (no protegido mecánicamente, expuesto a corrosión) — ITC-BT-18 §3.4; 16 mm² si cuenta con protección mecánica adicional.',
   },
   {
     id: 'nbr-br',
@@ -70,7 +80,7 @@ export const NORMATIVE_PROFILES: NormativeProfile[] = [
     rgGeneral: 5,
     bodyResistanceOhm: 1000,
     bodyWeightKg: 70,
-    notes: 'La NBR 15751 sigue una metodología equivalente a IEEE 80 (tensões de passo e toque admissíveis según resistividad superficial y tiempo de falla); no fija un techo universal de resistencia — se usan 1 Ω/5 Ω como referencia práctica habitual, igual que en el perfil IEEE por defecto.',
+    notes: 'La NBR 15751 sigue una metodología equivalente a IEEE 80 (tensões de passo e toque admissíveis según resistividad superficial y tiempo de falla); no fija un techo universal de resistencia — se usan 1 Ω/5 Ω como referencia práctica habitual, igual que en el perfil IEEE por defecto. No se fija aquí una sección mínima de conductor: la NBR 5410 prohíbe TN-C bajo 10 mm² de cobre, pero no se encontró una cifra específica y confiable para malla de subestación (NBR 15751) — verifica directamente contra NBR 15751/5410 para el proyecto específico en vez de asumir un valor.',
   },
 ];
 

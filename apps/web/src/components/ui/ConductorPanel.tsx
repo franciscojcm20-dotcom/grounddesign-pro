@@ -2,6 +2,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api, type ConductorResult, type ConductorEntry } from '@/lib/api';
 import { SectionLabel, ExpertItem, Th, TdMono } from './CalcShared';
+import { useNormativeProfile } from '@/context/NormativeProfileContext';
+import { applyMinConductorSection } from '@gdp/engines-math';
 
 function mm2ToDiamMm(mm2: number): number {
   return Math.sqrt((4 * mm2) / Math.PI);
@@ -11,9 +13,11 @@ function mm2ToDiamMm(mm2: number): number {
 export function ConductorPanel({ iFalla, tFalla, onChange }: {
   iFalla: number; tFalla: number; onChange: (diamMm: number, calibre: string) => void;
 }) {
+  const { profile } = useNormativeProfile();
   const [tempAmbiente, setTempAmbiente] = useState(40);
   const [tempMaxFusion, setTempMaxFusion] = useState(450);
   const [result, setResult] = useState<ConductorResult | null>(null);
+  const [bumpedByNorm, setBumpedByNorm] = useState(false);
   const [table, setTable] = useState<ConductorEntry[]>([]);
   const [manual, setManual] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -23,17 +27,22 @@ export function ConductorPanel({ iFalla, tFalla, onChange }: {
     if (iFalla <= 0 || tFalla <= 0) return;
     setLoading(true);
     try {
-      const [res, tbl] = await Promise.all([
+      const [rawRes, tbl] = await Promise.all([
         api.conductor.size({ iFalla, tFalla, tempAmbiente, tempMaxFusion, calibreSeleccionado }),
         table.length ? Promise.resolve({ table }) : api.conductor.table(),
       ]);
+      // El mínimo normativo de sección (mecánico/corrosión) es independiente del
+      // dimensionamiento térmico de Onderdonk — solo se aplica cuando el usuario
+      // no fijó manualmente un calibre (respeta su elección explícita).
+      const res = calibreSeleccionado ? rawRes : applyMinConductorSection(rawRes, profile.minConductorMm2);
+      setBumpedByNorm(!calibreSeleccionado && res.seleccionado.calibre !== rawRes.seleccionado.calibre);
       setResult(res);
       if (!table.length) setTable(tbl.table);
       onChange(mm2ToDiamMm(res.seleccionado.mm2), res.seleccionado.calibre);
     } catch { /* si falla, se mantiene el último resultado */ }
     finally { setLoading(false); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [iFalla, tFalla, tempAmbiente, tempMaxFusion]);
+  }, [iFalla, tFalla, tempAmbiente, tempMaxFusion, profile.minConductorMm2]);
 
   useEffect(() => { calculate(manual || undefined); }, [iFalla, tFalla]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -80,6 +89,12 @@ export function ConductorPanel({ iFalla, tFalla, onChange }: {
           {result.calibreSubdimensionado && (
             <ExpertItem type="warn">
               Calibre rechazado: {result.calibreSubdimensionado.calibre} ({result.calibreSubdimensionado.mm2} mm²) es inferior al mínimo de {result.areaMm2.toFixed(1)} mm². Se usa {result.sugerido.calibre}.
+            </ExpertItem>
+          )}
+
+          {bumpedByNorm && profile.minConductorMm2 && (
+            <ExpertItem type="info">
+              Calibre ajustado a {result.seleccionado.calibre} ({result.seleccionado.mm2} mm²) — el resultado térmico de Onderdonk exigía menos, pero {profile.label} fija una sección mínima de {profile.minConductorMm2} mm² para el conductor de puesta a tierra.
             </ExpertItem>
           )}
 

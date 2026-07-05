@@ -733,6 +733,22 @@ export function computeConductor(c: ConductorInput): ConductorResult {
   return { ...r, sugerido, seleccionado, esSeleccionManual, calibreSubdimensionado, margen };
 }
 
+/**
+ * Aplica la sección mínima de conductor exigida por un perfil normativo (si la
+ * define) sobre un resultado ya calculado por Onderdonk. El dimensionamiento
+ * térmico y la exigencia normativa de sección mínima son criterios
+ * independientes — se adopta el mayor de los dos. No sobrescribe una
+ * selección manual del usuario que ya cumpla ambos criterios.
+ */
+export function applyMinConductorSection<
+  T extends { areaMm2: number; seleccionado: ConductorEntry; esSeleccionManual: boolean; margen: number },
+>(result: T, minMm2?: number): T {
+  if (!minMm2 || result.seleccionado.mm2 >= minMm2) return result;
+  const bumped = CONDUCTOR_TABLE.find(e => e.mm2 >= minMm2) ?? CONDUCTOR_TABLE[CONDUCTOR_TABLE.length - 1]!;
+  const margen = ((bumped.mm2 - result.areaMm2) / result.areaMm2) * 100;
+  return { ...result, seleccionado: bumped, esSeleccionManual: false, margen };
+}
+
 // ─── TOPOLOGÍAS ADICIONALES DE ELECTRODOS (IEEE 80-2013 Annex B) ─────────────
 
 export interface MultipleRodsInput {

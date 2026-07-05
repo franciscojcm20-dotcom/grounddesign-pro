@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useNormativeProfile } from '@/context/NormativeProfileContext';
+import { useI18n } from '@/context/I18nContext';
 import { inputStyle } from './CalcShared';
 
 /**
@@ -11,15 +12,16 @@ import { inputStyle } from './CalcShared';
  */
 export function NormativeProfileSelector() {
   const { profile, profileId, setProfileId, profiles } = useNormativeProfile();
+  const { t } = useI18n();
   const [showInfo, setShowInfo] = useState(false);
 
   return (
     <div style={{ marginBottom: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--dim)', marginBottom: 4 }}>
-        <span>Perfil normativo</span>
+        <span>{t('normativeProfile')}</span>
         <button type="button" onClick={() => setShowInfo(s => !s)} style={{
           background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', fontSize: 10, padding: 0,
-        }}>{showInfo ? '▾' : '▸'} referencia</button>
+        }}>{showInfo ? '▾' : '▸'} {t('normativeProfileReference')}</button>
       </div>
       <select
         style={inputStyle}
@@ -34,7 +36,7 @@ export function NormativeProfileSelector() {
           borderRadius: 3, fontSize: 8.5, color: 'var(--faint)', lineHeight: 1.5,
         }}>
           <div style={{ color: 'var(--dim)', marginBottom: 2 }}>{profile.standard}</div>
-          <div>Rg crítico ≤ {profile.rgCritical} Ω · Rg general ≤ {profile.rgGeneral} Ω{profile.touchVoltageMaxV ? ` · Ucontacto ≤ ${profile.touchVoltageMaxV} V` : ''}</div>
+          <div>Rg {t('rgCriticalWord')} ≤ {profile.rgCritical} Ω · Rg {t('rgGeneralWord')} ≤ {profile.rgGeneral} Ω{profile.touchVoltageMaxV ? ` · U${t('touchVoltageWord')} ≤ ${profile.touchVoltageMaxV} V` : ''}</div>
           <div style={{ marginTop: 4 }}>{profile.notes}</div>
         </div>
       )}

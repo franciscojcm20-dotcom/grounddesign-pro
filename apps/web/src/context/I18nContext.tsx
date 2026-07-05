@@ -53,6 +53,8 @@ const DICT = {
     attachPdf: 'Adjuntar PDF en email', attachPdfDesc: 'Incluye el PDF del reporte en el correo',
     deliverablesSubtitle: 'Tres entregables profesionales independientes del sistema de puesta a tierra diseñado: informe técnico consolidado, valorización económica y plano DXF.',
     tabConsolidated: 'Informe Consolidado', tabValorization: 'Cubicación y Valorización', tabDxf: 'Plano DXF (AutoCAD)',
+    normativeProfile: 'Perfil normativo', normativeProfileReference: 'referencia',
+    rgCriticalWord: 'crítico', rgGeneralWord: 'general', touchVoltageWord: 'contacto',
   },
   en: {
     dashboard: 'Dashboard', projects: 'Projects', pricing: 'Pricing', profile: 'My profile',
@@ -91,6 +93,8 @@ const DICT = {
     attachPdf: 'Attach PDF in email', attachPdfDesc: 'Include the report PDF in the email',
     deliverablesSubtitle: 'Three independent professional deliverables for the designed grounding system: consolidated technical report, economic valuation, and DXF drawing.',
     tabConsolidated: 'Consolidated Report', tabValorization: 'Quantity Takeoff & Valuation', tabDxf: 'DXF Drawing (AutoCAD)',
+    normativeProfile: 'Normative profile', normativeProfileReference: 'reference',
+    rgCriticalWord: 'critical', rgGeneralWord: 'general', touchVoltageWord: 'contact',
   },
   pt: {
     dashboard: 'Painel de controle', projects: 'Projetos', pricing: 'Preços', profile: 'Meu perfil',
@@ -129,6 +133,8 @@ const DICT = {
     attachPdf: 'Anexar PDF no email', attachPdfDesc: 'Inclui o PDF do relatório no email',
     deliverablesSubtitle: 'Três entregáveis profissionais independentes do sistema de aterramento projetado: relatório técnico consolidado, valorização econômica e desenho DXF.',
     tabConsolidated: 'Relatório Consolidado', tabValorization: 'Quantitativo e Valorização', tabDxf: 'Desenho DXF (AutoCAD)',
+    normativeProfile: 'Perfil normativo', normativeProfileReference: 'referência',
+    rgCriticalWord: 'crítico', rgGeneralWord: 'geral', touchVoltageWord: 'contato',
   },
   fr: {
     dashboard: 'Tableau de bord', projects: 'Projets', pricing: 'Tarifs', profile: 'Mon profil',
@@ -167,6 +173,8 @@ const DICT = {
     attachPdf: "Joindre le PDF à l'email", attachPdfDesc: "Inclut le PDF du rapport dans l'email",
     deliverablesSubtitle: 'Trois livrables professionnels indépendants du système de mise à la terre conçu : rapport technique consolidé, valorisation économique et plan DXF.',
     tabConsolidated: 'Rapport Consolidé', tabValorization: 'Métré et Valorisation', tabDxf: 'Plan DXF (AutoCAD)',
+    normativeProfile: 'Profil normatif', normativeProfileReference: 'référence',
+    rgCriticalWord: 'critique', rgGeneralWord: 'général', touchVoltageWord: 'contact',
   },
   de: {
     dashboard: 'Übersicht', projects: 'Projekte', pricing: 'Preise', profile: 'Mein Profil',
@@ -205,6 +213,8 @@ const DICT = {
     attachPdf: 'PDF an E-Mail anhängen', attachPdfDesc: 'Fügt das Bericht-PDF der E-Mail bei',
     deliverablesSubtitle: 'Drei unabhängige professionelle Ergebnisse des entworfenen Erdungssystems: konsolidierter technischer Bericht, wirtschaftliche Bewertung und DXF-Zeichnung.',
     tabConsolidated: 'Konsolidierter Bericht', tabValorization: 'Mengenermittlung & Bewertung', tabDxf: 'DXF-Zeichnung (AutoCAD)',
+    normativeProfile: 'Normprofil', normativeProfileReference: 'Referenz',
+    rgCriticalWord: 'kritisch', rgGeneralWord: 'allgemein', touchVoltageWord: 'Berührung',
   },
   it: {
     dashboard: 'Pannello di controllo', projects: 'Progetti', pricing: 'Prezzi', profile: 'Il mio profilo',
@@ -243,6 +253,8 @@ const DICT = {
     attachPdf: 'Allega PDF via email', attachPdfDesc: "Include il PDF del rapporto nell'email",
     deliverablesSubtitle: 'Tre deliverable professionali indipendenti del sistema di messa a terra progettato: relazione tecnica consolidata, valorizzazione economica e disegno DXF.',
     tabConsolidated: 'Relazione Consolidata', tabValorization: 'Computo Metrico e Valorizzazione', tabDxf: 'Disegno DXF (AutoCAD)',
+    normativeProfile: 'Profilo normativo', normativeProfileReference: 'riferimento',
+    rgCriticalWord: 'critico', rgGeneralWord: 'generale', touchVoltageWord: 'contatto',
   },
   ja: {
     dashboard: 'ダッシュボード', projects: 'プロジェクト', pricing: '料金プラン', profile: 'マイプロフィール',
@@ -281,6 +293,8 @@ const DICT = {
     attachPdf: 'メールにPDFを添付', attachPdfDesc: 'メールにレポートのPDFを含める',
     deliverablesSubtitle: '設計した接地システムの独立した3つの専門的な成果物：統合技術報告書、経済的な原価評価、DXF図面。',
     tabConsolidated: '統合報告書', tabValorization: '数量積算と原価評価', tabDxf: 'DXF図面（AutoCAD）',
+    normativeProfile: '規格プロファイル', normativeProfileReference: '参照',
+    rgCriticalWord: '重要', rgGeneralWord: '一般', touchVoltageWord: '接触',
   },
   zh: {
     dashboard: '仪表盘', projects: '项目', pricing: '价格方案', profile: '我的资料',
@@ -319,6 +333,8 @@ const DICT = {
     attachPdf: '在邮件中附加PDF', attachPdfDesc: '在邮件中包含报告PDF',
     deliverablesSubtitle: '所设计接地系统的三个独立专业交付物：综合技术报告、经济价值评估和DXF图纸。',
     tabConsolidated: '综合报告', tabValorization: '工程量清单与估价', tabDxf: 'DXF图纸（AutoCAD）',
+    normativeProfile: '规范配置', normativeProfileReference: '参考',
+    rgCriticalWord: '关键', rgGeneralWord: '通用', touchVoltageWord: '接触',
   },
 } as const;
 
