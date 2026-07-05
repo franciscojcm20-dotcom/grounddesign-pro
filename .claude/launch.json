@@ -9,13 +9,6 @@
       "port": 3000
     },
     {
-      "name": "strike-web",
-      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
-      "runtimeArgs": ["node_modules/next/dist/bin/next", "dev", "-p", "3005", "-H", "127.0.0.1"],
-      "cwd": "apps/strike-web-proxy",
-      "port": 3005
-    },
-    {
       "name": "api",
       "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
       "runtimeArgs": ["--watch", "--experimental-strip-types", "src/server.ts"],
