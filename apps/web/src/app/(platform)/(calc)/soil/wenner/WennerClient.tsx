@@ -1,90 +1,90 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { api, type WennerResult } from '@/lib/api';
 import { ExportBar } from '@/components/ui/ExportBar';
 import { ChartRho } from '@/components/ui/ChartRho';
 import {
   SectionLabel, StatCard, CompBanner, ExpertItem, FundBtn,
-  calcLayout, inputStyle, panelStyle, Th, TdMono,
+  calcLayout, panelStyle, Th, TdMono,
 } from '@/components/ui/CalcShared';
-
-const DEFAULT_READINGS = [
-  { a:  1,   r: 196.99 },
-  { a:  1.5, r: 133.27 },
-  { a:  2,   r: 101.37 },
-  { a:  3,   r:  69.34 },
-  { a:  4,   r:  53.18 },
-  { a:  6,   r:  36.72 },
-  { a:  8,   r:  28.22 },
-  { a: 12,   r:  19.36 },
-  { a: 16,   r:  14.74 },
-  { a: 24,   r:   9.96 },
-];
-
-type Row = { a: string; r: string };
+import { useSoilModel } from '@/context/SoilModelContext';
 
 export function WennerClient() {
-  const [rows, setRows]     = useState<Row[]>(DEFAULT_READINGS.map(v => ({ a: String(v.a), r: String(v.r) })));
+  const soilModel = useSoilModel();
+  const readings = soilModel.wennerReadings;
+
   const [result, setResult] = useState<WennerResult | null>(null);
-  const [error, setError]   = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showFund, setShowFund] = useState(false);
 
-  function updateRow(i: number, field: 'a' | 'r', val: string) {
-    setRows(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r));
-  }
-  function addRow()       { setRows(prev => [...prev, { a: '', r: '' }]); }
-  function removeRow(i: number) { setRows(prev => prev.filter((_, idx) => idx !== i)); }
-
   async function calculate() {
-    const readings = rows.map(r => ({ a: Number(r.a), r: Number(r.r) })).filter(r => r.a > 0 && r.r > 0);
-    if (readings.length < 2) { setError('Se necesitan al menos 2 lecturas válidas.'); return; }
+    if (readings.length < 2) { setError('Se necesitan al menos 2 lecturas válidas. Agrégalas en Mediciones de Campo.'); return; }
     setLoading(true); setError(null);
     try {
-      setResult(await api.soil.wenner(readings));
+      const res = await api.soil.wenner(readings);
+      setResult(res);
+      soilModel.setFromWenner(res.twoLayer);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error de conexión con la API');
     } finally { setLoading(false); }
   }
+
+  // Calcula automáticamente si ya hay lecturas guardadas desde Mediciones de Campo.
+  useEffect(() => {
+    if (readings.length >= 2 && !result) { calculate(); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readings]);
 
   return (
     <div style={calcLayout}>
       {/* INPUTS */}
       <aside style={{ borderRight: '1px solid var(--line)', overflowY: 'auto', background: 'var(--panel)', padding: '18px 16px 40px' }}>
         <h2 style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Resistividad — Wenner</h2>
-        <p style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 18, lineHeight: 1.5 }}>
+        <p style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 6, lineHeight: 1.5 }}>
           ρa = 2πaR · IEEE Std 81-2012, Cl. 8.3
         </p>
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 8.5,
+          color: 'var(--blue)', background: 'var(--blue-soft)', border: '1px solid var(--blue)',
+          borderRadius: 10, padding: '2px 8px', marginBottom: 14, fontFamily: 'var(--font-mono)',
+        }}>
+          ✓ Método de validación — contrastar contra Schlumberger para confirmar el modelo de suelo
+        </div>
+
+        <div style={{
+          fontSize: 9, color: 'var(--dim)', background: 'var(--panel3)', border: '1px solid var(--line)',
+          borderRadius: 4, padding: '7px 9px', marginBottom: 14, lineHeight: 1.5,
+        }}>
+          🔒 Las lecturas se editan únicamente en{' '}
+          <Link href="/soil/field" style={{ color: 'var(--copper)' }}>Mediciones de Campo</Link>. Esta vista es de solo cálculo/consulta.
+        </div>
 
         <SectionLabel>Lecturas de campo (a, R)</SectionLabel>
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 8 }}>
-          <thead>
-            <tr><Th>a (m)</Th><Th>R (Ω)</Th><Th></Th></tr>
-          </thead>
-          <tbody>
-            {rows.map((row, i) => (
-              <tr key={i}>
-                <td style={{ padding: '2px 3px' }}>
-                  <input value={row.a} onChange={e => updateRow(i, 'a', e.target.value)} style={inputStyle} placeholder="0" />
-                </td>
-                <td style={{ padding: '2px 3px' }}>
-                  <input value={row.r} onChange={e => updateRow(i, 'r', e.target.value)} style={inputStyle} placeholder="0" />
-                </td>
-                <td style={{ padding: '2px 3px' }}>
-                  <button onClick={() => removeRow(i)} style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: 12 }}>×</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <button onClick={addRow} style={{ width: '100%', background: 'none', border: '1px dashed var(--line)', color: 'var(--dim)', fontFamily: 'var(--font-mono)', fontSize: 10, padding: 6, borderRadius: 3, cursor: 'pointer', marginBottom: 20 }}>
-          + Agregar lectura
-        </button>
+        {readings.length === 0 ? (
+          <div style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 14, lineHeight: 1.5 }}>
+            Sin lecturas todavía. Ve a{' '}
+            <Link href="/soil/field" style={{ color: 'var(--copper)' }}>Mediciones de Campo</Link> para registrarlas.
+          </div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 14 }}>
+            <thead><tr><Th>a (m)</Th><Th>R (Ω)</Th></tr></thead>
+            <tbody>
+              {readings.map((row, i) => (
+                <tr key={i}>
+                  <TdMono>{row.a}</TdMono>
+                  <TdMono>{row.r}</TdMono>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
 
-        <button onClick={calculate} disabled={loading} style={{ width: '100%', background: 'var(--copper)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 11, padding: 10, borderRadius: 3, cursor: 'pointer', opacity: loading ? 0.6 : 1 }}>
+        <button onClick={calculate} disabled={loading || readings.length < 2} style={{ width: '100%', background: 'var(--copper)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 11, padding: 10, borderRadius: 3, cursor: 'pointer', opacity: (loading || readings.length < 2) ? 0.6 : 1 }}>
           {loading ? 'Calculando…' : 'Calcular'}
         </button>
-        {error && <div style={{ marginTop: 12, padding: '8px 10px', background: '#1a0d0d', border: '1px solid #ef444444', borderRadius: 3, fontSize: 10, color: 'var(--danger)' }}>{error}</div>}
+        {error && <div style={{ marginTop: 12, padding: '8px 10px', background: 'var(--danger-soft)', border: '1px solid var(--danger)', borderRadius: 3, fontSize: 10, color: 'var(--danger)' }}>{error}</div>}
       </aside>
 
       {/* RESULTS */}
@@ -92,7 +92,9 @@ export function WennerClient() {
         {!result ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12 }}>
             <div style={{ fontSize: 32 }}>⚡</div>
-            <div style={{ color: 'var(--faint)', fontSize: 11 }}>Ingresa las lecturas y presiona Calcular</div>
+            <div style={{ color: 'var(--faint)', fontSize: 11 }}>
+              {readings.length < 2 ? 'Registra lecturas en Mediciones de Campo primero.' : 'Presiona Calcular.'}
+            </div>
           </div>
         ) : (
           <>
@@ -125,6 +127,14 @@ export function WennerClient() {
             {result.rhoAvg > 1000 && (
               <ExpertItem type="warn">
                 ρ = {result.rhoAvg.toFixed(0)} Ω·m — suelo de alta resistividad. Evaluar aditivo gel o reducir malla al mínimo normativo.
+              </ExpertItem>
+            )}
+            {soilModel.model?.source === 'schlumberger' && soilModel.model.validatedBy && (
+              <ExpertItem type={soilModel.model.validatedBy.deltaPct > 15 ? 'warn' : 'ok'}>
+                Validación vs. Schlumberger (método principal): diferencia de {soilModel.model.validatedBy.deltaPct.toFixed(1)}% en ρ equivalente.
+                {soilModel.model.validatedBy.deltaPct > 15
+                  ? ' Diferencia significativa — revisar orientación/ubicación de las mediciones.'
+                  : ' Dentro del rango esperado de concordancia entre métodos.'}
               </ExpertItem>
             )}
 

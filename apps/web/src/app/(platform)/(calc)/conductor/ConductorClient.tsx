@@ -4,12 +4,13 @@ import { api, type ConductorResult, type ConductorEntry } from '@/lib/api';
 import { Field, SectionLabel, StatCard, CompBanner, ExpertItem, FundBtn, calcLayout, inputStyle, panelStyle } from '@/components/ui/CalcShared';
 import { ExportBar } from '@/components/ui/ExportBar';
 import { useI18n } from '@/context/I18nContext';
+import { usePersistedState } from '@/lib/usePersistedState';
 
 const DEFAULTS = { iFalla: 8500, tFalla: 0.5, tempAmbiente: 40, tempMaxFusion: 450 };
 
 export function ConductorClient() {
   const { t } = useI18n();
-  const [form, setForm] = useState({ ...DEFAULTS, calibreSeleccionado: '' });
+  const [form, setForm] = usePersistedState('gdp-form-conductor', { ...DEFAULTS, calibreSeleccionado: '' });
   const [result, setResult] = useState<ConductorResult | null>(null);
   const [table, setTable]   = useState<ConductorEntry[]>([]);
   const [error, setError]   = useState<string | null>(null);
@@ -76,7 +77,7 @@ export function ConductorClient() {
           color: '#fff', fontWeight: 700, fontSize: 11, padding: 10,
           borderRadius: 3, cursor: 'pointer', opacity: loading ? 0.6 : 1, marginTop: 8,
         }}>{loading ? t('calculating') : t('calculate')}</button>
-        {error && <div style={{ marginTop: 10, padding: '8px 10px', background: '#1a0d0d', border: '1px solid #ef444433', borderRadius: 3, fontSize: 10, color: 'var(--danger)' }}>{error}</div>}
+        {error && <div style={{ marginTop: 10, padding: '8px 10px', background: 'var(--danger-soft)', border: '1px solid var(--danger)', borderRadius: 3, fontSize: 10, color: 'var(--danger)' }}>{error}</div>}
       </aside>
 
       {/* RESULTS */}
@@ -126,11 +127,11 @@ export function ConductorClient() {
                       const tooSmall  = row.mm2 < result.areaMm2;
                       return (
                         <tr key={row.calibre} style={{ background: isSel ? 'var(--copper-soft)' : 'transparent' }}>
-                          <td style={{ padding: '5px 8px', borderBottom: '1px solid #1e2230', fontFamily: 'var(--font-mono)', color: isSel ? 'var(--copper)' : 'var(--text)', fontWeight: isSel ? 700 : 400 }}>
+                          <td style={{ padding: '5px 8px', borderBottom: '1px solid var(--line)', fontFamily: 'var(--font-mono)', color: isSel ? 'var(--copper)' : 'var(--text)', fontWeight: isSel ? 700 : 400 }}>
                             {row.calibre} {isSel && '← seleccionado'}
                           </td>
-                          <td style={{ padding: '5px 8px', borderBottom: '1px solid #1e2230', fontFamily: 'var(--font-mono)', color: 'var(--dim)' }}>{row.mm2}</td>
-                          <td style={{ padding: '5px 8px', borderBottom: '1px solid #1e2230', fontSize: 10 }}>
+                          <td style={{ padding: '5px 8px', borderBottom: '1px solid var(--line)', fontFamily: 'var(--font-mono)', color: 'var(--dim)' }}>{row.mm2}</td>
+                          <td style={{ padding: '5px 8px', borderBottom: '1px solid var(--line)', fontSize: 10 }}>
                             {tooSmall
                               ? <span style={{ color: 'var(--danger)' }}>✗ subdimensionado</span>
                               : isSuggest

@@ -2,8 +2,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useToast } from '@/context/ToastContext';
-
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+import { API_BASE as BASE } from '@/lib/apiBase';
 
 export function ForgotPasswordClient() {
   const [email, setEmail]     = useState('');

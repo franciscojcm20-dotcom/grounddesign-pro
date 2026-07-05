@@ -2,8 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { AuthGuard } from '@/components/ui/AuthGuard';
-
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+import { API_BASE as BASE } from '@/lib/apiBase';
 
 interface AdminStats {
   summary: { users: number; projects: number; calcs: number };
@@ -149,9 +148,9 @@ function AdminContent() {
             <tbody>
               {stats.recentUsers.map(u => (
                 <tr key={u.id}>
-                  <td style={{ padding: '7px 10px', borderBottom: '1px solid #1e2230', fontSize: 11, color: 'var(--text)' }}>{u.name}</td>
-                  <td style={{ padding: '7px 10px', borderBottom: '1px solid #1e2230', fontSize: 10, color: 'var(--dim)', fontFamily: 'var(--font-mono)' }}>{u.email}</td>
-                  <td style={{ padding: '7px 10px', borderBottom: '1px solid #1e2230' }}>
+                  <td style={{ padding: '7px 10px', borderBottom: '1px solid var(--line)', fontSize: 11, color: 'var(--text)' }}>{u.name}</td>
+                  <td style={{ padding: '7px 10px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--dim)', fontFamily: 'var(--font-mono)' }}>{u.email}</td>
+                  <td style={{ padding: '7px 10px', borderBottom: '1px solid var(--line)' }}>
                     <span style={{
                       fontSize: 8.5, padding: '2px 7px', borderRadius: 8,
                       color: PLAN_COLOR[u.plan] ?? 'var(--dim)',
@@ -160,7 +159,7 @@ function AdminContent() {
                       textTransform: 'capitalize',
                     }}>{u.plan}</span>
                   </td>
-                  <td style={{ padding: '7px 10px', borderBottom: '1px solid #1e2230', fontSize: 10, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>
+                  <td style={{ padding: '7px 10px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>
                     {new Date(u.created_at).toLocaleDateString('es-CL')}
                   </td>
                 </tr>

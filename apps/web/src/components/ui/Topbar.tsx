@@ -4,11 +4,12 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
+import { ThemeToggle } from './ThemeToggle';
 
 const PLAN_COLOR: Record<string, { bg: string; border: string; text: string }> = {
-  community:    { bg: '#0d1220', border: '#3b82f633', text: '#93c5fd' },
-  individual:   { bg: '#1a1508', border: '#f59e0b33', text: 'var(--warn)' },
-  professional: { bg: '#1e2a1e', border: '#22c55e44', text: 'var(--safe)' },
+  community:    { bg: 'var(--blue-soft)',   border: 'var(--blue-soft)',   text: 'var(--blue)' },
+  individual:   { bg: 'var(--warn-soft)',   border: 'var(--warn-soft)',   text: 'var(--warn)' },
+  professional: { bg: 'var(--safe-soft)',   border: 'var(--safe-soft)',   text: 'var(--safe)' },
 };
 
 export function Topbar() {
@@ -47,7 +48,7 @@ export function Topbar() {
     <header style={{
       display: 'flex', alignItems: 'center', height: 44,
       padding: '0 16px', borderBottom: '1px solid var(--line)',
-      background: 'linear-gradient(180deg,#141820,#0f1117)',
+      background: 'var(--panel)',
       gap: 12, flexShrink: 0, position: 'sticky', top: 0, zIndex: 200,
     }}>
       {/* Logo */}
@@ -80,6 +81,9 @@ export function Topbar() {
 
       {/* Spacer */}
       <div style={{ marginLeft: 'auto' }} />
+
+      {/* Theme toggle */}
+      <ThemeToggle />
 
       {/* Command palette trigger */}
       <button
@@ -130,7 +134,7 @@ export function Topbar() {
               position: 'absolute', top: 'calc(100% + 6px)', right: 0,
               background: 'var(--panel)', border: '1px solid var(--line)',
               borderRadius: 4, minWidth: 200, padding: '6px 0',
-              boxShadow: '0 8px 24px #00000044', zIndex: 300,
+              boxShadow: 'var(--shadow)', zIndex: 300,
             }}>
               {/* User info header */}
               <div style={{ padding: '8px 14px 10px', borderBottom: '1px solid var(--line)', marginBottom: 4 }}>

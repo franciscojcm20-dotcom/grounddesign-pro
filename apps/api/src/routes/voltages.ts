@@ -5,7 +5,12 @@ import {
   permissibleStep,
   meshVoltage,
   stepVoltageReal,
+  optimizeVoltages,
+  type VoltagesOptimizeInput,
 } from '@gdp/engines-math';
+import { getActionOrder, recordOutcomes, stepsToOutcomes } from '../learning/bandit.ts';
+
+const ORDER_VOLTAGES = ['improve_surface_rho', 'thicken_surface', 'extend_ltotal', 'increase_depth', 'increase_spacing'];
 
 export async function routesVoltages(app: FastifyInstance): Promise<void> {
 
@@ -80,5 +85,15 @@ export async function routesVoltages(app: FastifyInstance): Promise<void> {
       compliance,
       norm: 'IEEE Std 80-2013 Cl. 16.5',
     };
+  });
+
+  // POST /api/v1/voltages/optimize
+  app.post<{ Body: VoltagesOptimizeInput }>('/optimize', async (req, reply) => {
+    const p = req.body;
+    if (p.Ltotal <= 0 || p.D <= 0 || p.h <= 0) return reply.code(400).send({ error: 'Parámetros inválidos' });
+    const order = await getActionOrder('voltages', ORDER_VOLTAGES);
+    const optimization = optimizeVoltages(p, order);
+    await recordOutcomes('voltages', stepsToOutcomes(optimization.steps, optimization.initialRatio));
+    return { ...optimization, norm: 'IEEE Std 80-2013 Cl. 16.5 — motor de optimización propio (aprendizaje adaptativo activo)' };
   });
 }

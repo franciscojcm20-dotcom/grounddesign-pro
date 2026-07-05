@@ -73,7 +73,7 @@ export function RegisterClient() {
         </div>
 
         {error && (
-          <div style={{ padding: '8px 10px', background: '#1a0d0d', border: '1px solid #ef444444', borderRadius: 3, fontSize: 10, color: 'var(--danger)', marginBottom: 14 }}>
+          <div style={{ padding: '8px 10px', background: 'var(--danger-soft)', border: '1px solid var(--danger)', borderRadius: 3, fontSize: 10, color: 'var(--danger)', marginBottom: 14 }}>
             {error}
           </div>
         )}

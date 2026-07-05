@@ -2,40 +2,44 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-
-const MODULES = [
-  { group: 'Suelo',  items: [
-    { label: 'Wenner',       href: '/soil/wenner',       icon: '〰' },
-    { label: 'Schlumberger', href: '/soil/schlumberger', icon: '📡' },
-    { label: 'N Capas',      href: '/soil/nlayer',       icon: '🌍' },
-  ]},
-  { group: 'Malla',  items: [
-    { label: 'Rectangular',  href: '/grid/resistance',   icon: '⬡' },
-    { label: 'Picas (N)',    href: '/grid/rod',          icon: '⬇' },
-    { label: 'Horizontal',   href: '/grid/strip',        icon: '─' },
-    { label: 'Radial ★',    href: '/grid/radial',       icon: '✦' },
-    { label: 'Anillo',       href: '/grid/ring',         icon: '◯' },
-    { label: 'Malla+Picas',  href: '/grid/combined',     icon: '⊞' },
-    { label: 'Gel Químico',  href: '/grid/gel',          icon: '🧪' },
-  ]},
-  { group: 'Sistema', items: [
-    { label: 'Conductor',    href: '/conductor',         icon: '〰' },
-    { label: 'Tensiones',    href: '/voltages',          icon: '⚠' },
-    { label: 'GPR',          href: '/gpr',               icon: '⏚' },
-    { label: 'Rayos (SPR)',  href: '/lightning',         icon: '⚡' },
-  ]},
-];
+import { useI18n } from '@/context/I18nContext';
 
 export function ModulesSidebar() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const { t } = useI18n();
+
+  const MODULES = [
+    { group: t('groupSoilMeasurement'), items: [
+      { label: t('moduleFieldMeasurements'), href: '/soil/field',        icon: '🌐' },
+      { label: 'Schlumberger',               href: '/soil/schlumberger', icon: '📡' },
+      { label: 'Wenner',                     href: '/soil/wenner',       icon: '〰' },
+      { label: t('moduleNLayer'),            href: '/soil/nlayer',       icon: '🌍' },
+    ]},
+    { group: t('groupFaultAnalysis'), items: [
+      { label: t('moduleFaultAnalysis'), href: '/fault-analysis', icon: '⚡' },
+    ]},
+    { group: t('groupGridDesign'), items: [
+      { label: t('moduleGridRectangular'), href: '/grid/resistance',   icon: '⬡' },
+      { label: t('moduleGridRod'),         href: '/grid/rod',          icon: '⬇' },
+      { label: t('moduleGridStrip'),       href: '/grid/strip',        icon: '─' },
+      { label: t('moduleGridRadial'),      href: '/grid/radial',       icon: '✦' },
+      { label: t('moduleGridRing'),        href: '/grid/ring',         icon: '◯' },
+      { label: t('moduleGridCombined'),    href: '/grid/combined',     icon: '⊞' },
+    ]},
+    { group: t('groupVerification'), items: [
+      { label: t('moduleVoltages'), href: '/voltages', icon: '⚠' },
+      { label: 'GPR',                href: '/gpr',      icon: '⏚' },
+      { label: t('moduleReport'),    href: '/report',   icon: '📋' },
+    ]},
+  ];
 
   return (
     <>
       {/* Toggle tab — sticks to right edge */}
       <button
         onClick={() => setOpen(o => !o)}
-        title="Módulos de cálculo"
+        title={t('calcModulesTooltip')}
         style={{
           position: 'fixed', right: open ? 180 : 0, top: '50%', transform: 'translateY(-50%)',
           zIndex: 400, background: 'var(--panel)', border: '1px solid var(--line)',
@@ -48,7 +52,7 @@ export function ModulesSidebar() {
       >
         <span style={{ fontSize: 14, lineHeight: 1 }}>⚡</span>
         <span style={{ fontSize: 7, color: 'var(--faint)', writingMode: 'vertical-rl', textOrientation: 'mixed', letterSpacing: '.05em' }}>
-          {open ? 'cerrar' : 'módulos'}
+          {open ? t('closeWord') : t('modulesWord')}
         </span>
       </button>
 
@@ -57,10 +61,10 @@ export function ModulesSidebar() {
         position: 'fixed', right: open ? 0 : -180, top: 44, bottom: 0,
         width: 180, background: 'var(--panel)', borderLeft: '1px solid var(--line)',
         zIndex: 399, overflowY: 'auto', padding: '12px 0 40px',
-        transition: 'right .2s', boxShadow: open ? '-4px 0 16px #00000033' : 'none',
+        transition: 'right .2s', boxShadow: open ? 'var(--shadow)' : 'none',
       }}>
         <div style={{ padding: '4px 14px 8px', fontSize: 8.5, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.1em', fontFamily: 'var(--font-mono)' }}>
-          Módulos
+          {t('calcModulesTitle')}
         </div>
         {MODULES.map(g => (
           <div key={g.group} style={{ marginBottom: 10 }}>

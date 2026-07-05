@@ -5,8 +5,9 @@ import {
   Field, calcLayout, inputStyle, panelStyle, Th, TdMono,
 } from '@/components/ui/CalcShared';
 import { ExportBar } from '@/components/ui/ExportBar';
-
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+import { SoilRhoField } from '@/components/ui/SoilRhoField';
+import { API_BASE as BASE } from '@/lib/apiBase';
+import { usePersistedState } from '@/lib/usePersistedState';
 
 function GelSensitivity({ result, rhoGel, radioVarilla, longVarilla, currentR2 }: {
   result: GelResult; rhoGel: number; radioVarilla: number; longVarilla: number; currentR2: number;
@@ -55,6 +56,38 @@ function GelSensitivity({ result, rhoGel, radioVarilla, longVarilla, currentR2 }
   );
 }
 
+function GelCrossSection({ radioVarilla, radioConGel, longVarilla }: {
+  radioVarilla: number; radioConGel: number; longVarilla: number;
+}) {
+  const W = 460, H = 150;
+  const cx = 110, cy = H / 2;
+  const scale = Math.min(70 / radioConGel, 900);
+  const rOuter = Math.max(radioConGel * scale, 30);
+  const rInner = Math.max(radioVarilla * scale, 4);
+
+  const px = 300, py1 = 30, py2 = H - 20;
+  const scaleV = (py2 - py1) / Math.max(longVarilla, 1);
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: H, display: 'block' }}>
+      <text x={cx} y={16} textAnchor="middle" fontSize={8} fill="var(--faint)" fontFamily="var(--font-mono)">Corte transversal</text>
+      <circle cx={cx} cy={cy} r={rOuter} fill="var(--safe-soft)" stroke="var(--safe)" strokeWidth="1.2" strokeDasharray="4 2" />
+      <circle cx={cx} cy={cy} r={rInner} fill="var(--copper)" stroke="var(--bg)" strokeWidth="1" />
+      <line x1={cx} y1={cy} x2={cx + rOuter} y2={cy} stroke="var(--faint)" strokeWidth="0.7" strokeDasharray="2 2" />
+      <text x={cx + rOuter / 2} y={cy - 5} textAnchor="middle" fontSize={7} fill="var(--safe)">r₂={radioConGel.toFixed(3)}m</text>
+      <line x1={cx} y1={cy} x2={cx + rInner} y2={cy + 12} stroke="var(--faint)" strokeWidth="0.7" strokeDasharray="2 2" />
+      <text x={cx + rInner + 4} y={cy + 20} fontSize={7} fill="var(--copper)">r₁={radioVarilla.toFixed(4)}m</text>
+
+      <text x={px + 25} y={16} textAnchor="middle" fontSize={8} fill="var(--faint)" fontFamily="var(--font-mono)">Perfil vertical</text>
+      <line x1={px} y1={py1 - 8} x2={px + 60} y2={py1 - 8} stroke="var(--dim)" strokeWidth="1" strokeDasharray="3 2" opacity={0.6} />
+      <text x={px + 62} y={py1 - 5} fontSize={7} fill="var(--faint)">nivel de suelo</text>
+      <rect x={px + 20} y={py1} width={10} height={longVarilla * scaleV} fill="var(--safe-soft)" stroke="var(--safe)" strokeWidth="1" strokeDasharray="3 2" />
+      <rect x={px + 23} y={py1} width={4} height={longVarilla * scaleV} fill="var(--copper)" />
+      <text x={px + 40} y={py1 + longVarilla * scaleV / 2} fontSize={7} fill="var(--faint)">L={longVarilla}m</text>
+    </svg>
+  );
+}
+
 interface GelResult {
   Rsin: number; Rfunda: number; Rsuelo: number; Rtotal: number;
   rhoEff: number; mejoraPct: number; rhoSuelo: number;
@@ -70,7 +103,7 @@ const DEFAULTS = {
 };
 
 export function GelClient() {
-  const [form, setForm] = useState(DEFAULTS);
+  const [form, setForm] = usePersistedState('gdp-form-gel', DEFAULTS);
   const [result, setResult] = useState<GelResult | null>(null);
   const [error,  setError]  = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -104,9 +137,7 @@ export function GelClient() {
         </p>
 
         <SectionLabel>Suelo y varilla</SectionLabel>
-        <Field label="Resistividad del suelo ρ" unit="Ω·m">
-          <input style={inputStyle} type="number" value={form.rhoSuelo} onChange={num('rhoSuelo')} />
-        </Field>
+        <SoilRhoField value={form.rhoSuelo} onChange={v => set('rhoSuelo', v)} />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <Field label="Radio varilla" unit="m">
             <input style={inputStyle} type="number" step="0.001" value={form.radioVarilla} onChange={num('radioVarilla')} />
@@ -130,7 +161,7 @@ export function GelClient() {
         <button onClick={calculate} disabled={loading} style={{ width: '100%', background: 'var(--copper)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 11, padding: 10, borderRadius: 3, cursor: 'pointer', opacity: loading ? 0.6 : 1 }}>
           {loading ? 'Calculando…' : 'Calcular'}
         </button>
-        {error && <div style={{ marginTop: 12, padding: '8px 10px', background: '#1a0d0d', border: '1px solid #ef444444', borderRadius: 3, fontSize: 10, color: 'var(--danger)' }}>{error}</div>}
+        {error && <div style={{ marginTop: 12, padding: '8px 10px', background: 'var(--danger-soft)', border: '1px solid var(--danger)', borderRadius: 3, fontSize: 10, color: 'var(--danger)' }}>{error}</div>}
       </aside>
 
       <section style={{ overflowY: 'auto', padding: '18px 24px 40px', background: 'var(--bg)' }}>
@@ -151,6 +182,11 @@ export function GelClient() {
             <CompBanner pass={result.mejoraPct > 0} norm={result.norm}
               msg={`Reducción de ${result.mejoraPct.toFixed(1)}% — de ${result.Rsin.toFixed(2)} Ω a ${result.Rtotal.toFixed(2)} Ω`} />
             <ExportBar module="gel" inputs={form as unknown as Record<string,unknown>} outputs={result as unknown as Record<string,unknown>} norm={result.norm} />
+
+            <div style={panelStyle}>
+              <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 10 }}>Diseño del electrodo (2D)</div>
+              <GelCrossSection radioVarilla={form.radioVarilla} radioConGel={form.radioConGel} longVarilla={form.longVarillaGel} />
+            </div>
 
             <SectionLabel purple>Sistema Experto</SectionLabel>
             <ExpertItem type="info">
@@ -174,7 +210,7 @@ export function GelClient() {
                     { label: 'R sin gel (referencia)', val: result.Rsin, pct: null },
                   ].map(row => (
                     <tr key={row.label}>
-                      <td style={{ padding: '5px 8px', borderBottom: '1px solid #1e2230', fontSize: 10, color: 'var(--dim)' }}>{row.label}</td>
+                      <td style={{ padding: '5px 8px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--dim)' }}>{row.label}</td>
                       <TdMono highlight={row.label.includes('total')}>{row.val.toFixed(3)}</TdMono>
                       <TdMono>{row.pct !== null ? `${row.pct.toFixed(1)}%` : '—'}</TdMono>
                     </tr>

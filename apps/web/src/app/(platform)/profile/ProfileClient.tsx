@@ -3,13 +3,12 @@ import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { AuthGuard } from '@/components/ui/AuthGuard';
 import { useToast } from '@/context/ToastContext';
-
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+import { API_BASE as BASE } from '@/lib/apiBase';
 
 const PLAN_INFO = {
-  community:    { label: 'Community',    color: '#93c5fd', desc: 'Gratis · 3 proyectos · PDF con marca de agua' },
-  individual:   { label: 'Individual',   color: '#f59e0b', desc: 'CLP 29.900/mes · Proyectos ilimitados · PDF sin marca · Firma PE' },
-  professional: { label: 'Professional', color: '#22c55e', desc: 'CLP 79.900/mes · 5 usuarios · API access · Normas IEC/RETIE' },
+  community:    { label: 'Community',    color: 'var(--blue)', desc: 'Gratis · 3 proyectos · PDF con marca de agua' },
+  individual:   { label: 'Individual',   color: 'var(--warn)', desc: 'CLP 29.900/mes · Proyectos ilimitados · PDF sin marca · Firma PE' },
+  professional: { label: 'Professional', color: 'var(--safe)', desc: 'CLP 79.900/mes · 5 usuarios · API access · Normas IEC/RETIE' },
 };
 
 const INPUT: React.CSSProperties = {

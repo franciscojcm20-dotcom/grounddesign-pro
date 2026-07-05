@@ -1,11 +1,18 @@
 'use client';
 import { useState } from 'react';
-import { api, type VoltagesRealResult } from '@/lib/api';
+import { api, type VoltagesRealResult, type VoltagesOptimizeResult } from '@/lib/api';
 import {
   Field, SectionLabel, StatCard, CompBanner, ExpertItem,
   FundBtn, calcLayout, inputStyle, panelStyle, Th, TdMono,
 } from '@/components/ui/CalcShared';
 import { ExportBar } from '@/components/ui/ExportBar';
+import { BarCompareChart } from '@/components/ui/Charts';
+import { DiagnosisPanel, type ComplianceCheck } from '@/components/ui/DiagnosisPanel';
+import { FaultCurrentField } from '@/components/ui/FaultCurrentField';
+import { useFaultAnalysis } from '@/context/FaultAnalysisContext';
+import { useNormativeProfile } from '@/context/NormativeProfileContext';
+import { NormativeProfileSelector } from '@/components/ui/NormativeProfileSelector';
+import { usePersistedState } from '@/lib/usePersistedState';
 
 // Defaults: malla 40×30 m, conductor 4/0 AWG (d equivalente), ρ=110, ρs=2500
 const DEFAULTS = {
@@ -14,11 +21,15 @@ const DEFAULTS = {
 };
 
 export function VoltagesClient() {
-  const [form, setForm] = useState(DEFAULTS);
+  const faultAnalysis = useFaultAnalysis();
+  const { profile } = useNormativeProfile();
+  const [form, setForm] = usePersistedState('gdp-form-voltages', DEFAULTS);
   const [result, setResult] = useState<VoltagesRealResult | null>(null);
   const [error, setError]   = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showFund, setShowFund] = useState(false);
+  const [optimizing, setOptimizing] = useState(false);
+  const [optimizeResult, setOptimizeResult] = useState<VoltagesOptimizeResult | null>(null);
 
   function set<K extends keyof typeof DEFAULTS>(k: K, v: typeof DEFAULTS[K]) {
     setForm(f => ({ ...f, [k]: v }));
@@ -28,7 +39,7 @@ export function VoltagesClient() {
   }
 
   async function calculate() {
-    setLoading(true); setError(null);
+    setLoading(true); setError(null); setOptimizeResult(null);
     try {
       setResult(await api.voltages.real(form));
     } catch (e) {
@@ -36,9 +47,46 @@ export function VoltagesClient() {
     } finally { setLoading(false); }
   }
 
+  async function optimize() {
+    if (!result) return;
+    setOptimizing(true);
+    try {
+      setOptimizeResult(await api.voltages.optimize(form));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error de conexión');
+    } finally { setOptimizing(false); }
+  }
+
+  function applySuggested() {
+    if (!optimizeResult) return;
+    setForm(f => ({ ...f, ...optimizeResult.suggested }));
+    setOptimizeResult(null);
+  }
+
   const allPass = result
     ? result.compliance.touch.pass && result.compliance.step.pass
     : null;
+
+  const complianceChecks: ComplianceCheck[] = result ? [
+    { label: 'Tensión de contacto (touch)', pass: result.compliance.touch.pass, detail: `Em = ${result.compliance.touch.real_V.toFixed(0)} V vs admisible ${result.eTouchAdm_V.toFixed(0)} V.` },
+    { label: 'Tensión de paso (step)', pass: result.compliance.step.pass, detail: `Es = ${result.compliance.step.real_V.toFixed(0)} V vs admisible ${result.eStepAdm_V.toFixed(0)} V.` },
+    ...(profile.touchVoltageMaxV ? [{
+      label: `Ucontacto ≤ ${profile.touchVoltageMaxV} V — ${profile.label}`,
+      pass: result.compliance.touch.real_V <= profile.touchVoltageMaxV,
+      detail: `${profile.standard}. Em calculada = ${result.compliance.touch.real_V.toFixed(0)} V. A diferencia del criterio IEEE (admisible variable según Cs/t), esta norma fija un límite directo de tensión de contacto. ${profile.notes}`,
+    }] : []),
+  ] : [];
+  const diagnosis: string[] = [];
+  const dataQuality: string[] = [];
+  if (result && !result.compliance.touch.pass) {
+    diagnosis.push(`Em = ${result.compliance.touch.real_V.toFixed(0)} V supera el admisible de ${result.eTouchAdm_V.toFixed(0)} V: Em = ρ·Ki·Ig·Km/Lt; con Lt = ${form.Ltotal} m la resistividad efectiva sigue transfiriendo demasiado potencial al conductor.`);
+    if (form.hSuperficial < 0.1) diagnosis.push(`La capa superficial de grava (${form.hSuperficial} m, ${form.rhoSuperficial} Ω·m) es delgada o de baja resistividad; una capa más gruesa o de mayor ρs sube directamente el límite admisible al reducir el factor Cs.`);
+  }
+  if (result && !result.compliance.step.pass) {
+    diagnosis.push(`Es = ${result.compliance.step.real_V.toFixed(0)} V supera el admisible de ${result.eStepAdm_V.toFixed(0)} V — el factor Ks depende de D y h; aumentar el espaciado de conductores o la profundidad reduce Ks.`);
+  }
+  if (form.rhoSuperficial < 1500) dataQuality.push(`ρ superficial = ${form.rhoSuperficial} Ω·m es bajo para una capa de grava típica (1500–5000 Ω·m); confirma que corresponde al material realmente especificado para la capa superficial, no al suelo natural.`);
+  if (form.tFalla < 0.1 || form.tFalla > 3) dataQuality.push(`El tiempo de despeje de falla (${form.tFalla} s) está fuera del rango habitual (0.1–3 s); revisa la coordinación de protecciones utilizada como dato de entrada.`);
 
   return (
     <div style={calcLayout}>
@@ -49,10 +97,12 @@ export function VoltagesClient() {
           IEEE Std 80-2013, Cl. 16.5 (Sverak simplificado)
         </p>
 
+        <NormativeProfileSelector />
+
         <SectionLabel>Parámetros de la malla</SectionLabel>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <Field label="ρ suelo" unit="Ω·m"><input style={inputStyle} type="number" value={form.rho} onChange={num('rho')} /></Field>
-          <Field label="Ig (corriente)" unit="A"><input style={inputStyle} type="number" value={form.Ig} onChange={num('Ig')} /></Field>
+          <FaultCurrentField onSync={v => set('Ig', v)} />
           <Field label="D (espaciado)" unit="m"><input style={inputStyle} type="number" step="0.5" value={form.D} onChange={num('D')} /></Field>
           <Field label="d (diámetro cond.)" unit="m"><input style={inputStyle} type="number" step="0.001" value={form.d} onChange={num('d')} /></Field>
           <Field label="h (profundidad)" unit="m"><input style={inputStyle} type="number" step="0.1" value={form.h} onChange={num('h')} /></Field>
@@ -83,12 +133,12 @@ export function VoltagesClient() {
           </div>
         </Field>
 
-        <button onClick={calculate} disabled={loading} style={{
+        <button onClick={calculate} disabled={loading || !faultAnalysis.result} style={{
           width: '100%', background: 'var(--copper)', border: 'none',
           color: '#fff', fontWeight: 700, fontSize: 11, padding: 10,
-          borderRadius: 3, cursor: 'pointer', opacity: loading ? 0.6 : 1, marginTop: 4,
+          borderRadius: 3, cursor: 'pointer', opacity: (loading || !faultAnalysis.result) ? 0.6 : 1, marginTop: 4,
         }}>{loading ? 'Calculando…' : 'Calcular'}</button>
-        {error && <div style={{ marginTop: 10, padding: '8px 10px', background: '#1a0d0d', border: '1px solid #ef444433', borderRadius: 3, fontSize: 10, color: 'var(--danger)' }}>{error}</div>}
+        {error && <div style={{ marginTop: 10, padding: '8px 10px', background: 'var(--danger-soft)', border: '1px solid var(--danger)', borderRadius: 3, fontSize: 10, color: 'var(--danger)' }}>{error}</div>}
       </aside>
 
       {/* RESULTS */}
@@ -123,28 +173,20 @@ export function VoltagesClient() {
 
             {/* Voltage bar chart */}
             <div style={{ ...panelStyle, marginBottom: 16 }}>
-              <div style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 12 }}>Comparación real vs admisible (V)</div>
-              {[
-                { label: 'Contacto (touch)', real: result.compliance.touch.real_V, adm: result.compliance.touch.adm_V, pass: result.compliance.touch.pass },
-                { label: 'Paso (step)',      real: result.compliance.step.real_V,  adm: result.compliance.step.adm_V,  pass: result.compliance.step.pass  },
-              ].map(row => {
-                const max = Math.max(row.real, row.adm) * 1.1;
-                return (
-                  <div key={row.label} style={{ marginBottom: 14 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                      <span style={{ fontSize: 9.5, color: 'var(--dim)' }}>{row.label}</span>
-                      <span style={{ fontSize: 9, color: row.pass ? 'var(--safe)' : 'var(--danger)', fontFamily: 'var(--font-mono)' }}>
-                        {row.real.toFixed(0)} V / {row.adm.toFixed(0)} V adm.
-                      </span>
-                    </div>
-                    <div style={{ position: 'relative', height: 18, background: 'var(--bg)', borderRadius: 2, overflow: 'hidden' }}>
-                      <div style={{ position: 'absolute', height: '100%', width: `${(row.real / max * 100).toFixed(1)}%`, background: row.pass ? 'var(--safe)' : 'var(--danger)', opacity: 0.8, borderRadius: 2 }} />
-                      <div style={{ position: 'absolute', top: 2, bottom: 2, width: 2, background: 'var(--copper)', left: `${(row.adm / max * 100).toFixed(1)}%`, borderRadius: 1 }} />
-                    </div>
-                    <div style={{ fontSize: 8, color: 'var(--faint)', marginTop: 2 }}>│ límite adm.</div>
-                  </div>
-                );
-              })}
+              <div style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 4 }}>Comparación real vs admisible (V)</div>
+              <BarCompareChart
+                data={[
+                  { tipo: 'Contacto', Real: Math.round(result.compliance.touch.real_V), Admisible: Math.round(result.compliance.touch.adm_V) },
+                  { tipo: 'Paso',     Real: Math.round(result.compliance.step.real_V),  Admisible: Math.round(result.compliance.step.adm_V)  },
+                ]}
+                xKey="tipo"
+                bars={[
+                  { key: 'Real',      label: 'Real (V)',      color: result.compliance.touch.pass && result.compliance.step.pass ? 'var(--safe)' : 'var(--danger)' },
+                  { key: 'Admisible', label: 'Admisible (V)', color: 'var(--chart-2)' },
+                ]}
+                formatter={(v) => `${v} V`}
+                height={180}
+              />
             </div>
 
             {/* Tabla de compliance */}
@@ -170,10 +212,10 @@ export function VoltagesClient() {
                     },
                   ].map(row => (
                     <tr key={row.label}>
-                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #1e2230', fontSize: 10, color: 'var(--dim)' }}>{row.label}</td>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--dim)' }}>{row.label}</td>
                       <TdMono highlight>{row.real.toFixed(1)}</TdMono>
                       <TdMono>{row.adm.toFixed(1)}</TdMono>
-                      <td style={{ padding: '6px 8px', borderBottom: '1px solid #1e2230', fontSize: 10 }}>
+                      <td style={{ padding: '6px 8px', borderBottom: '1px solid var(--line)', fontSize: 10 }}>
                         {row.pass
                           ? <span style={{ color: 'var(--safe)' }}>✓ CUMPLE</span>
                           : <span style={{ color: 'var(--danger)' }}>✗ NO CUMPLE</span>}
@@ -197,7 +239,7 @@ export function VoltagesClient() {
                     ['Ks (factor de paso)', result.step.Ks.toFixed(4)],
                   ].map(([k, v]) => (
                     <tr key={k as string}>
-                      <td style={{ padding: '5px 8px', borderBottom: '1px solid #1e2230', fontSize: 10, color: 'var(--dim)' }}>{k}</td>
+                      <td style={{ padding: '5px 8px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--dim)' }}>{k}</td>
                       <TdMono>{v}</TdMono>
                     </tr>
                   ))}
@@ -205,16 +247,29 @@ export function VoltagesClient() {
               </table>
             </div>
 
-            {!allPass && (
-              <ExpertItem type="warn">
-                Las tensiones no cumplen con los límites admisibles para {form.peso} kg, t={form.tFalla} s.
-                Acciones correctivas: reducir Rg (mayor malla), aumentar espesor de grava (hs), o aumentar ρ superficial.
-              </ExpertItem>
-            )}
             <ExpertItem type="info">
               Cs = {result.Cs.toFixed(3)} — factor de reducción por capa superficial de ρs={form.rhoSuperficial} Ω·m y hs={form.hSuperficial} m.
               Un Cs menor reduce las tensiones admisibles.
             </ExpertItem>
+
+            <DiagnosisPanel
+              checks={complianceChecks}
+              diagnosis={diagnosis}
+              dataQuality={dataQuality}
+              onOptimize={optimize}
+              optimizing={optimizing}
+              optimizeResult={optimizeResult ? {
+                achieved: optimizeResult.achieved,
+                steps: optimizeResult.steps,
+                initialRg: optimizeResult.initialRatio,
+                finalRg: optimizeResult.finalRatio,
+              } : null}
+              onApplySuggested={applySuggested}
+              targetLabel="Em ≤ admisible y Es ≤ admisible"
+              metricUnit="× admisible"
+              buttonLabel="Optimizar tensiones de paso/contacto"
+              methodNote="El motor prueba, en orden de menor costo, mejorar la capa superficial (ρs, hs — sube el límite admisible), luego aumentar la longitud total de conductor, luego la geometría (D, h) — reteniendo solo cambios que reducen la peor razón entre valor real y admisible de ambos criterios (contacto y paso) simultáneamente."
+            />
 
             <FundBtn show={showFund} onToggle={() => setShowFund(f => !f)} label="Tensiones de seguridad IEEE 80 Cl. 16">
               <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--copper)', marginBottom: 8, fontSize: 11 }}>

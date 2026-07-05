@@ -220,14 +220,14 @@ const RELEASES = [
 ];
 
 const TAG_COLORS: Record<string, { bg: string; color: string }> = {
-  'fase 19': { bg: '#1e2a1e', color: '#4ade80' },
-  'fase 17': { bg: '#1a1508', color: '#fbbf24' },
-  'fase 16': { bg: '#1a1508', color: '#fbbf24' },
-  'fase 15': { bg: '#1e2a1e', color: '#4ade80' },
-  'fase 14': { bg: '#0d1220', color: '#93c5fd' },
-  'fase 13': { bg: '#0d1220', color: '#93c5fd' },
-  'fase 12': { bg: '#1e2a1e', color: '#4ade80' },
-  'fase 11': { bg: '#1a1508', color: '#fbbf24' },
+  'fase 19': { bg: 'var(--safe-soft)', color: 'var(--safe)' },
+  'fase 17': { bg: 'var(--warn-soft)', color: 'var(--warn)' },
+  'fase 16': { bg: 'var(--warn-soft)', color: 'var(--warn)' },
+  'fase 15': { bg: 'var(--safe-soft)', color: 'var(--safe)' },
+  'fase 14': { bg: 'var(--blue-soft)', color: 'var(--blue)' },
+  'fase 13': { bg: 'var(--blue-soft)', color: 'var(--blue)' },
+  'fase 12': { bg: 'var(--safe-soft)', color: 'var(--safe)' },
+  'fase 11': { bg: 'var(--warn-soft)', color: 'var(--warn)' },
 };
 
 export default function ChangelogPage() {

@@ -5,8 +5,9 @@ import {
   calcLayout, inputStyle, panelStyle, Th, TdMono, Field,
 } from '@/components/ui/CalcShared';
 import { ExportBar } from '@/components/ui/ExportBar';
-
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+import { FaultCurrentField } from '@/components/ui/FaultCurrentField';
+import { useFaultAnalysis } from '@/context/FaultAnalysisContext';
+import { API_BASE as BASE } from '@/lib/apiBase';
 
 interface GprResult {
   GPR: number; Ib: number; Ib50: number; Ib70: number;
@@ -73,9 +74,12 @@ function GprCurve({ Ig, Sf, Rg }: { Ig: number; Sf: number; Rg: number }) {
 }
 
 export function GprClient() {
+  const faultAnalysis = useFaultAnalysis();
   const [Ig,    setIg]    = useState('10000');
   const [Rg,    setRg]    = useState('0.8');
-  const [Sf,    setSf]    = useState('0.6');
+  // Sf ya viene incluido en Ig (Motor de Análisis de Falla entrega la corriente de diseño
+  // final = If·Sf·Df) — se fija en 1 para no aplicar el factor de división dos veces.
+  const Sf = '1';
   const [ts,    setTs]    = useState('0.5');
   const [bodyW, setBodyW] = useState<50 | 70>(70);
   const [Cs,    setCs]    = useState('0.75');
@@ -115,15 +119,13 @@ export function GprClient() {
         </p>
 
         <SectionLabel>Sistema de falla</SectionLabel>
-        <Field label="Corriente de falla Ig" unit="A">
-          <input style={inputStyle} type="number" value={Ig} onChange={e => setIg(e.target.value)} />
-        </Field>
+        <FaultCurrentField onSync={v => setIg(String(Math.round(v)))} label="Corriente de diseño Ig" />
         <Field label="Resistencia de malla Rg" unit="Ω">
           <input style={inputStyle} type="number" value={Rg} onChange={e => setRg(e.target.value)} step="0.01" />
         </Field>
-        <Field label="Factor de división Sf" unit="(0–1)">
-          <input style={inputStyle} type="number" value={Sf} onChange={e => setSf(e.target.value)} step="0.01" min="0" max="1" />
-        </Field>
+        <div style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: -6, marginBottom: 10, lineHeight: 1.5 }}>
+          El factor de división Sf ya está incluido en Ig (determinado por el Motor de Análisis de Falla) — no se aplica nuevamente aquí.
+        </div>
         <Field label="Duración de falla ts" unit="s">
           <input style={inputStyle} type="number" value={ts} onChange={e => setTs(e.target.value)} step="0.01" />
         </Field>
@@ -148,15 +150,15 @@ export function GprClient() {
           ))}
         </div>
 
-        <button onClick={calculate} disabled={loading} style={{
+        <button onClick={calculate} disabled={loading || !faultAnalysis.result} style={{
           width: '100%', background: 'var(--copper)', border: 'none', color: '#fff',
           fontWeight: 700, fontSize: 11, padding: 10, borderRadius: 3,
-          cursor: 'pointer', opacity: loading ? 0.6 : 1,
+          cursor: 'pointer', opacity: (loading || !faultAnalysis.result) ? 0.6 : 1,
         }}>
           {loading ? 'Calculando…' : 'Calcular GPR'}
         </button>
         {error && (
-          <div style={{ marginTop: 12, padding: '8px 10px', background: '#1a0d0d', border: '1px solid #ef444444', borderRadius: 3, fontSize: 10, color: 'var(--danger)' }}>
+          <div style={{ marginTop: 12, padding: '8px 10px', background: 'var(--danger-soft)', border: '1px solid var(--danger)', borderRadius: 3, fontSize: 10, color: 'var(--danger)' }}>
             {error}
           </div>
         )}
@@ -229,9 +231,9 @@ export function GprClient() {
 
             <FundBtn show={showFund} onToggle={() => setShowFund(f => !f)} label="Fundamentos IEEE 80-2013">
               <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--copper)', marginBottom: 10, fontSize: 11 }}>
-                GPR = Sf · Ig · Rg
+                GPR = Ig · Rg
               </div>
-              <p><strong style={{ color: 'var(--text)' }}>Sf (Split Factor):</strong> fracción de la corriente de falla que circula por la malla. Depende del diseño del sistema y de la impedancia de la red de tierra remota.</p>
+              <p><strong style={{ color: 'var(--text)' }}>Ig:</strong> corriente de diseño oficial del proyecto, determinada por el Motor de Análisis de Falla (Ig = If · Sf · Df) — el factor de división Sf y el factor de decremento Df ya están incluidos, por lo que aquí no se aplican nuevamente.</p>
               <p style={{ marginTop: 8 }}><strong style={{ color: 'var(--text)' }}>Ib (Dalziel-Lee):</strong> 0.116/√ts (50 kg) y 0.157/√ts (70 kg) — IEEE 80-2013 Ec. 29-30.</p>
               <p style={{ marginTop: 8 }}><strong style={{ color: 'var(--text)' }}>Etouch = (1000 + 1.5·Cs·ρs)·Ib</strong> — IEEE 80-2013 Ec. 32.</p>
               <p style={{ marginTop: 8 }}><strong style={{ color: 'var(--text)' }}>Estep = (1000 + 6·Cs·ρs)·Ib</strong> — IEEE 80-2013 Ec. 33.</p>

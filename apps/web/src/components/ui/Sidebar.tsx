@@ -1,35 +1,48 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-
-const NAV = [
-  {
-    group: 'Medición de suelo',
-    items: [
-      { href: '/soil/wenner',       label: 'Resistividad — Wenner' },
-      { href: '/soil/schlumberger', label: 'Resistividad — Schlumberger' },
-      { href: '/soil/nlayer',       label: 'Curvas N capas' },
-    ],
-  },
-  {
-    group: 'Diseño de malla',
-    items: [
-      { href: '/grid/resistance', label: 'Resistencia de malla' },
-      { href: '/grid/gel',        label: 'Aditivo gel químico' },
-      { href: '/conductor',       label: 'Conductor IEEE 80' },
-    ],
-  },
-  {
-    group: 'Verificación',
-    items: [
-      { href: '/voltages', label: 'Tensiones paso/contacto' },
-      { href: '/gpr',      label: 'GPR — Potencial de tierra' },
-    ],
-  },
-];
+import { useI18n } from '@/context/I18nContext';
 
 export function Sidebar() {
   const path = usePathname();
+  const { t } = useI18n();
+
+  const NAV = [
+    {
+      group: t('groupSoilMeasurement'),
+      items: [
+        { href: '/soil/field',        label: t('moduleFieldMeasurements') },
+        { href: '/soil/schlumberger', label: t('moduleSchlumberger') },
+        { href: '/soil/wenner',       label: t('moduleWenner') },
+        { href: '/soil/nlayer',       label: t('moduleNLayer') },
+      ],
+    },
+    {
+      group: t('groupFaultAnalysis'),
+      items: [
+        { href: '/fault-analysis', label: t('moduleFaultAnalysis') },
+      ],
+    },
+    {
+      group: t('groupGridDesign'),
+      items: [
+        { href: '/grid/resistance', label: t('moduleGridRectangular') },
+        { href: '/grid/rod',        label: t('moduleGridRod') },
+        { href: '/grid/strip',      label: t('moduleGridStrip') },
+        { href: '/grid/radial',     label: t('moduleGridRadial') },
+        { href: '/grid/ring',       label: t('moduleGridRing') },
+        { href: '/grid/combined',   label: t('moduleGridCombined') },
+      ],
+    },
+    {
+      group: t('groupVerification'),
+      items: [
+        { href: '/voltages', label: t('moduleVoltages') },
+        { href: '/gpr',      label: t('moduleGpr') },
+        { href: '/report',   label: t('moduleReport') },
+      ],
+    },
+  ];
 
   return (
     <nav style={{
@@ -48,7 +61,7 @@ export function Sidebar() {
           display: 'inline-block', marginTop: 8, fontSize: 8.5,
           color: 'var(--copper)', fontFamily: 'var(--font-mono)', textDecoration: 'none',
         }}>
-          Ver proyectos →
+          {t('viewProjects')}
         </Link>
       </div>
 
@@ -87,7 +100,7 @@ export function Sidebar() {
           background: path === '/settings' ? 'var(--copper-soft)' : 'transparent',
           textDecoration: 'none',
         }}>
-          <span style={{ fontSize: 11 }}>⚙</span> Configuración
+          <span style={{ fontSize: 11 }}>⚙</span> {t('settings')}
         </Link>
         <Link href="/admin" style={{
           display: 'flex', alignItems: 'center', gap: 8,
@@ -96,12 +109,12 @@ export function Sidebar() {
           background: path === '/admin' ? 'var(--copper-soft)' : 'transparent',
           textDecoration: 'none',
         }}>
-          <span style={{ fontSize: 11 }}>🛡</span> Admin
+          <span style={{ fontSize: 11 }}>🛡</span> {t('adminWord')}
         </Link>
       </div>
 
       <div style={{ marginTop: 'auto', padding: '14px', borderTop: '1px solid var(--line)' }}>
-        <div style={{ fontSize: 8.5, color: 'var(--faint)', marginBottom: 6 }}>Norma activa</div>
+        <div style={{ fontSize: 8.5, color: 'var(--faint)', marginBottom: 6 }}>{t('norm')}</div>
         <div style={{ fontSize: 9, color: 'var(--copper)', fontFamily: 'var(--font-mono)', lineHeight: 1.6 }}>
           IEEE Std 80-2013<br />IEEE Std 81-2012
         </div>

@@ -1,11 +1,10 @@
 'use client';
 import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { useI18n, type Locale } from '@/context/I18nContext';
+import { useI18n, type Locale, LOCALES } from '@/context/I18nContext';
 import { useToast } from '@/context/ToastContext';
+import { useNormativeProfile } from '@/context/NormativeProfileContext';
 import { AuthGuard } from '@/components/ui/AuthGuard';
-
-const NORMS = ['IEEE 80-2013 + IEEE 81-2012', 'IEC 60364 + IEC 61936', 'NFPA 70 + NFPA 780'];
 
 function SettingRow({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) {
   return (
@@ -61,14 +60,13 @@ function SettingsContent() {
   const { user }          = useAuth();
   const { locale, setLocale, t } = useI18n();
   const toast             = useToast();
+  const { profile, profileId, setProfileId, profiles } = useNormativeProfile();
 
-  const [activeNorm, setActiveNorm] = useState(NORMS[0]!);
   const [emailNotif, setEmailNotif] = useState(true);
   const [pdfAttach,  setPdfAttach]  = useState(false);
   const [saved, setSaved]           = useState(false);
 
   function save() {
-    localStorage.setItem('gdp_norm', activeNorm);
     localStorage.setItem('gdp_email_notif', String(emailNotif));
     localStorage.setItem('gdp_pdf_attach',  String(pdfAttach));
     setSaved(true);
@@ -100,7 +98,7 @@ function SettingsContent() {
           </div>
           <div style={{
             marginLeft: 'auto', fontSize: 9.5, padding: '3px 10px', borderRadius: 10,
-            background: '#1a1508', border: '1px solid #f59e0b33', color: 'var(--warn)',
+            background: 'var(--warn-soft)', border: '1px solid var(--warn)', color: 'var(--warn)',
             textTransform: 'uppercase', letterSpacing: '.05em',
           }}>
             {user?.plan ?? 'community'}
@@ -111,27 +109,27 @@ function SettingsContent() {
       {/* Preferences */}
       <section style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 6, padding: '16px 20px', marginBottom: 24 }}>
         <div style={{ fontSize: 10, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 4 }}>
-          Preferencias
+          {t('preferences')}
         </div>
 
-        <SettingRow label={t('lang')} description="Idioma de la interfaz">
+        <SettingRow label={t('lang')} description={t('langDesc')}>
           <Select
             value={locale}
             onChange={v => setLocale(v as Locale)}
-            options={[
-              { value: 'es', label: '🇨🇱  Español' },
-              { value: 'en', label: '🇺🇸  English' },
-            ]}
+            options={LOCALES.map(l => ({ value: l.value, label: `${l.flag}  ${l.label}` }))}
           />
         </SettingRow>
 
-        <SettingRow label={t('norm')} description="Normativa usada en todos los módulos">
+        <SettingRow label={t('norm')} description={t('normDesc')}>
           <Select
-            value={activeNorm}
-            onChange={setActiveNorm}
-            options={NORMS.map(n => ({ value: n, label: n }))}
+            value={profileId}
+            onChange={setProfileId}
+            options={profiles.map(p => ({ value: p.id, label: p.label }))}
           />
         </SettingRow>
+        <div style={{ fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.5, marginTop: -6, marginBottom: 4 }}>
+          {profile.standard} — Rg crítico ≤ {profile.rgCritical} Ω · Rg general ≤ {profile.rgGeneral} Ω
+        </div>
       </section>
 
       {/* Notifications */}
@@ -140,11 +138,11 @@ function SettingsContent() {
           {t('notifications')}
         </div>
 
-        <SettingRow label="Resumen semanal por email" description="Recibe un resumen de tus proyectos activos">
+        <SettingRow label={t('weeklyDigest')} description={t('weeklyDigestDesc')}>
           <Toggle checked={emailNotif} onChange={setEmailNotif} />
         </SettingRow>
 
-        <SettingRow label="Adjuntar PDF en email" description="Incluye el PDF del reporte en el correo">
+        <SettingRow label={t('attachPdf')} description={t('attachPdfDesc')}>
           <Toggle checked={pdfAttach} onChange={setPdfAttach} />
         </SettingRow>
       </section>

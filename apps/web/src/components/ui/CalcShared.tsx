@@ -44,7 +44,7 @@ export function SectionLabel({ children, purple }: { children: ReactNode; purple
   );
 }
 
-export function Field({ label, unit, children }: { label: string; unit: string; children: ReactNode }) {
+export function Field({ label, unit = '', children }: { label: string; unit?: string; children: ReactNode }) {
   return (
     <div style={{ marginBottom: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--dim)', marginBottom: 4 }}>
@@ -56,15 +56,16 @@ export function Field({ label, unit, children }: { label: string; unit: string; 
   );
 }
 
-export function StatCard({ label, value, unit, primary, ok }: {
-  label: string; value: string; unit: string; primary?: boolean; ok?: boolean;
+export function StatCard({ label, value, unit = '', primary, ok, highlight }: {
+  label: string; value: string; unit?: string; primary?: boolean; ok?: boolean; highlight?: boolean;
 }) {
+  primary = primary || highlight;
   const borderColor = primary
     ? 'var(--copper)'
-    : ok === true ? '#22c55e44' : ok === false ? '#ef444444' : 'var(--line)';
+    : ok === true ? 'var(--safe)' : ok === false ? 'var(--danger)' : 'var(--line)';
   const bg = primary
-    ? 'linear-gradient(160deg,#1e1508,var(--panel))'
-    : ok === true ? '#0d1a0d' : ok === false ? '#1a0d0d' : 'var(--panel)';
+    ? 'linear-gradient(160deg,var(--copper-mid),var(--panel))'
+    : ok === true ? 'var(--safe-soft)' : ok === false ? 'var(--danger-soft)' : 'var(--panel)';
   const valColor = primary
     ? 'var(--copper)'
     : ok === true ? 'var(--safe)' : ok === false ? 'var(--danger)' : 'var(--text)';
@@ -80,30 +81,32 @@ export function StatCard({ label, value, unit, primary, ok }: {
   );
 }
 
-export function CompBanner({ pass, msg, norm }: { pass?: boolean; msg: string; norm: string }) {
+export function CompBanner({ pass, msg, label, norm }: { pass?: boolean; msg?: string; label?: string; norm: string }) {
   pass = pass ?? true;
+  msg = msg ?? label ?? '';
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10, padding: '9px 13px',
-      background: pass ? '#0d1a0d' : '#1a0d0d',
-      border: `1px solid ${pass ? '#22c55e44' : '#ef444444'}`,
+      background: pass ? 'var(--safe-soft)' : 'var(--danger-soft)',
+      border: `1px solid ${pass ? 'var(--safe)' : 'var(--danger)'}`,
       borderRadius: 4, marginBottom: 16, fontSize: 11,
-      color: pass ? '#86efac' : '#fca5a5',
+      color: pass ? 'var(--safe)' : 'var(--danger)',
     }}>
       <span style={{ fontWeight: 700 }}>{pass ? '✓' : '✗'}</span>
       <span>{msg}</span>
       <span style={{
         marginLeft: 'auto', fontSize: 9, padding: '2px 6px', borderRadius: 2,
-        background: '#ffffff0a', color: 'var(--dim)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap',
+        background: 'var(--panel3)', color: 'var(--dim)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap',
       }}>{norm}</span>
     </div>
   );
 }
 
-export function ExpertItem({ children, type }: { children: ReactNode; type: 'info' | 'warn' }) {
-  const c = type === 'warn'
-    ? { bg: '#1a1508', border: '#f59e0b33', dot: 'var(--warn)' }
-    : { bg: '#0d1220', border: '#3b82f633', dot: 'var(--blue)' };
+export function ExpertItem({ children, type }: { children: ReactNode; type: 'info' | 'warn' | 'ok' | 'danger' }) {
+  const c = type === 'warn'   ? { bg: 'var(--warn-soft)',   border: 'var(--warn-soft)',   dot: 'var(--warn)' }
+    :       type === 'ok'     ? { bg: 'var(--safe-soft)',   border: 'var(--safe-soft)',   dot: 'var(--safe)' }
+    :       type === 'danger' ? { bg: 'var(--danger-soft)', border: 'var(--danger-soft)', dot: 'var(--danger)' }
+    :                           { bg: 'var(--blue-soft)',   border: 'var(--blue-soft)',   dot: 'var(--blue)' };
   return (
     <div style={{
       display: 'flex', alignItems: 'flex-start', gap: 8, padding: '7px 10px',
@@ -153,13 +156,14 @@ export function Th({ children }: { children?: ReactNode }) {
   );
 }
 
-export function TdMono({ children, highlight }: { children: ReactNode; highlight?: boolean }) {
+export function TdMono({ children, highlight, style }: { children: ReactNode; highlight?: boolean; style?: CSSProperties }) {
   return (
     <td style={{
-      padding: '5px 8px', borderBottom: '1px solid #1e2230',
+      padding: '5px 8px', borderBottom: '1px solid var(--line)',
       fontFamily: 'var(--font-mono)', fontSize: 11,
       color: highlight ? 'var(--copper)' : 'var(--dim)',
       fontWeight: highlight ? 700 : 400,
+      ...style,
     }}>{children}</td>
   );
 }

@@ -4,24 +4,31 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { AuthGuard } from '@/components/ui/AuthGuard';
-
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+import { API_BASE as BASE } from '@/lib/apiBase';
 
 const MODULES = [
-  { href: '/soil/wenner',       icon: '〰', label: 'Resistividad Wenner',       norm: 'IEEE 81-2012 · Cl. 8.3' },
+  { href: '/soil/field',        icon: '🌐', label: 'Mediciones de Campo',       norm: 'IEEE 81-2012' },
   { href: '/soil/schlumberger', icon: '📡', label: 'Resistividad Schlumberger', norm: 'IEEE 81-2012 · Cl. 8' },
+  { href: '/soil/wenner',       icon: '〰', label: 'Resistividad Wenner (validación)', norm: 'IEEE 81-2012 · Cl. 8.3' },
   { href: '/soil/nlayer',       icon: '🌍', label: 'Modelo N capas',            norm: 'Wait (1954)' },
-  { href: '/grid/resistance',   icon: '⬡',  label: 'Resistencia de malla',      norm: 'IEEE 80-2013 · Cl. 14.2' },
-  { href: '/conductor',         icon: '〰', label: 'Conductor IEEE 80',         norm: 'IEEE 80-2013 · Cl. 11.3' },
+  { href: '/fault-analysis',    icon: '⚡', label: 'Motor de Análisis de Falla', norm: 'IEEE 80-2013 · Cl. 15' },
+  { href: '/grid/resistance',   icon: '⬡',  label: 'Malla rectangular',        norm: 'IEEE 80-2013 · Cl. 14.2' },
+  { href: '/grid/rod',          icon: '⬇', label: 'Electrodos verticales (picas)', norm: 'Dwight/Sunde (1949)' },
+  { href: '/grid/strip',        icon: '─', label: 'Conductor horizontal',      norm: 'Dwight (1936)' },
+  { href: '/grid/radial',       icon: '✦', label: 'Sistema radial / estrella', norm: 'Laurent-Niemann (1952)' },
+  { href: '/grid/ring',         icon: '◯', label: 'Anillo perimetral',         norm: 'Sunde (1949)' },
+  { href: '/grid/combined',     icon: '⊞', label: 'Malla + picas combinada',   norm: 'Schwarz (1954)' },
   { href: '/voltages',          icon: '⚠',  label: 'Tensiones paso/contacto',   norm: 'IEEE 80-2013 · Cl. 16' },
-  { href: '/grid/gel',          icon: '🧪', label: 'Aditivo gel químico',       norm: 'Dwight / Sunde' },
   { href: '/gpr',               icon: '⏚', label: 'GPR — Potencial de tierra', norm: 'IEEE 80-2013 · Cl. 15' },
+  { href: '/report',            icon: '📋', label: 'Entregables del Proyecto', norm: 'Vista consolidada' },
 ];
 
 const MODULE_LABEL: Record<string, string> = {
-  wenner: 'Wenner', schlumberger: 'Schlumberger', nlayer: 'N Capas',
-  grid: 'Malla', conductor: 'Conductor', voltages: 'Tensiones',
-  gel: 'Gel Químico', gpr: 'GPR',
+  field: 'Mediciones de Campo', wenner: 'Wenner', schlumberger: 'Schlumberger', nlayer: 'N Capas',
+  faultAnalysis: 'Análisis de Falla',
+  grid: 'Malla', rod: 'Picas', strip: 'Horizontal', radial: 'Radial', ring: 'Anillo', combined: 'Malla+Picas',
+  conductor: 'Conductor', voltages: 'Tensiones',
+  gel: 'Gel Químico', gpr: 'GPR', lightning: 'Rayos (SPR)',
 };
 
 interface Project { id: string; name: string; description?: string; updated_at: string }
@@ -106,7 +113,7 @@ export function DashboardClient() {
             {[
               { label: 'Proyectos', value: String(stats.totalProjects), icon: '📁' },
               { label: 'Cálculos guardados', value: String(stats.totalCalcs), icon: '💾' },
-              { label: 'Módulos disponibles', value: '8', icon: '⚡' },
+              { label: 'Módulos disponibles', value: String(MODULES.length), icon: '⚡' },
               { label: 'Norma principal', value: 'IEEE 80', icon: '📋' },
             ].map(s => (
               <div key={s.label} style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 4, padding: '14px 18px', minWidth: 130 }}>

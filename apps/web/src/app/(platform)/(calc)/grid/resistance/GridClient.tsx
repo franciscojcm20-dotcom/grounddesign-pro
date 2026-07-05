@@ -1,11 +1,25 @@
 'use client';
-import { useState } from 'react';
-import { api, type GridResult } from '@/lib/api';
+import { useState, type ReactElement } from 'react';
+import dynamic from 'next/dynamic';
+import { api, type GridResult, type MallaOptimizeResult } from '@/lib/api';
 import {
   Field, SectionLabel, StatCard, CompBanner, ExpertItem,
   FundBtn, calcLayout, inputStyle, panelStyle, Th, TdMono,
 } from '@/components/ui/CalcShared';
 import { ExportBar } from '@/components/ui/ExportBar';
+import { SoilRhoField } from '@/components/ui/SoilRhoField';
+import { GelPanel } from '@/components/ui/GelPanel';
+import { ConductorPanel } from '@/components/ui/ConductorPanel';
+import { DiagnosisPanel, type ComplianceCheck } from '@/components/ui/DiagnosisPanel';
+import { FaultCurrentField } from '@/components/ui/FaultCurrentField';
+import { useFaultAnalysis } from '@/context/FaultAnalysisContext';
+import { useNormativeProfile } from '@/context/NormativeProfileContext';
+import { NormativeProfileSelector } from '@/components/ui/NormativeProfileSelector';
+import { evaluateRgCompliance } from '@gdp/engines-math';
+import { usePersistedState } from '@/lib/usePersistedState';
+import type { GelParams } from '@/lib/api';
+
+const GridScene3D = dynamic(() => import('@/components/ui/Topology3D').then(m => m.GridScene3D), { ssr: false });
 
 const DEFAULTS = {
   largo: 40, ancho: 30, profundidad: 0.6,
@@ -37,18 +51,22 @@ function GridDiagram({ largo, ancho, nL, nW, nVarillas }: {
 
   // Ground rods (placed at intersections, evenly distributed)
   const rodCount = Math.min(nVarillas, 20);
-  const rods: JSX.Element[] = [];
+  const rods: ReactElement[] = [];
   const corners = [
     [ox, oy], [ox + gW, oy], [ox, oy + gH], [ox + gW, oy + gH],
   ];
+  const perimeter = 2 * (gW + gH);
   for (let i = 0; i < rodCount; i++) {
     let x: number, y: number;
     if (i < 4) {
       [x, y] = corners[i]!;
     } else {
-      const perimX = ox + Math.random() * gW;
-      const perimY = oy + Math.random() * gH;
-      x = perimX; y = perimY;
+      // Distribuye las picas restantes uniformemente a lo largo del perímetro.
+      const dist = (perimeter * (i - 4)) / Math.max(rodCount - 4, 1);
+      if (dist < gW)            { x = ox + dist;               y = oy; }
+      else if (dist < gW + gH)  { x = ox + gW;                 y = oy + (dist - gW); }
+      else if (dist < 2*gW+gH)  { x = ox + gW - (dist - gW - gH); y = oy + gH; }
+      else                      { x = ox;                      y = oy + gH - (dist - 2*gW - gH); }
     }
     rods.push(
       <g key={`r${i}`}>
@@ -82,22 +100,79 @@ function GridDiagram({ largo, ancho, nL, nW, nVarillas }: {
 }
 
 export function GridClient() {
-  const [form, setForm] = useState(DEFAULTS);
+  const faultAnalysis = useFaultAnalysis();
+  const { profile } = useNormativeProfile();
+  const [form, setForm] = usePersistedState('gdp-form-grid', DEFAULTS);
+  const [gel, setGel] = useState<GelParams | null>(null);
+  const [conductor, setConductor] = useState<{ diamMm: number; calibre: string } | null>(null);
   const [result, setResult] = useState<GridResult | null>(null);
   const [error, setError]   = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showFund, setShowFund] = useState(false);
+  const [view3d, setView3d] = useState(false);
+  const [optimizing, setOptimizing] = useState(false);
+  const [optimizeResult, setOptimizeResult] = useState<MallaOptimizeResult | null>(null);
 
   function set(k: string, v: number) { setForm(f => ({ ...f, [k]: v })); }
   function num(k: keyof typeof DEFAULTS) { return (e: React.ChangeEvent<HTMLInputElement>) => set(k, Number(e.target.value)); }
 
   async function calculate() {
-    setLoading(true); setError(null);
+    setLoading(true); setError(null); setOptimizeResult(null);
     try {
-      setResult(await api.grid.resistance(form));
+      setResult(await api.grid.resistance({ ...form, ...(gel ? { gel } : {}) }));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error de conexión');
     } finally { setLoading(false); }
+  }
+
+  async function optimize() {
+    if (!result) return;
+    setOptimizing(true);
+    try {
+      const targetRg = result.compliance.rg1ohm.pass ? 1 : (result.compliance.rg5ohm.pass ? 1 : 5);
+      const r = await api.grid.resistanceOptimize({ ...form, ...(gel ? { gel } : {}), targetRg });
+      setOptimizeResult(r);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error de conexión');
+    } finally { setOptimizing(false); }
+  }
+
+  function applySuggested() {
+    if (!optimizeResult) return;
+    setForm(f => ({ ...f, ...optimizeResult.suggested }));
+    setOptimizeResult(null);
+  }
+
+  const complianceChecks: ComplianceCheck[] = result ? [
+    {
+      label: 'Rg ≤ 1 Ω (alta tensión)',
+      pass: result.compliance.rg1ohm.pass,
+      detail: `Rg calculada = ${result.Rg.toFixed(3)} Ω, límite típico para subestaciones AT según IEEE Std 80-2013.`,
+    },
+    {
+      label: 'Rg ≤ 5 Ω (media tensión)',
+      pass: result.compliance.rg5ohm.pass,
+      detail: `Rg calculada = ${result.Rg.toFixed(3)} Ω, límite habitual para instalaciones de distribución MT.`,
+    },
+    {
+      label: `Rg ≤ ${profile.rgGeneral} Ω — ${profile.label}`,
+      pass: evaluateRgCompliance(result.Rg, profile).rgGeneral,
+      detail: `${profile.standard}. ${profile.notes}`,
+    },
+  ] : [];
+
+  const diagnosis: string[] = [];
+  const dataQuality: string[] = [];
+  if (result && !result.compliance.rg1ohm.pass) {
+    diagnosis.push(`La resistencia de puesta a tierra Rg = ${result.Rg.toFixed(3)} Ω supera el límite de 1 Ω porque la relación entre la resistividad efectiva del suelo (ρ = ${result.rhoUsado} Ω·m) y la longitud total de conductor enterrado (Lt = ${result.Ltotal} m) no es suficientemente favorable: Rg = ρ · [1/Lt + término de área].`);
+    if (result.rhoUsado > 200) diagnosis.push(`La resistividad usada (${result.rhoUsado} Ω·m) es alta; es el factor que más penaliza Rg — revisar si corresponde aplicar el aditivo gel o si el modelo de suelo (Schlumberger/Wenner) refleja correctamente el terreno.`);
+    if (result.area < 400) diagnosis.push(`El área de la malla (${result.area} m²) es reducida frente a la resistividad del sitio; ampliar la huella de la malla reduce el término de área en la ecuación de Sverak.`);
+    if (form.nVarillas < 8) diagnosis.push(`Solo hay ${form.nVarillas} varillas configuradas; agregar varillas perimetrales aumenta Lt sin requerir más superficie de terreno.`);
+  }
+  if (result) {
+    if (result.rhoUsado > 500) dataQuality.push(`ρ = ${result.rhoUsado} Ω·m es inusualmente alto. Verifica en Mediciones de Campo que las lecturas Schlumberger/Wenner no tengan errores de escala (unidades, distancia entre electrodos) antes de dimensionar en base a este valor.`);
+    if (form.iFalla > 40000) dataQuality.push(`La corriente de falla ingresada (${form.iFalla} A) es muy alta para la mayoría de instalaciones de distribución; confirma que el valor proviene del estudio de cortocircuito correcto (nivel de tensión/barra) y no de una unidad distinta (kA vs A).`);
+    if (form.tFalla < 0.1 || form.tFalla > 3) dataQuality.push(`El tiempo de despeje de falla (${form.tFalla} s) está fuera del rango habitual (0.1–3 s); revisa la coordinación de protecciones utilizada como dato de entrada.`);
   }
 
   return (
@@ -109,13 +184,33 @@ export function GridClient() {
           Ecuación de Sverak · IEEE Std 80-2013, Cl. 14.2
         </p>
 
+        <NormativeProfileSelector />
+
         {/* Live grid diagram */}
         <div style={{ ...panelStyle, marginBottom: 16, padding: '10px 8px' }}>
-          <GridDiagram
-            largo={form.largo} ancho={form.ancho}
-            nL={form.nConductoresL} nW={form.nConductoresW}
-            nVarillas={form.nVarillas}
-          />
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+            {([['2D', false], ['3D', true]] as const).map(([label, is3d]) => (
+              <button key={label} onClick={() => setView3d(is3d)} onMouseEnter={() => { if (is3d) import('@/components/ui/Topology3D'); }} style={{
+                flex: 1, padding: '5px 4px', borderRadius: 3, cursor: 'pointer', fontSize: 9.5, fontWeight: 700,
+                background: view3d === is3d ? 'var(--copper-soft)' : 'var(--bg)',
+                border: `1px solid ${view3d === is3d ? 'var(--copper)' : 'var(--line)'}`,
+                color: view3d === is3d ? 'var(--copper)' : 'var(--dim)',
+              }}>{label}</button>
+            ))}
+          </div>
+          {view3d ? (
+            <GridScene3D
+              largo={form.largo} ancho={form.ancho}
+              nL={form.nConductoresL} nW={form.nConductoresW}
+              profundidad={form.profundidad} nVarillas={form.nVarillas} longVarilla={form.longVarilla}
+            />
+          ) : (
+            <GridDiagram
+              largo={form.largo} ancho={form.ancho}
+              nL={form.nConductoresL} nW={form.nConductoresW}
+              nVarillas={form.nVarillas}
+            />
+          )}
         </div>
 
         <SectionLabel>Geometría de la malla</SectionLabel>
@@ -130,16 +225,19 @@ export function GridClient() {
         </div>
 
         <SectionLabel>Suelo y falla</SectionLabel>
-        <Field label="Resistividad ρ" unit="Ω·m"><input style={inputStyle} type="number" value={form.rho} onChange={num('rho')} /></Field>
-        <Field label="Corriente de falla" unit="A"><input style={inputStyle} type="number" value={form.iFalla} onChange={num('iFalla')} /></Field>
+        <SoilRhoField value={form.rho} onChange={v => set('rho', v)} />
+        <FaultCurrentField onSync={v => set('iFalla', v)} />
         <Field label="Tiempo de despeje" unit="s"><input style={inputStyle} type="number" step="0.1" value={form.tFalla} onChange={num('tFalla')} /></Field>
 
-        <button onClick={calculate} disabled={loading} style={{
+        <GelPanel rhoSuelo={form.rho} onChange={setGel} />
+        <ConductorPanel iFalla={form.iFalla} tFalla={form.tFalla} onChange={(diamMm, calibre) => setConductor({ diamMm, calibre })} />
+
+        <button onClick={calculate} disabled={loading || !faultAnalysis.result} style={{
           width: '100%', background: 'var(--copper)', border: 'none',
           color: '#fff', fontWeight: 700, fontSize: 11, padding: 10,
-          borderRadius: 3, cursor: 'pointer', opacity: loading ? 0.6 : 1, marginTop: 4,
+          borderRadius: 3, cursor: 'pointer', opacity: (loading || !faultAnalysis.result) ? 0.6 : 1, marginTop: 4,
         }}>{loading ? 'Calculando…' : 'Calcular'}</button>
-        {error && <div style={{ marginTop: 10, padding: '8px 10px', background: '#1a0d0d', border: '1px solid #ef444433', borderRadius: 3, fontSize: 10, color: 'var(--danger)' }}>{error}</div>}
+        {error && <div style={{ marginTop: 10, padding: '8px 10px', background: 'var(--danger-soft)', border: '1px solid var(--danger)', borderRadius: 3, fontSize: 10, color: 'var(--danger)' }}>{error}</div>}
       </aside>
 
       {/* RESULTS */}
@@ -189,19 +287,24 @@ export function GridClient() {
                 ? `Rg = ${result.Rg.toFixed(3)} Ω cumple el límite de 1 Ω`
                 : `Rg = ${result.Rg.toFixed(3)} Ω supera el límite de 1 Ω — revisar geometría o ρ efectiva`}
             />
-            <ExportBar module="grid" inputs={form as unknown as Record<string,unknown>} outputs={result as unknown as Record<string,unknown>} norm={result.norm} />
+            <ExportBar module="grid" inputs={{ ...form, ...(conductor ? { calibreConductor: conductor.calibre } : {}) } as unknown as Record<string,unknown>} outputs={result as unknown as Record<string,unknown>} norm={result.norm} />
 
-            {!result.compliance.rg1ohm.pass && (
-              <ExpertItem type="warn">
-                Con ρ = {result.rhoUsado} Ω·m y la geometría actual, Rg = {result.Rg.toFixed(3)} Ω.
-                Para reducir Rg: aumentar área de la malla, agregar más conductores o varillas,
-                o aplicar aditivo gel para reducir ρ efectiva.
-              </ExpertItem>
-            )}
             <ExpertItem type="info">
               GPR = Rg × Ifalla = {result.Rg.toFixed(3)} × {form.iFalla} A = {result.gpr.toFixed(0)} V ({(result.gpr / 1000).toFixed(2)} kV).
               Este valor alimenta el cálculo de tensiones de paso y contacto.
             </ExpertItem>
+
+            <DiagnosisPanel
+              checks={complianceChecks}
+              diagnosis={diagnosis}
+              dataQuality={dataQuality}
+              onOptimize={optimize}
+              optimizing={optimizing}
+              optimizeResult={optimizeResult}
+              onApplySuggested={applySuggested}
+              targetLabel={result.compliance.rg1ohm.pass ? 'Rg ≤ 1 Ω' : 'Rg ≤ 5 Ω'}
+              methodNote="El motor de optimización prueba, en orden de menor costo constructivo, agregar varillas, luego conductores, luego ampliar la huella de la malla — reteniendo solo los cambios que efectivamente reducen Rg — hasta alcanzar el límite objetivo o topar límites físicos razonables del predio."
+            />
 
             {/* Desglose */}
             <div style={panelStyle}>
@@ -213,11 +316,12 @@ export function GridClient() {
                     ['Long. conductor horizontal', `${result.condL} m`],
                     ['Long. varillas', `${result.condRods} m`],
                     ['Longitud total Lt', `${result.Ltotal} m`],
-                    ['ρ usada en cálculo', `${result.rhoUsado} Ω·m`],
+                    ['ρ usada en cálculo', `${result.rhoUsado} Ω·m${result.gelInfo?.activo ? ' (con gel)' : ''}`],
                     ['GPR', `${result.gpr.toFixed(0)} V`],
+                    ...(conductor ? [['Conductor seleccionado', conductor.calibre]] : []),
                   ].map(([k, v]) => (
                     <tr key={k as string}>
-                      <td style={{ padding: '5px 8px', borderBottom: '1px solid #1e2230', fontSize: 10, color: 'var(--dim)' }}>{k}</td>
+                      <td style={{ padding: '5px 8px', borderBottom: '1px solid var(--line)', fontSize: 10, color: 'var(--dim)' }}>{k}</td>
                       <TdMono highlight>{v}</TdMono>
                     </tr>
                   ))}

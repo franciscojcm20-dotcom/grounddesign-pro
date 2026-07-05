@@ -7,20 +7,20 @@ const COMMANDS = [
   { id: 'projects',     label: 'Proyectos',                  icon: '📁', href: '/projects',         group: 'Navegación' },
   { id: 'profile',      label: 'Mi perfil',                  icon: '👤', href: '/profile',          group: 'Navegación' },
   { id: 'settings',     label: 'Configuración',              icon: '⚙', href: '/settings',          group: 'Navegación' },
-  { id: 'wenner',       label: 'Resistividad Wenner',        icon: '⚡', href: '/soil/wenner',       group: 'Módulos' },
+  { id: 'field',        label: 'Mediciones de Campo',        icon: '🌐', href: '/soil/field',        group: 'Módulos' },
   { id: 'schlumberger', label: 'Resistividad Schlumberger',  icon: '📡', href: '/soil/schlumberger', group: 'Módulos' },
+  { id: 'wenner',       label: 'Resistividad Wenner (validación)', icon: '⚡', href: '/soil/wenner', group: 'Módulos' },
   { id: 'nlayer',       label: 'Modelo N capas',             icon: '🌐', href: '/soil/nlayer',       group: 'Módulos' },
+  { id: 'fault-analysis', label: 'Motor de Análisis de Falla', icon: '⚡', href: '/fault-analysis', group: 'Módulos' },
   { id: 'grid',         label: 'Malla rectangular (Sverak)',  icon: '⬡', href: '/grid/resistance',   group: 'Módulos' },
   { id: 'grid-rod',     label: 'Electrodos verticales (picas)', icon: '⬇', href: '/grid/rod',      group: 'Módulos' },
   { id: 'grid-strip',   label: 'Conductor horizontal enterrado', icon: '─', href: '/grid/strip',   group: 'Módulos' },
   { id: 'grid-radial',  label: 'Sistema radial / estrella ★',  icon: '✦', href: '/grid/radial',   group: 'Módulos' },
   { id: 'grid-ring',    label: 'Anillo perimetral (Sunde)',     icon: '◯', href: '/grid/ring',     group: 'Módulos' },
   { id: 'grid-combined',label: 'Malla + picas combinada (Schwarz)', icon: '⊞', href: '/grid/combined', group: 'Módulos' },
-  { id: 'conductor',    label: 'Conductor IEEE 80',          icon: '〰', href: '/conductor',         group: 'Módulos' },
   { id: 'voltages',     label: 'Tensiones paso/contacto',   icon: '⚠', href: '/voltages',           group: 'Módulos' },
-  { id: 'gel',          label: 'Gel químico',                icon: '🧪', href: '/grid/gel',          group: 'Módulos' },
   { id: 'gpr',          label: 'GPR — Potencial de tierra', icon: '⚡', href: '/gpr',               group: 'Módulos' },
-  { id: 'lightning',    label: 'Rayos — SPR IEC 62305',     icon: '🌩', href: '/lightning',          group: 'Módulos' },
+  { id: 'report',       label: 'Entregables del Proyecto', icon: '📋', href: '/report',            group: 'Módulos' },
   { id: 'pricing',      label: 'Precios y planes',           icon: '💎', href: '/pricing',           group: 'Información' },
   { id: 'changelog',   label: 'Changelog — versiones',      icon: '📋', href: '/changelog',         group: 'Información' },
   { id: 'admin',       label: 'Panel de administración',    icon: '🛡', href: '/admin',             group: 'Sistema' },
@@ -84,7 +84,7 @@ export function CommandPalette() {
       style={{ position: 'fixed', inset: 0, zIndex: 9000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '14vh', background: '#00000066' }}
       onMouseDown={e => { if (e.target === e.currentTarget) close(); }}
     >
-      <div style={{ width: '100%', maxWidth: 520, background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8, boxShadow: '0 24px 64px #00000077', overflow: 'hidden' }}>
+      <div style={{ width: '100%', maxWidth: 520, background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 8, boxShadow: 'var(--shadow)', overflow: 'hidden' }}>
         {/* Search bar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderBottom: '1px solid var(--line)' }}>
           <span style={{ fontSize: 13, opacity: 0.5 }}>⌕</span>

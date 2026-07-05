@@ -1,25 +1,24 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+import { API_BASE as BASE } from '@/lib/apiBase';
 
 const PLANS = [
   {
     id: 'community', name: 'Community', price: 0, interval: null,
-    color: '#93c5fd', badge: null,
+    color: 'var(--blue)', badge: null,
     features: ['3 proyectos', 'Todos los módulos IEEE 80/81', 'PDF con marca de agua', 'Historial de cálculos'],
     cta: 'Empezar gratis', ctaHref: '/register',
   },
   {
     id: 'individual', name: 'Individual', price: 29900, interval: 'mes',
-    color: '#f59e0b', badge: 'Más popular',
+    color: 'var(--warn)', badge: 'Más popular',
     features: ['Proyectos ilimitados', 'PDF profesional sin marca', 'Firma PE en reportes', 'Soporte por email', 'Guardar en proyecto ilimitado'],
     cta: 'Suscribirse', ctaHref: null,
   },
   {
     id: 'professional', name: 'Professional', price: 79900, interval: 'mes',
-    color: '#22c55e', badge: null,
+    color: 'var(--safe)', badge: null,
     features: ['5 usuarios incluidos', 'API access REST', 'Normas IEC 60364 / RETIE', 'Soporte prioritario', 'Onboarding técnico 1:1', 'Factura electrónica'],
     cta: 'Contactar ventas', ctaHref: 'mailto:ventas@grounddesing.pro',
   },
@@ -64,7 +63,7 @@ export function PricingClient() {
       </div>
 
       {error && (
-        <div style={{ background: '#1a0d0d', border: '1px solid #ef444444', borderRadius: 4, padding: '10px 16px', fontSize: 11, color: 'var(--danger)', marginBottom: 24, textAlign: 'center' }}>
+        <div style={{ background: 'var(--danger-soft)', border: '1px solid var(--danger)', borderRadius: 4, padding: '10px 16px', fontSize: 11, color: 'var(--danger)', marginBottom: 24, textAlign: 'center' }}>
           {error}
           {error.includes('configurado') && (
             <span style={{ color: 'var(--faint)', display: 'block', marginTop: 4, fontSize: 10 }}>

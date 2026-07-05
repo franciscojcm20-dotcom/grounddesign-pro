@@ -1,94 +1,89 @@
-# GroundDesing Pro — Prototipo de motor de cálculo de puesta a tierra
+# GroundDesing Pro
 
-## Qué es esto
+Plataforma SaaS de diseño de sistemas de puesta a tierra para ingenieros
+eléctricos. Motor de cálculo propio (sin librerías de matemática de terceros,
+sin IA/ML, sin APIs externas de pago) implementando IEEE Std 80-2013 e IEEE
+Std 81-2012 con cálculo real y trazable de cada fórmula.
 
-Prototipo funcional (un único `index.html` autocontenido, sin build step) de un
-software de ingeniería para diseño de sistemas de puesta a tierra eléctrica,
-desarrollado iterativamente en Claude.ai.
+## Stack
 
-Incluye cálculo real (no simulado) de:
+- **`apps/web`** — Next.js 15 (App Router), React 19, TypeScript. Frontend.
+- **`apps/api`** — Fastify 5, TypeScript. API REST, auth JWT, PostgreSQL.
+- **`packages/engines-math`** — Motores de cálculo puros (sin dependencias
+  externas de matemática), con su propia suite de tests.
+- **`packages/pdf-engine`** — Generación de reportes PDF (PDFKit) y
+  exportación DXF (AutoCAD), con su propia suite de tests.
 
-- Resistividad del suelo — método de Wenner e interpretación de N capas (kernel
-  recursivo de Wait, 1954), con datos de campo (earth tester / telurómetro).
-- Resistividad del suelo — método de Schlumberger, comparado contra Wenner.
-- Curvas patrón tipo Orellana-Mooney (ajuste automático de la curva más cercana).
-- Aditivo químico gel para mejoramiento de tierras (modelo de cilindros
-  concéntricos, Dwight/Sunde).
-- Resistencia de la malla de puesta a tierra (ecuación de Sverak, IEEE Std
-  80-2013 Cl. 14.2).
-- Tensiones de paso y de contacto, admisibles y reales (IEEE Std 80-2013 Cl. 16,
-  modelo de Dalziel).
-- Dimensionamiento térmico de conductor (ecuación de Onderdonk, IEEE Std
-  80-2013 Cl. 11), con selección manual de calibre y bloqueo de calibres
-  subdimensionados.
-- Lista de materiales y costos (acumulativo: reacciona a cambios de geometría,
-  gel y calibre de conductor).
-- Memoria técnica consolidada con estado de cumplimiento global.
+Monorepo gestionado con pnpm workspaces.
 
-Todos los módulos de cálculo están interconectados: la resistividad medida en
-Wenner alimenta el diseño de malla, que alimenta tensiones, que considera el
-conductor realmente seleccionado, etc. Editar cualquier parámetro aguas arriba
-recalcula todo lo que depende de él.
+## Módulos de cálculo
 
-También incluye pantallas de **maqueta** (sin backend real, claramente
-marcadas en la UI): dashboard, gestión de proyectos, login/registro, gestión
-de usuarios y roles, y planes de suscripción.
+**Medición de suelo**
+- Wenner e interpretación biestrato (método de asíntotas) — IEEE Std 81-2012 Cl. 8.3
+- Schlumberger (forma exacta, Telford) — IEEE Std 81-2012 Cl. 8
+- Modelo N capas — la estratificación **no se ingresa manualmente**: se
+  determina ajustando el universo de curvas patrón de Orellana & Mooney
+  (1966), evaluadas de forma exacta vía el kernel recursivo de Wait (1954),
+  contra las lecturas reales de campo. El ajuste no lineal usa
+  Levenberg-Marquardt (Gauss-Newton amortiguado) y prueba de 1 a 4 estratos,
+  adoptando el modelo más simple que ya explica los datos dentro de la
+  precisión habitual de un ensayo VES (evita interpretar ruido de medición
+  como estratos ficticios).
 
-## Estado del proyecto
+**Análisis de falla**
+- Motor de análisis de falla: determina y justifica la corriente de diseño
+  (Ig) — IEEE Std 80-2013 Cl. 15.9–15.10.
+- Motor de cortocircuito (componentes simétricas) para modelar Ig cuando no
+  se dispone de un estudio de cortocircuito existente.
 
-Este es un prototipo de validación de concepto, no un producto terminado.
-Los algoritmos de ingeniería están verificados numéricamente (ver comentarios
-de trazabilidad en el código, con cláusula normativa exacta de cada ecuación),
-pero el código vive todo en un único archivo HTML de ~3300 líneas, sin tests
-automatizados, sin TypeScript, sin linter, y sin separación de módulos.
+**Diseño de malla** (cada uno con vista 2D y vista 3D interactiva rotable)
+- Resistencia de malla rectangular — ecuación de Sverak, IEEE Std 80-2013 Cl. 14.2
+- Electrodos verticales (picas) en paralelo — Dwight/Sunde, IEEE 80-2013 Annex B.1
+- Conductor horizontal enterrado — Dwight, IEEE 80-2013 Annex B.3
+- Sistema radial / estrella — Laurent-Niemann
+- Anillo perimetral — Sunde
+- Malla + picas combinada — Schwarz (1954)
+- Aditivo químico gel (mejoramiento de resistividad) — Dwight/Sunde, modelo de cilindros concéntricos
 
-## Por qué se migra a Claude Code
+**Verificación**
+- Tensiones de paso y de contacto, admisibles y reales — IEEE Std 80-2013 Cl. 16, modelo de Dalziel/Sverak
+- Dimensionamiento térmico de conductor — ecuación de Onderdonk, IEEE Std 80-2013 Cl. 11.3
+- GPR (elevación de potencial de tierra)
+- Cubicación y valorización económica (CLP) — comparación de costo entre sistemas calculados
 
-El archivo único ya superó el tamaño cómodo para seguir iterando con
-edición de texto plano. Claude Code permite:
+**Perfiles normativos por país** (seleccionable, afecta los umbrales de cumplimiento)
+- IEEE 80/81 · SEC/RIC (Chile) — perfil por defecto
+- RETIE (Colombia)
+- REBT (España)
+- NBR (Brasil)
 
-- Git real (commits, diff, revertir cambios con seguridad)
-- Separar el código en módulos (motores de cálculo / componentes UI / estilos)
-- Tests unitarios para los motores de cálculo
-- Linter / TypeScript para atrapar errores antes de ejecutar
-- Servidor de desarrollo con recarga en vivo
+Todos los módulos están interconectados vía contextos compartidos: el
+modelo de suelo medido en campo alimenta el diseño de malla, la corriente de
+diseño del Motor de Análisis de Falla alimenta todos los módulos posteriores,
+y el perfil normativo seleccionado se aplica de forma consistente en
+compliance, tensiones y el reporte final.
 
-## Instrucciones para continuar en Claude Code
+## Plataforma
 
-1. Abre esta carpeta en tu terminal y ejecuta `claude` (o ábrela desde la
-   extensión de VS Code / la app de escritorio).
+- Autenticación JWT real, historial de proyectos y resultados persistidos en PostgreSQL
+- Reportes PDF profesionales (memoria de cálculo completa, firmable)
+- Exportación DXF de la geometría de cada topología
+- Comparación de sistemas calculados para elegir el diseño final (técnico + económico)
+- i18n: 8 idiomas (ES/EN/PT/FR/DE/IT/JA/ZH)
 
-2. Como primer mensaje, dale este contexto:
+## Desarrollo
 
-   > "Tengo un prototipo de software de ingeniería en index.html (cálculo de
-   > sistemas de puesta a tierra: Wenner, Schlumberger, malla, tensiones,
-   > conductor, materiales). Léelo completo primero. Quiero que lo
-   > reestructures en módulos separados (un archivo JS por motor de cálculo,
-   > componentes de UI aparte, CSS aparte), conservando EXACTAMENTE la misma
-   > lógica de cálculo — no cambies ninguna fórmula ni constante todavía.
-   > Antes de mover nada, muéstrame la estructura de carpetas que propones."
+```bash
+pnpm install
+pnpm dev          # apps/api (puerto 3001) + apps/web (puerto 3000)
+pnpm -r typecheck
+pnpm -r test
+```
 
-3. Una vez migrada la estructura, pide que agregue tests unitarios para los
-   motores de cálculo usando los valores de ejemplo ya presentes en el código
-   (lecturas Wenner/Schlumberger de muestra, geometría de malla de muestra)
-   como casos de referencia — esos valores ya fueron verificados.
-
-4. Haz que trabaje con commits frecuentes y descriptivos para poder revertir
-   con seguridad si algo se rompe.
-
-## Normas de referencia implementadas (con cálculo real)
-
-- IEEE Std 80-2013 — "IEEE Guide for Safety in AC Substation Grounding"
-- IEEE Std 81-2012 — "IEEE Guide for Measuring Earth Resistivity, Ground
-  Impedance, and Earth Surface Potentials of a Grounding System"
-
-Otras normas (IEC 60364, NFPA 70, SEC/RIC, RETIE, REBT, NBR 5419) aparecen
-solo como catálogo de referencia visual en la pestaña "Normas de Referencia",
-sin cálculos reales detrás — están explícitamente marcadas como "no
-implementado" en la interfaz.
+Requiere una instancia de PostgreSQL corriendo localmente (ver `apps/api/.env`
+para la cadena de conexión).
 
 ## Advertencia
 
-Este software es un prototipo de validación técnica, no reemplaza una memoria
-de cálculo firmada por un ingeniero eléctrico competente. Los resultados
-deben validarse profesionalmente antes de cualquier uso en construcción real.
+Los resultados de este software deben ser validados y firmados por un
+ingeniero eléctrico competente antes de cualquier uso en construcción real.

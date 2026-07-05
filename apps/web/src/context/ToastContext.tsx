@@ -19,10 +19,10 @@ interface ToastCtx {
 const Ctx = createContext<ToastCtx | null>(null);
 
 const COLORS: Record<ToastType, { bg: string; border: string; icon: string }> = {
-  success: { bg: '#0d1a0d', border: 'var(--safe)',   icon: '✓' },
-  error:   { bg: '#1a0d0d', border: 'var(--danger)', icon: '✕' },
-  info:    { bg: '#0d1220', border: 'var(--blue)',   icon: 'ℹ' },
-  warn:    { bg: '#1a1508', border: 'var(--warn)',   icon: '⚠' },
+  success: { bg: 'var(--safe-soft)',   border: 'var(--safe)',   icon: '✓' },
+  error:   { bg: 'var(--danger-soft)', border: 'var(--danger)', icon: '✕' },
+  info:    { bg: 'var(--blue-soft)',   border: 'var(--blue)',   icon: 'ℹ' },
+  warn:    { bg: 'var(--warn-soft)',   border: 'var(--warn)',   icon: '⚠' },
 };
 
 const TEXT: Record<ToastType, string> = {
@@ -62,9 +62,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           return (
             <div key={t.id} style={{
               display: 'flex', alignItems: 'flex-start', gap: 10,
-              background: c.bg, border: `1px solid ${c.border}`,
+              background: `linear-gradient(${c.bg}, ${c.bg}), var(--panel)`,
+              border: `1px solid ${c.border}`,
               borderRadius: 4, padding: '10px 14px',
-              boxShadow: '0 4px 16px #00000055',
+              boxShadow: 'var(--shadow)',
               minWidth: 260, maxWidth: 380,
               animation: 'toast-in .2s ease',
               pointerEvents: 'auto',

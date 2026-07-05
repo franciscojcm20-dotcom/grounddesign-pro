@@ -1,8 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/context/ToastContext';
-
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+import { API_BASE as BASE } from '@/lib/apiBase';
 
 interface Project { id: string; name: string; description?: string }
 
@@ -19,6 +18,7 @@ export function SaveToProjectModal({ module, inputs, outputs, norm, onClose, onS
   const toast = useToast();
   const [projects,    setProjects]    = useState<Project[]>([]);
   const [loading,     setLoading]     = useState(true);
+  const [loadError,   setLoadError]   = useState<string | null>(null);
   const [saving,      setSaving]      = useState(false);
   const [selected,    setSelected]    = useState<string>('');
   const [createMode,  setCreateMode]  = useState(false);
@@ -27,15 +27,16 @@ export function SaveToProjectModal({ module, inputs, outputs, norm, onClose, onS
   const [creating,    setCreating]    = useState(false);
 
   const loadProjects = useCallback(async () => {
-    setLoading(true);
+    setLoading(true); setLoadError(null);
     try {
       const res = await fetch(`${BASE}/api/v1/projects`, { credentials: 'include' });
-      if (!res.ok) throw new Error('Error al cargar proyectos');
+      if (!res.ok) throw new Error(res.status === 401 ? 'Debes iniciar sesión para guardar en un proyecto.' : 'Error al cargar proyectos');
       const body = await res.json() as { projects: Project[] };
       setProjects(body.projects);
       if (body.projects[0]) setSelected(body.projects[0].id);
-    } catch { /* silent */ }
-    finally { setLoading(false); }
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : 'No se pudo conectar con el servidor. Verifica tu conexión e inténtalo de nuevo.');
+    } finally { setLoading(false); }
   }, []);
 
   useEffect(() => { loadProjects(); }, [loadProjects]);
@@ -90,7 +91,7 @@ export function SaveToProjectModal({ module, inputs, outputs, norm, onClose, onS
       style={{ position: 'fixed', inset: 0, zIndex: 8000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#00000066' }}
       onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div style={{ width: '100%', maxWidth: 420, background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 6, boxShadow: '0 20px 60px #00000055', overflow: 'hidden' }}>
+      <div style={{ width: '100%', maxWidth: 420, background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 6, boxShadow: 'var(--shadow)', overflow: 'hidden' }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--line)' }}>
           <div>
@@ -105,6 +106,15 @@ export function SaveToProjectModal({ module, inputs, outputs, norm, onClose, onS
         <div style={{ padding: '18px 18px 20px' }}>
           {loading ? (
             <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--faint)', fontSize: 11 }}>Cargando proyectos…</div>
+          ) : loadError ? (
+            <>
+              <div style={{ textAlign: 'center', padding: '16px 0 20px', color: 'var(--danger)', fontSize: 11 }}>
+                ⚠ {loadError}
+              </div>
+              <button onClick={loadProjects} style={{ width: '100%', background: 'var(--copper)', border: 'none', borderRadius: 3, color: '#fff', fontWeight: 700, fontSize: 11, padding: '10px 0', cursor: 'pointer' }}>
+                Reintentar
+              </button>
+            </>
           ) : createMode ? (
             <>
               <div style={{ fontSize: 10, color: 'var(--faint)', marginBottom: 12 }}>Nuevo proyecto</div>

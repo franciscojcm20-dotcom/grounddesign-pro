@@ -1,23 +1,101 @@
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Montserrat:wght@400;600;700&display=swap');
 
-:root {
-  --bg:        #0f1117;
-  --panel:     #181c24;
-  --panel2:    #1e2230;
-  --line:      #2a2f3e;
-  --copper:    #E07A23;
+/* ── Dark theme (default) ── */
+:root, [data-theme="dark"] {
+  --bg:          #0f1117;
+  --panel:       #181c24;
+  --panel2:      #1e2230;
+  --panel3:      #252a38;
+  --line:        #2a2f3e;
+  --copper:      #E07A23;
   --copper-soft: #E07A2318;
-  --text:      #f2f4f7;
-  --dim:       #9aa3b0;
-  --faint:     #4b5563;
-  --safe:      #22c55e;
-  --danger:    #ef4444;
-  --warn:      #f59e0b;
-  --blue:      #3b82f6;
-  --purple:    #8b5cf6;
-  --radius:    4px;
-  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
-  --font-sans: 'Montserrat', system-ui, sans-serif;
+  --copper-mid:  #E07A2340;
+  --text:        #f2f4f7;
+  --dim:         #9aa3b0;
+  --faint:       #4b5563;
+  --safe:        #22c55e;
+  --safe-soft:   #22c55e18;
+  --danger:      #ef4444;
+  --danger-soft: #ef444418;
+  --warn:        #f59e0b;
+  --warn-soft:   #f59e0b18;
+  --blue:        #3b82f6;
+  --blue-soft:   #3b82f618;
+  --purple:      #8b5cf6;
+  --purple-soft: #8b5cf618;
+  --shadow:      0 4px 24px #00000055;
+  --radius:      4px;
+  --font-mono:   'IBM Plex Mono', ui-monospace, monospace;
+  --font-sans:   'Montserrat', system-ui, sans-serif;
+
+  /* Chart colors */
+  --chart-1: #E07A23;
+  --chart-2: #3b82f6;
+  --chart-3: #22c55e;
+  --chart-4: #8b5cf6;
+  --chart-5: #f59e0b;
+  --chart-grid: #2a2f3e;
+  --chart-axis: #4b5563;
+  --chart-tooltip-bg: #181c24;
+  --chart-tooltip-border: #2a2f3e;
+
+  /* Textures — blueprint-style grid overlay, dot grid for panels */
+  --texture-blueprint:
+    linear-gradient(rgba(224,122,35,.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(224,122,35,.05) 1px, transparent 1px);
+  --texture-blueprint-size: 24px 24px;
+  --texture-dots: radial-gradient(rgba(255,255,255,.035) 1px, transparent 1px);
+  --texture-dots-size: 14px 14px;
+  --texture-noise-opacity: 0.035;
+}
+
+/* ── Light theme ── */
+[data-theme="light"] {
+  --bg:          #f5f6fa;
+  --panel:       #ffffff;
+  --panel2:      #f0f1f6;
+  --panel3:      #e8eaf2;
+  --line:        #dde1ec;
+  --copper:      #c0620d;
+  --copper-soft: #c0620d15;
+  --copper-mid:  #c0620d35;
+  --text:        #1a1d29;
+  --dim:         #4b5573;
+  --faint:       #8b93a8;
+  --safe:        #16a34a;
+  --safe-soft:   #16a34a15;
+  --danger:      #dc2626;
+  --danger-soft: #dc262615;
+  --warn:        #d97706;
+  --warn-soft:   #d9770615;
+  --blue:        #2563eb;
+  --blue-soft:   #2563eb15;
+  --purple:      #7c3aed;
+  --purple-soft: #7c3aed15;
+  --shadow:      0 4px 24px #00000018;
+  --radius:      4px;
+  --font-mono:   'IBM Plex Mono', ui-monospace, monospace;
+  --font-sans:   'Montserrat', system-ui, sans-serif;
+
+  /* Chart colors */
+  --chart-1: #c0620d;
+  --chart-2: #2563eb;
+  --chart-3: #16a34a;
+  --chart-4: #7c3aed;
+  --chart-5: #d97706;
+  --chart-grid: #dde1ec;
+  --chart-axis: #8b93a8;
+  --chart-tooltip-bg: #ffffff;
+  --chart-tooltip-border: #dde1ec;
+
+  /* Textures — softer in light mode */
+  --texture-blueprint:
+    linear-gradient(rgba(192,98,13,.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(192,98,13,.045) 1px, transparent 1px);
+  --texture-blueprint-size: 24px 24px;
+  --texture-dots: radial-gradient(rgba(26,29,41,.045) 1px, transparent 1px);
+  --texture-dots-size: 14px 14px;
+  --texture-noise-opacity: 0.02;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -26,6 +104,9 @@ html { font-size: 14px; }
 
 body {
   background: var(--bg);
+  background-image: var(--texture-blueprint);
+  background-size: var(--texture-blueprint-size);
+  background-attachment: fixed;
   color: var(--text);
   font-family: var(--font-sans);
   line-height: 1.5;
@@ -45,6 +126,16 @@ body {
 .faint { color: var(--faint); }
 .safe { color: var(--safe); }
 .danger { color: var(--danger); }
+
+/* ── Textures ── */
+.texture-dots {
+  background-image: var(--texture-dots);
+  background-size: var(--texture-dots-size);
+}
+.texture-blueprint {
+  background-image: var(--texture-blueprint);
+  background-size: var(--texture-blueprint-size);
+}
 
 /* ── Toast animation ── */
 @keyframes toast-in {

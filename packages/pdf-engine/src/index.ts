@@ -1,6 +1,12 @@
 import PDFDocument from 'pdfkit';
 import { Writable } from 'node:stream';
 
+export {
+  generateGridDxf, generateRodDxf, generateStripDxf, generateRadialDxf, generateRingDxf, generateCombinedDxf,
+  type GridDxfInput, type RodDxfInput, type StripDxfInput, type RadialDxfInput, type RingDxfInput, type CombinedDxfInput,
+  type DxfLayer, type ResumenRow,
+} from './dxf.ts';
+
 // ─── Public types ─────────────────────────────────────────────────────────────
 
 export interface ReportMeta {
@@ -52,7 +58,7 @@ const C = {
 
 function hex(h: string): [number, number, number] {
   const n = parseInt(h.slice(1), 16);
-  return [(n >> 16) / 255, ((n >> 8) & 0xff) / 255, (n & 0xff) / 255];
+  return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
 }
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
@@ -61,6 +67,26 @@ const PAGE   = { width: 595.28, height: 841.89 };
 const MARGIN = 40;
 const CONTENT = PAGE.width - MARGIN * 2;
 const COL_W   = CONTENT / 2 - 6;
+
+// ─── Text sanitisation ────────────────────────────────────────────────────────
+// PDFKit's standard 14 fonts (Helvetica) only support WinAnsiEncoding (Windows-1252
+// — Latin-1 plus Spanish accents, but NO Greek letters or most math operators).
+// Content built elsewhere in the app freely uses Ω, ρ, π, √, Δ, α, ≤, ≥, ≈, etc.
+// (electrical engineering notation), which corrupts not just the unsupported glyph
+// but the rest of the string once WinAnsi's mapping fails. Every string reaching
+// the PDF must be sanitised to a WinAnsi-safe equivalent first.
+const UNSAFE_CHAR_MAP: Record<string, string> = {
+  'Ω': 'Ohm', 'ρ': 'rho', 'π': 'pi', 'Δ': 'Delta', 'α': 'alpha', 'β': 'beta',
+  'σ': 'sigma', 'Σ': 'Sigma', 'μ': 'u', 'λ': 'lambda', 'θ': 'theta', 'φ': 'phi', 'Φ': 'Phi',
+  '√': 'sqrt', '≤': '<=', '≥': '>=', '≈': '~', '≫': '>>', '≪': '<<', '→': '->',
+  '−': '-', '★': '*', '─': '-', '✓': 'OK', '✗': 'X',
+};
+const UNSAFE_CHARS_RE = new RegExp(Object.keys(UNSAFE_CHAR_MAP).join('|'), 'g');
+
+/** Reemplaza símbolos griegos/matemáticos fuera de WinAnsi por su equivalente ASCII seguro. */
+function safe(text: string): string {
+  return text.replace(UNSAFE_CHARS_RE, (m) => UNSAFE_CHAR_MAP[m] ?? m);
+}
 
 // ─── Drawing helpers ──────────────────────────────────────────────────────────
 
@@ -72,16 +98,16 @@ function strokeRect(doc: PDFKit.PDFDocument, x: number, y: number, w: number, h:
   doc.save().rect(x, y, w, h).lineWidth(lw).strokeColor(hex(color)).stroke().restore();
 }
 
-function hRule(doc: PDFKit.PDFDocument, y: number, color = C.line, lw = 0.5) {
+function hRule(doc: PDFKit.PDFDocument, y: number, color: string = C.line, lw = 0.5) {
   doc.save().moveTo(MARGIN, y).lineTo(PAGE.width - MARGIN, y).lineWidth(lw).strokeColor(hex(color)).stroke().restore();
 }
 
-function lbl(doc: PDFKit.PDFDocument, x: number, y: number, text: string, size = 7, color = C.dim) {
-  doc.fontSize(size).fillColor(hex(color)).font('Helvetica').text(text, x, y, { lineBreak: false });
+function lbl(doc: PDFKit.PDFDocument, x: number, y: number, text: string, size = 7, color: string = C.dim) {
+  doc.fontSize(size).fillColor(hex(color)).font('Helvetica').text(safe(text), x, y, { lineBreak: false });
 }
 
-function val(doc: PDFKit.PDFDocument, x: number, y: number, text: string, size = 9, color = C.text, bold = false) {
-  doc.fontSize(size).fillColor(hex(color)).font(bold ? 'Helvetica-Bold' : 'Helvetica').text(text, x, y, { lineBreak: false });
+function val(doc: PDFKit.PDFDocument, x: number, y: number, text: string, size = 9, color: string = C.text, bold = false) {
+  doc.fontSize(size).fillColor(hex(color)).font(bold ? 'Helvetica-Bold' : 'Helvetica').text(safe(text), x, y, { lineBreak: false });
 }
 
 // ─── Ground symbol ────────────────────────────────────────────────────────────
@@ -111,7 +137,7 @@ function drawHeader(doc: PDFKit.PDFDocument, meta: ReportMeta, pageNum: number, 
   // Project name in header (pages > 1)
   if (pageNum > 1) {
     doc.fontSize(7).fillColor(hex(C.faint))
-      .text(meta.projectName, PAGE.width / 2 - 80, 24, { lineBreak: false, width: 160, align: 'center' });
+      .text(safe(meta.projectName), PAGE.width / 2 - 80, 24, { lineBreak: false, width: 160, align: 'center' });
   }
 
   doc.fontSize(7).fillColor(hex(C.dim))
@@ -157,20 +183,7 @@ function drawMeta(doc: PDFKit.PDFDocument, meta: ReportMeta): number {
 function drawCoverPage(doc: PDFKit.PDFDocument, meta: ReportMeta, sections: ReportSection[], totalPages: number) {
   drawHeader(doc, meta, 1, totalPages);
 
-  // Hero band
-  fillRect(doc, 0, 60, PAGE.width, 220, C.panel);
-  fillRect(doc, 0, 60, PAGE.width, 3, C.copper);
-
-  // Large ground symbol
-  drawGroundSymbol(doc, PAGE.width / 2 - 8, 82, 2.2);
-
-  // Title
-  doc.fontSize(22).fillColor(hex(C.white)).font('Helvetica-Bold')
-    .text('INFORME DE CÁLCULO', MARGIN, 128, { width: CONTENT, align: 'center', lineBreak: false });
-  doc.fontSize(11).fillColor(hex(C.copper)).font('Helvetica')
-    .text('SISTEMA DE PUESTA A TIERRA', MARGIN, 158, { width: CONTENT, align: 'center', lineBreak: false });
-
-  // Meta rows in hero
+  // Meta rows in hero — declared before the hero band so its height can be sized to fit them
   const mid = 200;
   const entries = [
     ['PROYECTO', meta.projectName],
@@ -183,6 +196,21 @@ function drawCoverPage(doc: PDFKit.PDFDocument, meta: ReportMeta, sections: Repo
       : new Date().toLocaleDateString('es-CL', { year: 'numeric', month: 'long', day: 'numeric' })],
     ['NORMA REF.', meta.norm ?? 'IEEE Std 80-2013 / 81-2012'],
   ];
+
+  // Hero band — height derived from the meta row count so it never spills onto the plain
+  // page background (a fixed height here previously clipped rows once NORMA REF. was added).
+  const heroHeight = (mid - 60) + entries.length * 18 + 14;
+  fillRect(doc, 0, 60, PAGE.width, heroHeight, C.panel);
+  fillRect(doc, 0, 60, PAGE.width, 3, C.copper);
+
+  // Large ground symbol
+  drawGroundSymbol(doc, PAGE.width / 2 - 8, 82, 2.2);
+
+  // Title
+  doc.fontSize(22).fillColor(hex(C.white)).font('Helvetica-Bold')
+    .text('INFORME DE CÁLCULO', MARGIN, 128, { width: CONTENT, align: 'center', lineBreak: false });
+  doc.fontSize(11).fillColor(hex(C.copper)).font('Helvetica')
+    .text('SISTEMA DE PUESTA A TIERRA', MARGIN, 158, { width: CONTENT, align: 'center', lineBreak: false });
 
   let ey = mid;
   for (const [k, v] of entries) {
@@ -246,12 +274,13 @@ function drawSection(doc: PDFKit.PDFDocument, sec: ReportSection, startY: number
   // Section title bar
   fillRect(doc, MARGIN, y, CONTENT, 22, C.panel);
   fillRect(doc, MARGIN, y, 3, 22, C.copper);
+  const safeTitle = safe(sec.title.toUpperCase());
   doc.font('Helvetica-Bold').fontSize(9).fillColor(hex(C.copper))
-    .text(sec.title.toUpperCase(), MARGIN + 12, y + 7, { lineBreak: false });
+    .text(safeTitle, MARGIN + 12, y + 7, { lineBreak: false });
   if (sec.norm) {
-    const titleW = doc.widthOfString(sec.title.toUpperCase());
+    const titleW = doc.widthOfString(safeTitle);
     doc.font('Helvetica').fontSize(6.5).fillColor(hex(C.faint))
-      .text(sec.norm, MARGIN + 12 + titleW + 10, y + 8, { lineBreak: false });
+      .text(safe(sec.norm), MARGIN + 12 + titleW + 10, y + 8, { lineBreak: false });
   }
   y += 24;
 
@@ -268,12 +297,12 @@ function drawSection(doc: PDFKit.PDFDocument, sec: ReportSection, startY: number
   // ── Inputs column ────────────────────────────────────────────────────────
   let iy = y;
   for (let i = 0; i < sec.inputs.length; i++) {
-    const inp = sec.inputs[i];
+    const inp = sec.inputs[i]!;
     const bg  = i % 2 === 0 ? C.panelDark : C.panel;
     fillRect(doc, MARGIN, iy, COL_W, 17, bg);
     doc.font('Helvetica').fontSize(7.5).fillColor(hex(C.dim))
-      .text(inp.label, MARGIN + 7, iy + 5, { lineBreak: false, width: COL_W - 65 });
-    const v = `${inp.value}${inp.unit ? ' ' + inp.unit : ''}`;
+      .text(safe(inp.label), MARGIN + 7, iy + 5, { lineBreak: false, width: COL_W - 65 });
+    const v = safe(`${inp.value}${inp.unit ? ' ' + inp.unit : ''}`);
     doc.font('Helvetica-Bold').fontSize(8).fillColor(hex(C.text))
       .text(v, MARGIN + COL_W - 62, iy + 4, { lineBreak: false, width: 58, align: 'right' });
     doc.font('Helvetica');
@@ -285,14 +314,14 @@ function drawSection(doc: PDFKit.PDFDocument, sec: ReportSection, startY: number
   const rx = MARGIN + COL_W + 12;
   let ry    = y;
   for (let i = 0; i < sec.results.length; i++) {
-    const res    = sec.results[i];
+    const res    = sec.results[i]!;
     const bg     = res.highlight ? C.copperSoft : (i % 2 === 0 ? C.panelDark : C.panel);
     const vColor = res.highlight ? C.copper : C.text;
     fillRect(doc, rx, ry, COL_W, 17, bg);
     if (res.highlight) fillRect(doc, rx, ry, 2, 17, C.copper);
     doc.font('Helvetica').fontSize(7.5).fillColor(hex(C.dim))
-      .text(res.label, rx + 7, ry + 5, { lineBreak: false, width: COL_W - 65 });
-    const v = `${res.value}${res.unit ? ' ' + res.unit : ''}`;
+      .text(safe(res.label), rx + 7, ry + 5, { lineBreak: false, width: COL_W - 65 });
+    const v = safe(`${res.value}${res.unit ? ' ' + res.unit : ''}`);
     doc.font('Helvetica-Bold').fontSize(8).fillColor(hex(vColor))
       .text(v, rx + COL_W - 62, ry + 4, { lineBreak: false, width: 58, align: 'right' });
     doc.font('Helvetica');
@@ -311,18 +340,23 @@ function drawSection(doc: PDFKit.PDFDocument, sec: ReportSection, startY: number
     const mark = sec.pass ? '✓' : '✗';
     const txt  = sec.passLabel ?? (sec.pass ? 'CUMPLE' : 'NO CUMPLE');
     doc.font('Helvetica-Bold').fontSize(8).fillColor(hex(bColor))
-      .text(`${mark}  ${txt}`, MARGIN + 12, y + 5, { lineBreak: false });
+      .text(safe(`${mark}  ${txt}`), MARGIN + 12, y + 5, { lineBreak: false });
     y += 22;
   }
 
   // ── Observations ─────────────────────────────────────────────────────────
+  // Height is measured per observation (they wrap to multiple lines) rather than
+  // assumed single-line, so long paragraphs no longer overlap the next row.
   if (sec.observations?.length) {
     for (const obs of sec.observations) {
-      fillRect(doc, MARGIN, y, CONTENT, 14, C.blueBg);
-      fillRect(doc, MARGIN, y, 2, 14, C.blue);
-      doc.font('Helvetica').fontSize(7).fillColor(hex(C.dim))
-        .text(`•  ${obs}`, MARGIN + 10, y + 4, { lineBreak: false, width: CONTENT - 16 });
-      y += 15;
+      const text = safe(`•  ${obs}`);
+      doc.font('Helvetica').fontSize(7);
+      const textH = doc.heightOfString(text, { width: CONTENT - 16 });
+      const rowH = textH + 8;
+      fillRect(doc, MARGIN, y, CONTENT, rowH, C.blueBg);
+      fillRect(doc, MARGIN, y, 2, rowH, C.blue);
+      doc.fillColor(hex(C.dim)).text(text, MARGIN + 10, y + 4, { width: CONTENT - 16 });
+      y += rowH + 1;
     }
   }
 
@@ -339,7 +373,7 @@ function drawFooter(doc: PDFKit.PDFDocument, meta: ReportMeta, pageNum: number) 
   doc.font('Helvetica').fontSize(6.5).fillColor(hex(C.faint))
     .text('GroundDesing Pro · Motor IEEE Std 80-2013 / 81-2012 · grounddesing.pro', MARGIN, y + 8, { lineBreak: false });
   if (meta.engineer) {
-    doc.text(`Ingeniero responsable: ${meta.engineer}`, MARGIN, y + 18, { lineBreak: false });
+    doc.text(safe(`Ingeniero responsable: ${meta.engineer}`), MARGIN, y + 18, { lineBreak: false });
   }
 
   if (pageNum > 1) {
@@ -354,11 +388,22 @@ function drawFooter(doc: PDFKit.PDFDocument, meta: ReportMeta, pageNum: number) 
 export function generateReport(opts: ReportOptions): void {
   const { meta, sections, stream } = opts;
 
+  const doc = new PDFDocument({ size: 'A4', margin: 0, autoFirstPage: false });
+  doc.pipe(stream);
+
   const bodyHeight = PAGE.height - 80 - 40;
+  // Observations wrap to multiple lines, so their height must be measured against the
+  // real font metrics (doc.heightOfString) rather than assumed as a fixed single line —
+  // otherwise pagination under-estimates section height and rows overflow past the page.
+  const observationsHeight = (obs?: string[]) => {
+    if (!obs?.length) return 0;
+    doc.font('Helvetica').fontSize(7);
+    return obs.reduce((sum, o) => sum + doc.heightOfString(safe(`•  ${o}`), { width: CONTENT - 16 }) + 8 + 1, 0);
+  };
   const sectionHeight = (sec: ReportSection) =>
     24 + 13 + Math.max(sec.inputs.length, sec.results.length) * 18 +
     (sec.pass !== undefined ? 22 : 0) +
-    (sec.observations?.length ?? 0) * 15 + 8;
+    observationsHeight(sec.observations) + 8;
 
   // Page 1 = cover, remaining pages = calc sections
   let used = 0;
@@ -368,9 +413,6 @@ export function generateReport(opts: ReportOptions): void {
     if (used + h > bodyHeight) { totalPages++; used = 0; }
     used += h;
   }
-
-  const doc = new PDFDocument({ size: 'A4', margin: 0, autoFirstPage: false });
-  doc.pipe(stream);
 
   // ── Cover page ──────────────────────────────────────────────────────────
   doc.addPage();

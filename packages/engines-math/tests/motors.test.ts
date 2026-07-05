@@ -24,7 +24,13 @@ import {
   stepVoltageReal,
   onderdonkArea,
   computeConductor,
+  applyMinConductorSection,
   CONDUCTOR_TABLE,
+  computeMultipleRods,
+  NORMATIVE_PROFILES,
+  getNormativeProfile,
+  evaluateRgCompliance,
+  fitLayeredEarthModel,
 } from '../src/index.ts';
 
 // ─── Tolerancia para comparaciones de punto flotante ─────────────────────────
@@ -189,6 +195,47 @@ describe('Modelo N capas — kernel de Wait y wennerApparentNLayer', () => {
   });
 });
 
+describe('Ajuste automático de modelo de suelo N capas (inversión, sin capas manuales)', () => {
+  const SPACINGS = [0.5, 1, 2, 4, 8, 16, 32, 64];
+
+  it('recupera un suelo homogéneo sintético como 1 capa (sin agregar estratos ficticios)', () => {
+    const rho = 300;
+    const measured = SPACINGS.map(a => ({ a, rho: wennerApparentNLayer(a, [rho], []) }));
+    const { best } = fitLayeredEarthModel(measured);
+    assert.strictEqual(best.nLayers, 1, `debería preferir 1 capa para un suelo homogéneo, obtuvo ${best.nLayers}`);
+    assertClose(best.rhos[0]!, rho, 0.05, 'ρ recuperada del suelo homogéneo');
+  });
+
+  it('recupera un modelo sintético de 2 capas conocido (ρ1, ρ2, h) dentro de tolerancia razonable', () => {
+    const trueRhos = [1214, 1537];
+    const trueHs = [4];
+    const measured = SPACINGS.map(a => ({ a, rho: wennerApparentNLayer(a, trueRhos, trueHs) }));
+    const { best } = fitLayeredEarthModel(measured);
+    assert.ok(best.nLayers <= 2, `no debería sobreajustar más allá de 2 capas para datos limpios de 2 capas, obtuvo ${best.nLayers}`);
+    assert.ok(best.rmsError < 0.03, `el ajuste debería tener bajo error para datos sintéticos limpios (rmsError=${best.rmsError})`);
+  });
+
+  it('el candidato de cada nLayers reproduce su propia curva con error ≈ 0 (el ajuste local converge)', () => {
+    const measured = SPACINGS.map(a => ({ a, rho: wennerApparentNLayer(a, [1214, 1537, 3200], [4, 8]) }));
+    const { candidates } = fitLayeredEarthModel(measured);
+    const c3 = candidates.find(c => c.nLayers === 3)!;
+    assert.ok(c3.rmsError < 0.02, `el candidato de 3 capas debería ajustar casi perfectamente datos sintéticos de 3 capas (rmsError=${c3.rmsError})`);
+  });
+
+  it('devuelve un candidato por cada nLayers de 1 a 4, todos con curva del mismo largo que las mediciones', () => {
+    const measured = SPACINGS.map(a => ({ a, rho: wennerApparentNLayer(a, [1214, 1537], [4]) }));
+    const { candidates } = fitLayeredEarthModel(measured);
+    assert.deepStrictEqual(candidates.map(c => c.nLayers), [1, 2, 3, 4]);
+    for (const c of candidates) assert.strictEqual(c.curve.length, SPACINGS.length);
+  });
+
+  it('la parsimonia evita preferir 4 capas cuando 2 capas ya explican bien los datos', () => {
+    const measured = SPACINGS.map(a => ({ a, rho: wennerApparentNLayer(a, [1214, 1537], [4]) }));
+    const { best } = fitLayeredEarthModel(measured);
+    assert.ok(best.nLayers <= 2, `no debería preferir 4 capas para datos generados con 2, obtuvo ${best.nLayers}`);
+  });
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // 4. RESISTENCIA DE MALLA — Sverak (IEEE Std 80-2013, Cl. 14.2)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -198,6 +245,67 @@ const MALLA = {
   nVarillas: 12, longVarilla: 3,
   rho: 110, iFalla: 8500, tFalla: 0.5,
 };
+
+describe('Perfiles normativos (IEEE/RETIE/REBT/NBR)', () => {
+  it('hay al menos un perfil por cada norma esperada', () => {
+    const ids = NORMATIVE_PROFILES.map(p => p.id);
+    for (const expected of ['ieee80-sec-ric', 'retie-co', 'rebt-es', 'nbr-br']) {
+      assert.ok(ids.includes(expected), `falta perfil ${expected}`);
+    }
+  });
+
+  it('todos los perfiles tienen rgCritical <= rgGeneral', () => {
+    for (const p of NORMATIVE_PROFILES) {
+      assert.ok(p.rgCritical <= p.rgGeneral, `${p.id}: rgCritical=${p.rgCritical} > rgGeneral=${p.rgGeneral}`);
+    }
+  });
+
+  it('getNormativeProfile devuelve el perfil por id y cae al default si no existe', () => {
+    const retie = getNormativeProfile('retie-co');
+    assert.strictEqual(retie.country, 'Colombia');
+    const fallback = getNormativeProfile('no-existe');
+    assert.strictEqual(fallback.id, NORMATIVE_PROFILES[0]!.id);
+  });
+
+  it('evaluateRgCompliance respeta los umbrales del perfil seleccionado', () => {
+    const rebt = getNormativeProfile('rebt-es'); // rgCritical=15, rgGeneral=37
+    assert.deepStrictEqual(evaluateRgCompliance(10, rebt), { rgCritical: true, rgGeneral: true });
+    assert.deepStrictEqual(evaluateRgCompliance(20, rebt), { rgCritical: false, rgGeneral: true });
+    assert.deepStrictEqual(evaluateRgCompliance(40, rebt), { rgCritical: false, rgGeneral: false });
+  });
+});
+
+describe('Electrodos múltiples en paralelo — Sunde (resistencia mutua)', () => {
+  const base = { rho: 150, L: 3, radius: 0.00465, n: 12, iFalla: 8500 };
+
+  it('Rm es siempre no-negativa, incluso con s >= 2L (rango antes roto)', () => {
+    for (const spacing of [1, 2, 3, 4.5, 6, 9, 12]) {
+      const { Rm } = computeMultipleRods({ ...base, spacing });
+      assert.ok(Rm >= 0, `Rm=${Rm} negativa con spacing=${spacing}`);
+    }
+  });
+
+  it('Rn (n picas) es siempre no-negativa y no supera R1 de una sola pica', () => {
+    for (const spacing of [1, 2, 3, 4.5, 6, 9, 12]) {
+      const { Rn, R1 } = computeMultipleRods({ ...base, spacing });
+      assert.ok(Rn >= 0, `Rn=${Rn} negativa con spacing=${spacing}`);
+      assert.ok(Rn <= R1, `Rn=${Rn} > R1=${R1} con spacing=${spacing}`);
+    }
+  });
+
+  it('Rm decrece monótonamente a medida que aumenta la separación', () => {
+    const spacings = [1, 2, 3, 4.5, 6, 9, 12];
+    const Rms = spacings.map(spacing => computeMultipleRods({ ...base, spacing }).Rm);
+    for (let i = 1; i < Rms.length; i++) {
+      assert.ok(Rms[i] < Rms[i - 1], `Rm no decrece de s=${spacings[i - 1]} a s=${spacings[i]}`);
+    }
+  });
+
+  it('n=1 devuelve Rn = R1 (sin acoplamiento mutuo)', () => {
+    const { Rn, R1 } = computeMultipleRods({ ...base, n: 1, spacing: 6 });
+    assert.strictEqual(Rn, R1);
+  });
+});
 
 describe('Resistencia de malla — Sverak (geometría de muestra 40×30 m)', () => {
   it('longitud total de conductor calculada correctamente', () => {
@@ -352,6 +460,25 @@ describe('Conductor — Onderdonk (Ifalla=8500 A, t=0.5 s, Ta=40°C, Tm=450°C)'
   it('margen (%) = (mm2_seleccionado − mm2_mínimo) / mm2_mínimo × 100', () => {
     const res = computeConductor(CONDUCTOR);
     assertClose(res.margen, ((res.seleccionado.mm2 - res.areaMm2) / res.areaMm2) * 100, 1e-10, 'fórmula del margen');
+  });
+
+  it('applyMinConductorSection sube el calibre cuando el mínimo normativo supera el térmico', () => {
+    const res = computeConductor(CONDUCTOR); // sugerido = 2/0 AWG (67.4 mm²)
+    const bumped = applyMinConductorSection(res, 100);
+    assert.ok(bumped.seleccionado.mm2 >= 100, `debería subir a ≥100 mm², obtuvo ${bumped.seleccionado.mm2}`);
+    assert.strictEqual(bumped.esSeleccionManual, false);
+  });
+
+  it('applyMinConductorSection no cambia nada si el térmico ya supera el mínimo normativo', () => {
+    const res = computeConductor(CONDUCTOR); // 67.4 mm²
+    const unchanged = applyMinConductorSection(res, 50);
+    assert.strictEqual(unchanged.seleccionado.calibre, res.seleccionado.calibre);
+  });
+
+  it('applyMinConductorSection es no-op sin mínimo definido', () => {
+    const res = computeConductor(CONDUCTOR);
+    const unchanged = applyMinConductorSection(res, undefined);
+    assert.strictEqual(unchanged, res);
   });
 
   it('la tabla de conductores está ordenada ascendentemente por mm2', () => {

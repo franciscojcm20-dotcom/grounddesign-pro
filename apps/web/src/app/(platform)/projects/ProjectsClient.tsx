@@ -43,7 +43,7 @@ function StatsBar({ projects }: { projects: Project[] }) {
 }
 
 export function ProjectsClient() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, authError } = useAuth();
   const router = useRouter();
   const toast  = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -51,13 +51,23 @@ export function ProjectsClient() {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName]   = useState('');
   const [error, setError]       = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch]     = useState('');
 
+  function loadProjects() {
+    setLoading(true); setLoadError(null);
+    projectApi.list()
+      .then(d => setProjects(d.projects))
+      .catch(err => setLoadError(err instanceof Error ? err.message : 'Error al cargar tus proyectos. Verifica tu conexión e inténtalo de nuevo.'))
+      .finally(() => setLoading(false));
+  }
+
   useEffect(() => {
-    if (!authLoading && !user) { router.push('/login'); return; }
-    if (!user) return;
-    projectApi.list().then(d => setProjects(d.projects)).catch(() => setProjects([])).finally(() => setLoading(false));
-  }, [user, authLoading, router]);
+    if (!authLoading && !user && !authError) { router.push('/login'); return; }
+    if (!user) { setLoading(false); return; }
+    loadProjects();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, authLoading, authError, router]);
 
   async function createProject(e: React.FormEvent) {
     e.preventDefault();
@@ -90,6 +100,38 @@ export function ProjectsClient() {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--faint)', fontSize: 11 }}>
         Cargando proyectos…
+      </div>
+    );
+  }
+
+  if (!user && authError) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12, padding: 24 }}>
+        <div style={{ fontSize: 32 }}>⚠</div>
+        <div style={{ color: 'var(--danger)', fontSize: 11, textAlign: 'center', maxWidth: 340 }}>
+          No se pudo verificar tu sesión ({authError}). Esto no significa que se haya cerrado tu sesión — probablemente el servidor no está disponible en este momento.
+        </div>
+        <button onClick={() => window.location.reload()} style={{
+          background: 'var(--copper)', border: 'none', color: '#fff', fontWeight: 700,
+          fontSize: 11, padding: '8px 18px', borderRadius: 3, cursor: 'pointer',
+        }}>
+          Reintentar
+        </button>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12, padding: 24 }}>
+        <div style={{ fontSize: 32 }}>⚠</div>
+        <div style={{ color: 'var(--danger)', fontSize: 11, textAlign: 'center', maxWidth: 340 }}>{loadError}</div>
+        <button onClick={loadProjects} style={{
+          background: 'var(--copper)', border: 'none', color: '#fff', fontWeight: 700,
+          fontSize: 11, padding: '8px 18px', borderRadius: 3, cursor: 'pointer',
+        }}>
+          Reintentar
+        </button>
       </div>
     );
   }

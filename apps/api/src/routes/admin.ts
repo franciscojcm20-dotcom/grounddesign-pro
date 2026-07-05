@@ -1,14 +1,21 @@
 import type { FastifyInstance } from 'fastify';
 import { sql } from '../db/client.ts';
 
+// Allowlist explícita por variable de entorno — un email de registro no
+// verifica propiedad del dominio, así que "termina en @empresa.com" no es
+// una comprobación de autorización válida (cualquiera puede registrarse con
+// cualquier email). Sin ADMIN_EMAILS configurado, nadie es admin (seguro por
+// defecto), en vez de abrir el acceso cuando NODE_ENV no es 'production'.
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? '')
+  .split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+
 export async function adminRoutes(app: FastifyInstance) {
 
   // GET /api/v1/admin/stats — resumen general de la plataforma
   app.get('/stats', { preHandler: [app.authenticate] }, async (req, reply) => {
     const jwt = req.user as { sub: string; email: string };
 
-    // Solo admins (email @grounddesing.pro o entorno dev)
-    const isAdmin = jwt.email.endsWith('@grounddesing.pro') || process.env.NODE_ENV !== 'production';
+    const isAdmin = ADMIN_EMAILS.includes(jwt.email.toLowerCase());
     if (!isAdmin) return reply.code(403).send({ error: 'Acceso denegado' });
 
     const [users, projects, calcs, planDist] = await Promise.all([

@@ -40,6 +40,18 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
   used_at    TIMESTAMPTZ
 );
 
+-- Estadísticas agregadas del motor de optimización (bandit UCB1) — aprendizaje
+-- propio sobre qué acción de optimización resulta más efectiva por módulo,
+-- construido enteramente a partir del uso real del sistema (sin IA/API externa).
+CREATE TABLE IF NOT EXISTS optimization_stats (
+  module      TEXT NOT NULL,
+  action_kind TEXT NOT NULL,
+  n           INTEGER NOT NULL DEFAULT 0,
+  mean_reward DOUBLE PRECISION NOT NULL DEFAULT 0,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (module, action_kind)
+);
+
 CREATE INDEX IF NOT EXISTS idx_projects_user   ON projects(user_id);
 CREATE INDEX IF NOT EXISTS idx_results_project ON calc_results(project_id);
 CREATE INDEX IF NOT EXISTS idx_results_module  ON calc_results(module);

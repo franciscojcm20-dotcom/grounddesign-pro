@@ -136,23 +136,35 @@ export function wennerApparent(a: number, R: number): number {
   return 2 * Math.PI * a * R;
 }
 
-/** Estimación de 2 capas a partir de la curva ρa(a): método de asíntotas. */
-export function estimateTwoLayer(readings: Reading[]): TwoLayerEstimate {
-  const sorted = [...readings].sort((x, y) => x.a - y.a);
-  const rhos: RhoPoint[] = sorted.map(r => ({ a: r.a, rho: wennerApparent(r.a, r.r) }));
-  const n = rhos.length;
-  const halfLow  = rhos.slice(0, Math.ceil(n / 2));
-  const halfHigh = rhos.slice(Math.floor(n / 2));
+/** Estimación de 2 capas a partir de una curva ρa(spacing) ya calculada: método de asíntotas. */
+export function estimateTwoLayerFromCurve(curve: RhoPoint[]): TwoLayerEstimate {
+  const sorted = [...curve].sort((x, y) => x.a - y.a);
+  const n = sorted.length;
+  const halfLow  = sorted.slice(0, Math.ceil(n / 2));
+  const halfHigh = sorted.slice(Math.floor(n / 2));
   const rho1 = halfLow.reduce((s, x) => s + x.rho, 0) / halfLow.length;
   const rho2 = halfHigh.reduce((s, x) => s + x.rho, 0) / halfHigh.length;
   const target = Math.sqrt(rho1 * rho2);
   let hEstimate = sorted[Math.floor(n / 2)]!.a;
   let minDiff = Infinity;
-  for (const pt of rhos) {
+  for (const pt of sorted) {
     const diff = Math.abs(pt.rho - target);
     if (diff < minDiff) { minDiff = diff; hEstimate = pt.a; }
   }
-  return { rho1, rho2, h: hEstimate, curve: rhos };
+  return { rho1, rho2, h: hEstimate, curve: sorted };
+}
+
+/** Estimación de 2 capas a partir de la curva ρa(a) de Wenner: método de asíntotas. */
+export function estimateTwoLayer(readings: Reading[]): TwoLayerEstimate {
+  const sorted = [...readings].sort((x, y) => x.a - y.a);
+  const rhos: RhoPoint[] = sorted.map(r => ({ a: r.a, rho: wennerApparent(r.a, r.r) }));
+  return estimateTwoLayerFromCurve(rhos);
+}
+
+/** Estimación de 2 capas a partir de lecturas Schlumberger (L, l, R): usa L/2 como espaciado equivalente AB/2. */
+export function estimateTwoLayerSchlumberger(readings: { L: number; l: number; r: number }[]): TwoLayerEstimate {
+  const rhos: RhoPoint[] = readings.map(({ L, l, r }) => ({ a: L / 2, rho: schlumbergerApparent(L, l, r) }));
+  return estimateTwoLayerFromCurve(rhos);
 }
 
 // ─── SCHLUMBERGER (IEEE Std 81-2012, Cl. 8) ──────────────────────────────────
@@ -229,6 +241,183 @@ export function wennerApparentNLayer(a: number, rhos: number[], hs: number[]): n
   return rho1 * (1 + 2 * integral);
 }
 
+// ─── AJUSTE AUTOMÁTICO DE MODELO DE SUELO N CAPAS (inversión, sin capas manuales) ──
+//
+// El número de capas y sus ρ/h NO se ingresan manualmente: se determinan
+// ajustando el universo de curvas patrón de Orellana & Mooney (1966) — aquí
+// evaluadas de forma exacta vía el kernel de Wait en vez de tablas impresas —
+// contra la curva ρa(a) medida en terreno (Wenner o Schlumberger), probando de
+// 1 a 4 estratos y adoptando el modelo con mejor contraste contra la medición,
+// con penalización por capas adicionales que no mejoren significativamente el
+// ajuste (parsimonia — evita convertir ruido de medición en estratos ficticios).
+
+export interface LayeredEarthModel { rhos: number[]; hs: number[] }
+export interface LayerFitCandidate extends LayeredEarthModel {
+  nLayers: number;
+  rmsError: number;
+  curve: RhoPoint[];
+}
+export interface LayerFitResult {
+  best: LayerFitCandidate;
+  candidates: LayerFitCandidate[];
+}
+
+function forwardCurveNLayer(spacings: number[], rhos: number[], hs: number[]): RhoPoint[] {
+  return spacings.map(a => ({ a, rho: rhos.length === 1 ? rhos[0]! : wennerApparentNLayer(a, rhos, hs) }));
+}
+
+function relResiduals(theoretical: RhoPoint[], measured: RhoPoint[]): number[] {
+  return measured.map((m, i) => (theoretical[i]!.rho - m.rho) / m.rho);
+}
+
+function rmsFromResiduals(residuals: number[]): number {
+  return Math.sqrt(residuals.reduce((s, r) => s + r * r, 0) / residuals.length);
+}
+
+function rmsRelError(theoretical: RhoPoint[], measured: RhoPoint[]): number {
+  return rmsFromResiduals(relResiduals(theoretical, measured));
+}
+
+/** Jacobiano numérico por diferencias finitas centradas (sin derivadas analíticas). */
+function numericalJacobian(params: number[], residuals: (p: number[]) => number[], base: number[]): number[][] {
+  const m = base.length, n = params.length;
+  const J: number[][] = Array.from({ length: m }, () => new Array(n).fill(0));
+  for (let j = 0; j < n; j++) {
+    const h = Math.max(Math.abs(params[j]!) * 1e-5, 1e-6);
+    const trial = [...params];
+    trial[j] = params[j]! + h;
+    const rTrial = residuals(trial);
+    for (let i = 0; i < m; i++) J[i]![j] = (rTrial[i]! - base[i]!) / h;
+  }
+  return J;
+}
+
+/** Resuelve A·x = b para una matriz densa pequeña (n≤7) por eliminación gaussiana con pivoteo parcial. */
+function solveLinearSystem(A: number[][], b: number[]): number[] | null {
+  const n = b.length;
+  const M = A.map((row, i) => [...row, b[i]!]);
+  for (let col = 0; col < n; col++) {
+    let pivot = col;
+    for (let r = col + 1; r < n; r++) if (Math.abs(M[r]![col]!) > Math.abs(M[pivot]![col]!)) pivot = r;
+    if (Math.abs(M[pivot]![col]!) < 1e-14) return null;
+    [M[col], M[pivot]] = [M[pivot]!, M[col]!];
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue;
+      const factor = M[r]![col]! / M[col]![col]!;
+      for (let c = col; c <= n; c++) M[r]![c] = M[r]![c]! - factor * M[col]![c]!;
+    }
+  }
+  return M.map((row, i) => row[n]! / row[i]!);
+}
+
+/**
+ * Levenberg-Marquardt (Gauss-Newton amortiguado — familia Newton-Raphson) para
+ * mínimos cuadrados no lineales. En cada iteración calcula el Jacobiano
+ * numérico de los residuos, resuelve (JᵀJ + λ·diag(JᵀJ))·δ = −Jᵀr y dа un paso
+ * directo hacia el mínimo; λ crece si el paso empeora (más conservador, tipo
+ * descenso de gradiente) y decrece si mejora (más agresivo, tipo Newton puro).
+ * Converge en muchas menos iteraciones y con más precisión que una búsqueda
+ * por patrones, sin depender de librerías externas de optimización.
+ */
+function levenbergMarquardt(seed: number[], residuals: (p: number[]) => number[], maxIter = 60): number[] {
+  const n = seed.length;
+  let params = [...seed];
+  let lambda = 1e-3;
+  let r = residuals(params);
+  let cost = r.reduce((s, v) => s + v * v, 0);
+
+  for (let iter = 0; iter < maxIter; iter++) {
+    const J = numericalJacobian(params, residuals, r);
+    const JtJ: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
+    const Jtr: number[] = new Array(n).fill(0);
+    for (let i = 0; i < r.length; i++) {
+      for (let a = 0; a < n; a++) {
+        Jtr[a] = Jtr[a]! + J[i]![a]! * r[i]!;
+        for (let b = 0; b < n; b++) JtJ[a]![b] = JtJ[a]![b]! + J[i]![a]! * J[i]![b]!;
+      }
+    }
+    let improved = false;
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const A = JtJ.map((row, a) => row.map((v, b) => (a === b ? v * (1 + lambda) : v)));
+      const delta = solveLinearSystem(A, Jtr.map(v => -v));
+      if (!delta) { lambda *= 10; continue; }
+      // Mantiene los parámetros positivos (ρ's y h's) — un paso que los volvería
+      // negativos se recorta a un valor pequeño positivo en vez de aceptarse.
+      const trial = params.map((p, i) => Math.max(p + delta[i]!, p * 0.05));
+      const rTrial = residuals(trial);
+      const costTrial = rTrial.reduce((s, v) => s + v * v, 0);
+      if (costTrial < cost) {
+        params = trial; r = rTrial; cost = costTrial; lambda = Math.max(lambda / 10, 1e-8);
+        improved = true;
+        break;
+      }
+      lambda *= 10;
+    }
+    if (!improved) break; // convergió (ningún paso amortiguado mejora más)
+  }
+  return params;
+}
+
+/** Refina varias semillas independientes con Levenberg-Marquardt y conserva la que converge al menor error — mitiga mínimos locales. */
+function bestOfSeeds(seeds: number[][], residuals: (p: number[]) => number[]): number[] {
+  let best = seeds[0]!;
+  let bestCost = Infinity;
+  for (const seed of seeds) {
+    const refined = levenbergMarquardt(seed, residuals);
+    const cost = rmsFromResiduals(residuals(refined));
+    if (cost < bestCost) { bestCost = cost; best = refined; }
+  }
+  return best;
+}
+
+/** Ajusta el universo de curvas patrón de 1 a 4 estratos contra una curva ρa(a) medida en terreno. */
+export function fitLayeredEarthModel(measured: RhoPoint[]): LayerFitResult {
+  const sorted = [...measured].sort((a, b) => a.a - b.a);
+  const spacings = sorted.map(p => p.a);
+
+  function evalModel(rhos: number[], hs: number[]): LayerFitCandidate {
+    const curve = forwardCurveNLayer(spacings, rhos, hs);
+    return { nLayers: rhos.length, rhos, hs, rmsError: rmsRelError(curve, sorted), curve };
+  }
+
+  // n = 1: suelo homogéneo — la media geométrica minimiza el error relativo cuadrático medio.
+  const logMean = sorted.reduce((s, p) => s + Math.log(p.rho), 0) / sorted.length;
+  const c1 = evalModel([Math.exp(logMean)], []);
+
+  // n = 2: semilla por método de asíntotas (ya usado en Wenner/Schlumberger), refinada con Levenberg-Marquardt.
+  const seed2 = estimateTwoLayerFromCurve(sorted);
+  const residuals2 = (p: number[]) => relResiduals(forwardCurveNLayer(spacings, [p[0]!, p[1]!], [p[2]!]), sorted);
+  const p2 = levenbergMarquardt([seed2.rho1, seed2.rho2, seed2.h], residuals2);
+  const c2 = evalModel([p2[0]!, p2[1]!], [p2[2]!]);
+
+  // n = 3: extiende la solución de 2 capas insertando un tercer estrato en profundidad.
+  // Se prueban varias semillas para h2/ρ3 (mínimos locales distintos) y se conserva la mejor.
+  const lastRho = sorted[sorted.length - 1]!.rho;
+  const residuals3 = (p: number[]) => relResiduals(forwardCurveNLayer(spacings, [p[0]!, p[1]!, p[2]!], [p[3]!, p[4]!]), sorted);
+  const seeds3 = [1.5, 3, 6].map(mult => [c2.rhos[0]!, c2.rhos[1]!, lastRho, c2.hs[0]!, c2.hs[0]! * mult]);
+  const p3 = bestOfSeeds(seeds3, residuals3);
+  const c3 = evalModel([p3[0]!, p3[1]!, p3[2]!], [p3[3]!, p3[4]!]);
+
+  // n = 4: extiende la solución de 3 capas insertando un cuarto estrato.
+  const residuals4 = (p: number[]) => relResiduals(forwardCurveNLayer(spacings, [p[0]!, p[1]!, p[2]!, p[3]!], [p[4]!, p[5]!, p[6]!]), sorted);
+  const seeds4 = [1.5, 3, 6].map(mult => [c3.rhos[0]!, c3.rhos[1]!, c3.rhos[2]!, lastRho, c3.hs[0]!, c3.hs[1]!, c3.hs[1]! * mult]);
+  const p4 = bestOfSeeds(seeds4, residuals4);
+  const c4 = evalModel([p4[0]!, p4[1]!, p4[2]!, p4[3]!], [p4[4]!, p4[5]!, p4[6]!]);
+
+  const candidates = [c1, c2, c3, c4];
+
+  // Parsimonia: se adopta el modelo más simple cuyo error ya está dentro de una tolerancia
+  // razonable para mediciones de campo (5% RMS relativo); solo se suman estratos adicionales
+  // si el modelo más simple aún no alcanza esa tolerancia — evita ajustar ruido de medición
+  // como estratos ficticios, que es el defecto de comparar solo mejoras relativas entre
+  // modelos anidados (un modelo con más parámetros nunca ajusta peor que uno más simple).
+  const GOOD_ENOUGH_RMS = 0.05;
+  let best = candidates.find(c => c.rmsError <= GOOD_ENOUGH_RMS)
+    ?? candidates.reduce((a, b) => (b.rmsError < a.rmsError ? b : a));
+
+  return { best, candidates };
+}
+
 // ─── GEL QUÍMICO (Dwight / Sunde) ────────────────────────────────────────────
 
 /** Resistencia de varilla vertical: R = (ρ / (2πL)) · (ln(8L/d) − 1) */
@@ -283,6 +472,99 @@ export function computeMalla(
   return { area, condL, condRods, Ltotal, Rg, term1, term2, gpr: Rg * m.iFalla, rhoUsado };
 }
 
+// ─── OPTIMIZACIÓN ITERATIVA DE MALLA — motor de reglas propio (sin IA/API externa) ──
+
+export interface MallaOptimizeInput extends MallaInput {
+  targetRg: number;
+  maxLargo?: number;
+  maxAncho?: number;
+  maxVarillas?: number;
+  maxConductoresL?: number;
+  maxConductoresW?: number;
+}
+
+export interface OptimizeStep { action: string; Rg: number; kind: string }
+
+export interface MallaOptimizeResult {
+  achieved:  boolean;
+  steps:     OptimizeStep[];
+  suggested: MallaInput;
+  initialRg: number;
+  finalRg:   number;
+}
+
+/**
+ * Ordena una lista de candidatos de mutación según un orden de prioridad
+ * aprendido (`order`, lista de `kind`). Los candidatos no mencionados en
+ * `order` conservan su posición relativa original al final. Esto permite que
+ * el motor de aprendizaje (bandit) re-priorice las acciones sin modificar la
+ * lógica de cálculo de cada optimizador.
+ */
+function sortByOrder<T extends { kind: string }>(candidates: T[], order?: string[]): T[] {
+  if (!order || order.length === 0) return candidates;
+  const rank = new Map(order.map((k, i) => [k, i]));
+  return [...candidates].sort((a, b) => {
+    const ra = rank.has(a.kind) ? rank.get(a.kind)! : order.length + candidates.indexOf(a);
+    const rb = rank.has(b.kind) ? rank.get(b.kind)! : order.length + candidates.indexOf(b);
+    return ra - rb;
+  });
+}
+
+/**
+ * Búsqueda iterativa determinística: en cada iteración prueba, en el orden
+ * indicado (por defecto: varillas → conductores → geometría, el orden de
+ * menor costo constructivo relativo), y conserva el primer cambio que reduce
+ * Rg. El orden puede ser sobrescrito por `actionOrder` (provisto por el motor
+ * de aprendizaje en apps/api, basado en el historial real de qué acción fue
+ * más efectiva en proyectos anteriores). Se detiene al alcanzar targetRg, al
+ * topar los límites físicos del predio, o al no encontrar más mejora posible.
+ */
+export function optimizeMallaResistance(
+  input: MallaOptimizeInput,
+  gelInfo?: { activo: boolean; rhoEff: number } | null,
+  actionOrder?: string[],
+): MallaOptimizeResult {
+  const bounds = {
+    maxLargo:         input.maxLargo         ?? input.largo * 2,
+    maxAncho:         input.maxAncho         ?? input.ancho * 2,
+    maxVarillas:      input.maxVarillas      ?? Math.max(input.nVarillas * 3, 40),
+    maxConductoresL:  input.maxConductoresL  ?? Math.max(input.nConductoresL * 2, 20),
+    maxConductoresW:  input.maxConductoresW  ?? Math.max(input.nConductoresW * 2, 20),
+  };
+  let current: MallaInput = { ...input };
+  const steps: OptimizeStep[] = [];
+  const initialRg = computeMalla(current, gelInfo).Rg;
+  let Rg = initialRg;
+
+  function tryStep(kind: string, action: string, mutate: (c: MallaInput) => MallaInput): boolean {
+    const next = mutate({ ...current });
+    const r = computeMalla(next, gelInfo);
+    if (r.Rg < Rg - 1e-9) {
+      current = next; Rg = r.Rg;
+      steps.push({ kind, action, Rg });
+      return true;
+    }
+    return false;
+  }
+
+  let iterations = 0;
+  while (Rg > input.targetRg && iterations < 60) {
+    iterations++;
+    const candidates = sortByOrder([
+      { kind: 'add_rods', run: () => current.nVarillas < bounds.maxVarillas && tryStep('add_rods', `+2 varillas (total ${current.nVarillas + 2})`, c => ({ ...c, nVarillas: c.nVarillas + 2 })) },
+      { kind: 'add_cond_l', run: () => current.nConductoresL < bounds.maxConductoresL && tryStep('add_cond_l', `+1 conductor longitudinal (total ${current.nConductoresL + 1})`, c => ({ ...c, nConductoresL: c.nConductoresL + 1 })) },
+      { kind: 'add_cond_w', run: () => current.nConductoresW < bounds.maxConductoresW && tryStep('add_cond_w', `+1 conductor transversal (total ${current.nConductoresW + 1})`, c => ({ ...c, nConductoresW: c.nConductoresW + 1 })) },
+      { kind: 'expand_largo', run: () => current.largo < bounds.maxLargo && tryStep('expand_largo', `Ampliar largo a ${Math.round(current.largo * 1.05 * 10) / 10} m`, c => ({ ...c, largo: Math.round(c.largo * 1.05 * 10) / 10 })) },
+      { kind: 'expand_ancho', run: () => current.ancho < bounds.maxAncho && tryStep('expand_ancho', `Ampliar ancho a ${Math.round(current.ancho * 1.05 * 10) / 10} m`, c => ({ ...c, ancho: Math.round(c.ancho * 1.05 * 10) / 10 })) },
+    ], actionOrder);
+    let progressed = false;
+    for (const c of candidates) { if (c.run()) { progressed = true; break; } }
+    if (!progressed) break;
+  }
+
+  return { achieved: Rg <= input.targetRg, steps, suggested: current, initialRg, finalRg: Rg };
+}
+
 // ─── TENSIONES PASO/CONTACTO (IEEE Std 80-2013, Cl. 16) ──────────────────────
 
 /** Factor de reducción por capa superficial (Sverak), Ec. 27 */
@@ -327,6 +609,74 @@ export function stepVoltageReal(p: StepInput): { Es: number; Ks: number } {
     1 / (2 * p.h) + 1 / (p.D + p.h) + (1 / p.D) * (1 - Math.pow(0.5, p.n - 2))
   );
   return { Es: (p.rho * Ks * p.Ki * p.Ig) / p.Ltotal, Ks };
+}
+
+// ─── OPTIMIZACIÓN DE TENSIONES DE PASO/CONTACTO — motor de reglas propio ─────
+//
+// A diferencia de las mallas (donde se optimiza una sola resistencia), aquí
+// se optimiza el margen de cumplimiento de DOS criterios simultáneos (Em vs
+// Etouch_adm, Es vs Estep_adm). La métrica objetivo es la peor razón real/admisible
+// entre ambos; se busca llevarla a ≤ 1. Se priorizan mejoras de bajo costo
+// constructivo: primero la capa superficial (grava — ρs y hs, que suben el
+// límite admisible), luego la longitud total de conductor (que baja Em y Es
+// directamente), y por último geometría (D, h).
+
+export interface VoltagesOptimizeInput {
+  rho: number; Ig: number; D: number; d: number; h: number; n: number; Ltotal: number;
+  rhoSuperficial: number; hSuperficial: number; tFalla: number; peso?: 50 | 70;
+  maxRhoSuperficial?: number; maxHSuperficial?: number; maxLtotal?: number; maxD?: number; maxH?: number;
+}
+export interface VoltagesOptimizeResult {
+  achieved: boolean;
+  steps: OptimizeStep[];
+  suggested: Omit<VoltagesOptimizeInput, 'maxRhoSuperficial' | 'maxHSuperficial' | 'maxLtotal' | 'maxD' | 'maxH'>;
+  initialRatio: number;
+  finalRatio: number;
+}
+
+function worstVoltageRatio(p: VoltagesOptimizeInput): number {
+  const mesh = meshVoltage(p);
+  const step = stepVoltageReal({ ...p, Ki: mesh.Ki });
+  const Cs = surfaceFactorCs(p.rho, p.rhoSuperficial, p.hSuperficial);
+  const eTouchAdm = permissibleTouch(Cs, p.rhoSuperficial, p.tFalla, p.peso ?? 70);
+  const eStepAdm = permissibleStep(Cs, p.rhoSuperficial, p.tFalla, p.peso ?? 70);
+  return Math.max(mesh.Em / eTouchAdm, step.Es / eStepAdm);
+}
+
+export function optimizeVoltages(input: VoltagesOptimizeInput, actionOrder?: string[]): VoltagesOptimizeResult {
+  const bounds = {
+    maxRhoSuperficial: input.maxRhoSuperficial ?? Math.max(input.rhoSuperficial * 2, 5000),
+    maxHSuperficial:   input.maxHSuperficial   ?? 0.20,
+    maxLtotal:         input.maxLtotal         ?? input.Ltotal * 2,
+    maxD:              input.maxD              ?? input.D * 1.5,
+    maxH:              input.maxH              ?? Math.max(input.h * 1.5, 1),
+  };
+  let current: VoltagesOptimizeInput = { ...input };
+  const steps: OptimizeStep[] = [];
+  const initialRatio = worstVoltageRatio(current);
+  let ratio = initialRatio;
+  function tryStep(kind: string, action: string, mutate: (c: VoltagesOptimizeInput) => VoltagesOptimizeInput): boolean {
+    const next = mutate({ ...current });
+    const r = worstVoltageRatio(next);
+    if (r < ratio - 1e-9) { current = next; ratio = r; steps.push({ kind, action, Rg: ratio }); return true; }
+    return false;
+  }
+  let iterations = 0;
+  while (ratio > 1 && iterations < 60) {
+    iterations++;
+    const candidates = sortByOrder([
+      { kind: 'improve_surface_rho', run: () => current.rhoSuperficial < bounds.maxRhoSuperficial && tryStep('improve_surface_rho', `Mejorar capa superficial a ρs = ${Math.round(current.rhoSuperficial * 1.15)} Ω·m (grava de mayor resistividad)`, c => ({ ...c, rhoSuperficial: Math.round(c.rhoSuperficial * 1.15) })) },
+      { kind: 'thicken_surface', run: () => current.hSuperficial < bounds.maxHSuperficial && tryStep('thicken_surface', `Aumentar espesor de capa superficial a ${Math.round((current.hSuperficial + 0.02) * 100) / 100} m`, c => ({ ...c, hSuperficial: Math.round((c.hSuperficial + 0.02) * 100) / 100 })) },
+      { kind: 'extend_ltotal', run: () => current.Ltotal < bounds.maxLtotal && tryStep('extend_ltotal', `Aumentar longitud total de conductor a ${Math.round(current.Ltotal * 1.08)} m`, c => ({ ...c, Ltotal: Math.round(c.Ltotal * 1.08) })) },
+      { kind: 'increase_depth', run: () => current.h < bounds.maxH && tryStep('increase_depth', `Aumentar profundidad de enterramiento a ${Math.round(current.h * 1.1 * 100) / 100} m`, c => ({ ...c, h: Math.round(c.h * 1.1 * 100) / 100 })) },
+      { kind: 'increase_spacing', run: () => current.D < bounds.maxD && tryStep('increase_spacing', `Aumentar espaciado entre conductores D a ${Math.round(current.D * 1.08 * 100) / 100} m`, c => ({ ...c, D: Math.round(c.D * 1.08 * 100) / 100 })) },
+    ], actionOrder);
+    let progressed = false;
+    for (const c of candidates) { if (c.run()) { progressed = true; break; } }
+    if (!progressed) break;
+  }
+  const { maxRhoSuperficial: _a, maxHSuperficial: _b, maxLtotal: _c, maxD: _d, maxH: _e, ...suggested } = current;
+  return { achieved: ratio <= 1, steps, suggested, initialRatio, finalRatio: ratio };
 }
 
 // ─── CONDUCTOR — ONDERDONK (IEEE Std 80-2013, Cl. 11.3) ──────────────────────
@@ -383,6 +733,22 @@ export function computeConductor(c: ConductorInput): ConductorResult {
   return { ...r, sugerido, seleccionado, esSeleccionManual, calibreSubdimensionado, margen };
 }
 
+/**
+ * Aplica la sección mínima de conductor exigida por un perfil normativo (si la
+ * define) sobre un resultado ya calculado por Onderdonk. El dimensionamiento
+ * térmico y la exigencia normativa de sección mínima son criterios
+ * independientes — se adopta el mayor de los dos. No sobrescribe una
+ * selección manual del usuario que ya cumpla ambos criterios.
+ */
+export function applyMinConductorSection<
+  T extends { areaMm2: number; seleccionado: ConductorEntry; esSeleccionManual: boolean; margen: number },
+>(result: T, minMm2?: number): T {
+  if (!minMm2 || result.seleccionado.mm2 >= minMm2) return result;
+  const bumped = CONDUCTOR_TABLE.find(e => e.mm2 >= minMm2) ?? CONDUCTOR_TABLE[CONDUCTOR_TABLE.length - 1]!;
+  const margen = ((bumped.mm2 - result.areaMm2) / result.areaMm2) * 100;
+  return { ...result, seleccionado: bumped, esSeleccionManual: false, margen };
+}
+
 // ─── TOPOLOGÍAS ADICIONALES DE ELECTRODOS (IEEE 80-2013 Annex B) ─────────────
 
 export interface MultipleRodsInput {
@@ -407,8 +773,12 @@ export interface MultipleRodsResult {
  */
 export function computeMultipleRods(p: MultipleRodsInput): MultipleRodsResult {
   const R1 = rodResistanceDwight(p.rho, p.L, p.radius);
-  // Resistencia mutua entre dos picas: Rm = (ρ/2πL)·[ln(2L/s) - 1]
-  const Rm = (p.rho / (2 * Math.PI * p.L)) * (Math.log(2 * p.L / p.spacing) - 1);
+  // Resistencia mutua entre dos picas (Sunde 1949, forma exacta):
+  // Rm = (ρ/2πL)·[ln((L+√(L²+s²))/s) + (√(L²+s²)-s)/L]
+  // La aproximación ln(2L/s)-1 diverge a valores negativos para s > ~0.74L
+  // (fuera de su rango de validez); esta forma es monótona y siempre ≥ 0.
+  const hyp = Math.sqrt(p.L * p.L + p.spacing * p.spacing);
+  const Rm = (p.rho / (2 * Math.PI * p.L)) * (Math.log((p.L + hyp) / p.spacing) + (hyp - p.spacing) / p.L);
   // Para n picas en fila: R_n = (R1 + (n-1)·Rm) / n²  (Sunde)
   const Rn = p.n === 1 ? R1 : (R1 + (p.n - 1) * Rm) / p.n;
   const gpr = Rn * p.iFalla;
@@ -546,6 +916,179 @@ export function computeCombinedGridRod(p: CombinedGridRodInput): CombinedGridRod
   return { Rg, Rr, Rmr, Rc, gpr: Rc * p.iFalla, mejora, compliance: { rg1: Rc <= 1, rg5: Rc <= 5 } };
 }
 
+// ─── OPTIMIZACIÓN ITERATIVA — TOPOLOGÍAS ADICIONALES (motor de reglas propio) ──
+//
+// Mismo principio que optimizeMallaResistance: en cada iteración se prueban
+// mutaciones en orden de menor costo constructivo relativo, se conserva solo
+// la primera que reduce la resistencia, y se detiene al alcanzar targetRg,
+// al topar límites configurados, o al no encontrar más mejora posible.
+
+export interface RodOptimizeInput extends MultipleRodsInput {
+  targetRg: number; maxN?: number; maxL?: number; maxSpacing?: number;
+}
+export interface RodOptimizeResult { achieved: boolean; steps: OptimizeStep[]; suggested: MultipleRodsInput; initialRg: number; finalRg: number }
+
+export function optimizeRodResistance(input: RodOptimizeInput, actionOrder?: string[]): RodOptimizeResult {
+  const bounds = { maxN: input.maxN ?? Math.max(input.n * 3, 20), maxL: input.maxL ?? input.L * 2, maxSpacing: input.maxSpacing ?? input.spacing * 2 };
+  let current: MultipleRodsInput = { ...input };
+  const steps: OptimizeStep[] = [];
+  const initialRg = computeMultipleRods(current).Rn;
+  let Rg = initialRg;
+  function tryStep(kind: string, action: string, mutate: (c: MultipleRodsInput) => MultipleRodsInput): boolean {
+    const next = mutate({ ...current });
+    const r = computeMultipleRods(next).Rn;
+    if (r < Rg - 1e-9) { current = next; Rg = r; steps.push({ kind, action, Rg }); return true; }
+    return false;
+  }
+  let iterations = 0;
+  while (Rg > input.targetRg && iterations < 60) {
+    iterations++;
+    const candidates = sortByOrder([
+      { kind: 'add_rod', run: () => current.n < bounds.maxN && tryStep('add_rod', `+1 pica (total ${current.n + 1})`, c => ({ ...c, n: c.n + 1 })) },
+      { kind: 'extend_length', run: () => current.L < bounds.maxL && tryStep('extend_length', `Aumentar longitud de pica a ${Math.round(current.L * 1.1 * 10) / 10} m`, c => ({ ...c, L: Math.round(c.L * 1.1 * 10) / 10 })) },
+      { kind: 'increase_spacing', run: () => current.spacing < bounds.maxSpacing && tryStep('increase_spacing', `Aumentar separación entre picas a ${Math.round(current.spacing * 1.1 * 10) / 10} m`, c => ({ ...c, spacing: Math.round(c.spacing * 1.1 * 10) / 10 })) },
+    ], actionOrder);
+    let progressed = false;
+    for (const c of candidates) { if (c.run()) { progressed = true; break; } }
+    if (!progressed) break;
+  }
+  return { achieved: Rg <= input.targetRg, steps, suggested: current, initialRg, finalRg: Rg };
+}
+
+export interface StripOptimizeInput extends HorizontalStripInput {
+  targetRg: number; maxL?: number; maxRadius?: number; maxH?: number;
+}
+export interface StripOptimizeResult { achieved: boolean; steps: OptimizeStep[]; suggested: HorizontalStripInput; initialRg: number; finalRg: number }
+
+export function optimizeStripResistance(input: StripOptimizeInput, actionOrder?: string[]): StripOptimizeResult {
+  const bounds = { maxL: input.maxL ?? input.L * 2, maxRadius: input.maxRadius ?? input.radius * 2, maxH: input.maxH ?? Math.max(input.h * 2, 1.5) };
+  let current: HorizontalStripInput = { ...input };
+  const steps: OptimizeStep[] = [];
+  const initialRg = computeHorizontalStrip(current).Rh;
+  let Rg = initialRg;
+  function tryStep(kind: string, action: string, mutate: (c: HorizontalStripInput) => HorizontalStripInput): boolean {
+    const next = mutate({ ...current });
+    const r = computeHorizontalStrip(next).Rh;
+    if (r < Rg - 1e-9) { current = next; Rg = r; steps.push({ kind, action, Rg }); return true; }
+    return false;
+  }
+  let iterations = 0;
+  while (Rg > input.targetRg && iterations < 60) {
+    iterations++;
+    const candidates = sortByOrder([
+      { kind: 'extend_length', run: () => current.L < bounds.maxL && tryStep('extend_length', `Ampliar longitud de conductor a ${Math.round(current.L * 1.08)} m`, c => ({ ...c, L: Math.round(c.L * 1.08) })) },
+      { kind: 'increase_depth', run: () => current.h < bounds.maxH && tryStep('increase_depth', `Aumentar profundidad de enterramiento a ${Math.round(current.h * 1.1 * 100) / 100} m`, c => ({ ...c, h: Math.round(c.h * 1.1 * 100) / 100 })) },
+      { kind: 'increase_section', run: () => current.radius < bounds.maxRadius && tryStep('increase_section', `Aumentar sección del conductor (radio ${Math.round(current.radius * 1.1 * 1000) / 1000} m)`, c => ({ ...c, radius: Math.round(c.radius * 1.1 * 1000) / 1000 })) },
+    ], actionOrder);
+    let progressed = false;
+    for (const c of candidates) { if (c.run()) { progressed = true; break; } }
+    if (!progressed) break;
+  }
+  return { achieved: Rg <= input.targetRg, steps, suggested: current, initialRg, finalRg: Rg };
+}
+
+export interface RadialOptimizeInput extends RadialStarInput {
+  targetRg: number; maxN?: number; maxL?: number; maxH?: number;
+}
+export interface RadialOptimizeResult { achieved: boolean; steps: OptimizeStep[]; suggested: RadialStarInput; initialRg: number; finalRg: number }
+
+export function optimizeRadialResistance(input: RadialOptimizeInput, actionOrder?: string[]): RadialOptimizeResult {
+  const bounds = { maxN: input.maxN ?? Math.max(input.n * 2, 16), maxL: input.maxL ?? input.L * 2, maxH: input.maxH ?? Math.max(input.h * 2, 1.5) };
+  let current: RadialStarInput = { ...input };
+  const steps: OptimizeStep[] = [];
+  const initialRg = computeRadialStar(current).Rstar;
+  let Rg = initialRg;
+  function tryStep(kind: string, action: string, mutate: (c: RadialStarInput) => RadialStarInput): boolean {
+    const next = mutate({ ...current });
+    const r = computeRadialStar(next).Rstar;
+    if (r < Rg - 1e-9) { current = next; Rg = r; steps.push({ kind, action, Rg }); return true; }
+    return false;
+  }
+  let iterations = 0;
+  while (Rg > input.targetRg && iterations < 60) {
+    iterations++;
+    const candidates = sortByOrder([
+      { kind: 'add_radial', run: () => current.n < bounds.maxN && tryStep('add_radial', `+1 radial (total ${current.n + 1})`, c => ({ ...c, n: c.n + 1 })) },
+      { kind: 'extend_length', run: () => current.L < bounds.maxL && tryStep('extend_length', `Ampliar longitud de cada radial a ${Math.round(current.L * 1.08 * 10) / 10} m`, c => ({ ...c, L: Math.round(c.L * 1.08 * 10) / 10 })) },
+      { kind: 'increase_depth', run: () => current.h < bounds.maxH && tryStep('increase_depth', `Aumentar profundidad a ${Math.round(current.h * 1.1 * 100) / 100} m`, c => ({ ...c, h: Math.round(c.h * 1.1 * 100) / 100 })) },
+    ], actionOrder);
+    let progressed = false;
+    for (const c of candidates) { if (c.run()) { progressed = true; break; } }
+    if (!progressed) break;
+  }
+  return { achieved: Rg <= input.targetRg, steps, suggested: current, initialRg, finalRg: Rg };
+}
+
+export interface RingOptimizeInput extends RingLoopInput {
+  targetRg: number; maxPerimeter?: number; maxRadius?: number; maxH?: number;
+}
+export interface RingOptimizeResult { achieved: boolean; steps: OptimizeStep[]; suggested: RingLoopInput; initialRg: number; finalRg: number }
+
+export function optimizeRingResistance(input: RingOptimizeInput, actionOrder?: string[]): RingOptimizeResult {
+  const bounds = { maxPerimeter: input.maxPerimeter ?? input.perimeter * 2, maxRadius: input.maxRadius ?? input.radius * 2, maxH: input.maxH ?? Math.max(input.h * 2, 1.5) };
+  let current: RingLoopInput = { ...input };
+  const steps: OptimizeStep[] = [];
+  const initialRg = computeRingLoop(current).Rring;
+  let Rg = initialRg;
+  function tryStep(kind: string, action: string, mutate: (c: RingLoopInput) => RingLoopInput): boolean {
+    const next = mutate({ ...current });
+    const r = computeRingLoop(next).Rring;
+    if (r < Rg - 1e-9) { current = next; Rg = r; steps.push({ kind, action, Rg }); return true; }
+    return false;
+  }
+  let iterations = 0;
+  while (Rg > input.targetRg && iterations < 60) {
+    iterations++;
+    const candidates = sortByOrder([
+      { kind: 'expand_perimeter', run: () => current.perimeter < bounds.maxPerimeter && tryStep('expand_perimeter', `Ampliar perímetro del anillo a ${Math.round(current.perimeter * 1.06 * 10) / 10} m`, c => ({ ...c, perimeter: Math.round(c.perimeter * 1.06 * 10) / 10 })) },
+      { kind: 'increase_depth', run: () => current.h < bounds.maxH && tryStep('increase_depth', `Aumentar profundidad a ${Math.round(current.h * 1.1 * 100) / 100} m`, c => ({ ...c, h: Math.round(c.h * 1.1 * 100) / 100 })) },
+      { kind: 'increase_section', run: () => current.radius < bounds.maxRadius && tryStep('increase_section', `Aumentar sección del conductor (radio ${Math.round(current.radius * 1.1 * 1000) / 1000} m)`, c => ({ ...c, radius: Math.round(c.radius * 1.1 * 1000) / 1000 })) },
+    ], actionOrder);
+    let progressed = false;
+    for (const c of candidates) { if (c.run()) { progressed = true; break; } }
+    if (!progressed) break;
+  }
+  return { achieved: Rg <= input.targetRg, steps, suggested: current, initialRg, finalRg: Rg };
+}
+
+export interface CombinedOptimizeInput extends CombinedGridRodInput {
+  targetRg: number; maxArea?: number; maxLtotal?: number; maxNRods?: number; maxRodLength?: number;
+}
+export interface CombinedOptimizeResult { achieved: boolean; steps: OptimizeStep[]; suggested: CombinedGridRodInput; initialRg: number; finalRg: number }
+
+export function optimizeCombinedResistance(input: CombinedOptimizeInput, actionOrder?: string[]): CombinedOptimizeResult {
+  const bounds = {
+    maxArea: input.maxArea ?? input.area * 2,
+    maxLtotal: input.maxLtotal ?? input.Ltotal * 2,
+    maxNRods: input.maxNRods ?? Math.max(input.nRods * 3, 30),
+    maxRodLength: input.maxRodLength ?? input.rodLength * 2,
+  };
+  let current: CombinedGridRodInput = { ...input };
+  const steps: OptimizeStep[] = [];
+  const initialRg = computeCombinedGridRod(current).Rc;
+  let Rg = initialRg;
+  function tryStep(kind: string, action: string, mutate: (c: CombinedGridRodInput) => CombinedGridRodInput): boolean {
+    const next = mutate({ ...current });
+    const r = computeCombinedGridRod(next).Rc;
+    if (r < Rg - 1e-9) { current = next; Rg = r; steps.push({ kind, action, Rg }); return true; }
+    return false;
+  }
+  let iterations = 0;
+  while (Rg > input.targetRg && iterations < 60) {
+    iterations++;
+    const candidates = sortByOrder([
+      { kind: 'add_rods', run: () => current.nRods < bounds.maxNRods && tryStep('add_rods', `+2 picas adicionales (total ${current.nRods + 2})`, c => ({ ...c, nRods: c.nRods + 2 })) },
+      { kind: 'extend_rods', run: () => current.rodLength < bounds.maxRodLength && tryStep('extend_rods', `Aumentar longitud de picas a ${Math.round(current.rodLength * 1.1 * 10) / 10} m`, c => ({ ...c, rodLength: Math.round(c.rodLength * 1.1 * 10) / 10 })) },
+      { kind: 'extend_ltotal', run: () => current.Ltotal < bounds.maxLtotal && tryStep('extend_ltotal', `Aumentar longitud total de malla a ${Math.round(current.Ltotal * 1.05)} m`, c => ({ ...c, Ltotal: Math.round(c.Ltotal * 1.05) })) },
+      { kind: 'expand_area', run: () => current.area < bounds.maxArea && tryStep('expand_area', `Ampliar área de la malla a ${Math.round(current.area * 1.08)} m²`, c => ({ ...c, area: Math.round(c.area * 1.08) })) },
+    ], actionOrder);
+    let progressed = false;
+    for (const c of candidates) { if (c.run()) { progressed = true; break; } }
+    if (!progressed) break;
+  }
+  return { achieved: Rg <= input.targetRg, steps, suggested: current, initialRg, finalRg: Rg };
+}
+
 // ─── Lightning Protection — Rolling Sphere / NFPA 780 / IEC 62305 ────────────
 
 /** LPS protection level → rolling sphere radius (m) per IEC 62305-3 Table 2 */
@@ -656,3 +1199,436 @@ export function computeLightning(p: LightningInput): LightningResult {
     groundTerminations,
   };
 }
+
+// ─── CUBICACIÓN Y VALORIZACIÓN ECONÓMICA — motor propio (sin API externa) ────
+//
+// Convierte la geometría de cualquier sistema de puesta a tierra ya diseñado
+// (malla, picas, conductor, radial, anillo o combinada) en una cubicación de
+// materiales (BOQ — Bill of Quantities) y su valorización económica en CLP.
+// Los precios unitarios son de referencia y siempre editables por el usuario
+// antes de emitir el entregable — no provienen de ninguna API de precios.
+
+export interface CubicacionInput {
+  conductorMetros:      number;  // m — longitud total de conductor (malla + picas + radiales, etc.)
+  conductorSeccionMm2:  number;  // mm² — sección del conductor seleccionado (Onderdonk)
+  varillasCantidad:     number;  // — número de electrodos verticales (picas)
+  varillaLongitudM:     number;  // m — longitud de cada pica
+  conectoresCantidad:   number;  // — uniones exotérmicas (derivación + terminales)
+  gelActivo:            boolean;
+  gelKg:                number;  // kg — aditivo químico de baja resistividad
+  zanjaM3:              number;  // m³ — excavación y relleno de zanja
+}
+
+export interface PreciosUnitariosCLP {
+  conductorPorMetroPorMm2: number; // CLP / (m·mm²) — conductor de cobre desnudo
+  varillaPorUnidad:        number; // CLP / unidad — varilla copperweld
+  conectorPorUnidad:       number; // CLP / unidad — conector exotérmico
+  gelPorKg:                number; // CLP / kg — aditivo gel químico
+  excavacionPorM3:         number; // CLP / m³ — excavación + relleno
+  manoObraPct:             number; // % sobre subtotal de materiales
+  imprevistosPct:          number; // % sobre (materiales + mano de obra)
+}
+
+/** Precios de referencia (CLP, mercado chileno) — punto de partida editable, no una cotización real. */
+export const DEFAULT_PRECIOS_CLP: PreciosUnitariosCLP = {
+  conductorPorMetroPorMm2: 350,
+  varillaPorUnidad:        18000,
+  conectorPorUnidad:       6500,
+  gelPorKg:                3200,
+  excavacionPorM3:         12000,
+  manoObraPct:             25,
+  imprevistosPct:          10,
+};
+
+export interface BOQItem {
+  item:          string;
+  unidad:        string;
+  cantidad:      number;
+  precioUnitCLP: number;
+  subtotalCLP:   number;
+}
+
+export interface ValorizacionResult {
+  items:              BOQItem[];
+  subtotalMateriales: number;
+  manoObra:           number;
+  imprevistos:        number;
+  total:              number;
+  moneda:             'CLP';
+}
+
+function round2(n: number): number { return Math.round(n * 100) / 100; }
+
+export function computeValorizacion(
+  input: CubicacionInput,
+  precios: PreciosUnitariosCLP = DEFAULT_PRECIOS_CLP,
+): ValorizacionResult {
+  const items: BOQItem[] = [];
+
+  if (input.conductorMetros > 0) {
+    const precioUnit = round2(input.conductorSeccionMm2 * precios.conductorPorMetroPorMm2);
+    items.push({
+      item: `Conductor de cobre desnudo ${input.conductorSeccionMm2} mm²`,
+      unidad: 'm', cantidad: round2(input.conductorMetros),
+      precioUnitCLP: precioUnit, subtotalCLP: round2(input.conductorMetros * precioUnit),
+    });
+  }
+  if (input.varillasCantidad > 0) {
+    items.push({
+      item: `Varilla copperweld ${input.varillaLongitudM} m`,
+      unidad: 'un', cantidad: input.varillasCantidad,
+      precioUnitCLP: precios.varillaPorUnidad,
+      subtotalCLP: round2(input.varillasCantidad * precios.varillaPorUnidad),
+    });
+  }
+  if (input.conectoresCantidad > 0) {
+    items.push({
+      item: 'Conector exotérmico (derivación/terminal)',
+      unidad: 'un', cantidad: input.conectoresCantidad,
+      precioUnitCLP: precios.conectorPorUnidad,
+      subtotalCLP: round2(input.conectoresCantidad * precios.conectorPorUnidad),
+    });
+  }
+  if (input.gelActivo && input.gelKg > 0) {
+    items.push({
+      item: 'Aditivo gel químico de baja resistividad',
+      unidad: 'kg', cantidad: round2(input.gelKg),
+      precioUnitCLP: precios.gelPorKg,
+      subtotalCLP: round2(input.gelKg * precios.gelPorKg),
+    });
+  }
+  if (input.zanjaM3 > 0) {
+    items.push({
+      item: 'Excavación y relleno de zanja',
+      unidad: 'm³', cantidad: round2(input.zanjaM3),
+      precioUnitCLP: precios.excavacionPorM3,
+      subtotalCLP: round2(input.zanjaM3 * precios.excavacionPorM3),
+    });
+  }
+
+  const subtotalMateriales = round2(items.reduce((s, i) => s + i.subtotalCLP, 0));
+  const manoObra    = round2(subtotalMateriales * (precios.manoObraPct / 100));
+  const imprevistos = round2((subtotalMateriales + manoObra) * (precios.imprevistosPct / 100));
+  const total       = round2(subtotalMateriales + manoObra + imprevistos);
+
+  return { items, subtotalMateriales, manoObra, imprevistos, total, moneda: 'CLP' };
+}
+
+/** Estima el volumen de zanja (m³) a partir de la longitud de conductor y una sección típica de zanja. */
+export function estimateTrenchVolume(conductorMetros: number, anchoM = 0.3, profundidadM = 0.6): number {
+  return round2(conductorMetros * anchoM * profundidadM);
+}
+
+// ─── MOTOR DE ANÁLISIS DE FALLA — CORRIENTE DE DISEÑO (IEEE Std 80-2013 Cl. 15) ──
+//
+// Determina y justifica técnicamente la corriente oficial de diseño (Ig) que
+// alimenta el resto del proyecto. Ig = If · Sf · Df, donde:
+//   If = corriente de falla simétrica (estudio de cortocircuito, dato de entrada)
+//   Sf = factor de división de corriente (fracción de If que efectivamente
+//        retorna por la malla en estudio, en vez de por caminos alternativos:
+//        neutros, cables de guarda, pantallas de cable, estructuras metálicas,
+//        mallas de tierra vecinas)
+//   Df = factor de decremento (corrige por la componente asimétrica/DC de la
+//        corriente de falla durante el tiempo de despeje, IEEE 80-2013 Ec. 79)
+
+export interface DecrementFactorInput {
+  tFalla: number;   // s — duración de la falla (tiempo de despeje de protecciones)
+  xr: number;       // — relación X/R en el punto de falla
+  freq?: number;    // Hz — frecuencia del sistema (50 Chile/Europa, 60 América)
+}
+
+/**
+ * Factor de decremento Df — IEEE Std 80-2013, Ecuación 79:
+ *   Df = √(1 + (Ta/tf)·(1 − e^(−2tf/Ta)))
+ * donde Ta = (X/R)/(2πf) es la constante de tiempo del sistema en el punto de falla.
+ * Df ≥ 1 siempre; para tf grande respecto a Ta, Df → 1 (la componente DC decae
+ * antes de que actúen las protecciones).
+ */
+export function computeDecrementFactor(p: DecrementFactorInput): { Df: number; Ta: number } {
+  const freq = p.freq ?? 50;
+  const Ta = p.xr / (2 * Math.PI * freq);
+  const tf = p.tFalla;
+  const Df = Math.sqrt(1 + (Ta / tf) * (1 - Math.exp((-2 * tf) / Ta)));
+  return { Df, Ta };
+}
+
+export type SplitFactorMethod = 'manual' | 'conservative' | 'estimated';
+
+export interface SplitFactorInput {
+  method: SplitFactorMethod;
+  manualValue?: number;      // 0–1, requerido si method='manual'
+  nParallelPaths?: number;   // nº de trayectorias de retorno paralelas, requerido si method='estimated'
+}
+
+export interface SplitFactorResult { Sf: number; justificacion: string }
+
+/**
+ * Factor de división de corriente (split factor) Sf — la determinación exacta
+ * requiere modelar todas las trayectorias de retorno paralelas a la malla
+ * (IEEE Std 80-2013 Annex C: cables de guarda, pantallas, neutros, estructuras
+ * metálicas, mallas vecinas), lo que exige datos de línea/torre detallados
+ * (normalmente obtenidos con software especializado de líneas de transmisión).
+ * Este motor ofrece tres métodos, para que el profesional use el más adecuado
+ * según la información disponible — nunca asume una corriente fija:
+ *   'manual'       — el profesional ingresa Sf desde un estudio específico (mayor confiabilidad).
+ *   'conservative' — Sf = 1 (100% retorna por la malla); usado cuando no hay
+ *                    datos de trayectorias alternativas — resultado conservador (Ig más alta).
+ *   'estimated'    — aproximación propia en función del número de trayectorias
+ *                    de retorno paralelas identificadas (NO reemplaza un
+ *                    estudio de distribución de corriente para proyectos críticos).
+ */
+export function computeSplitFactor(p: SplitFactorInput): SplitFactorResult {
+  if (p.method === 'conservative') {
+    return {
+      Sf: 1,
+      justificacion: 'Se asume conservadoramente que el 100% de la corriente de falla retorna por la malla de tierra en estudio, por no existir datos suficientes de trayectorias de retorno alternativas (cables de guarda, neutros, pantallas, estructuras o mallas vecinas). Esta hipótesis maximiza Ig y por tanto el diseño resultante, sin optimización de costo.',
+    };
+  }
+  if (p.method === 'manual') {
+    const Sf = Math.min(Math.max(p.manualValue ?? 1, 0), 1);
+    return {
+      Sf,
+      justificacion: 'Factor de división ingresado directamente por el profesional a partir de un estudio específico de distribución de corriente de falla (análisis de línea de transmisión, EMTP/ATP, o información entregada por la compañía eléctrica/operador del sistema).',
+    };
+  }
+  const n = Math.max(p.nParallelPaths ?? 1, 1);
+  // Modelo propio simplificado de retornos decrecientes: cada trayectoria paralela adicional
+  // reduce la fracción que retorna por la malla, con un factor de acoplamiento típico de 0.7
+  // (no lineal — reflejar que la primera trayectoria alternativa es la más efectiva).
+  const Sf = Math.max(1 / (1 + 0.7 * (n - 1)), 0.1);
+  return {
+    Sf,
+    justificacion: `Estimación propia considerando ${n} trayectoria(s) de retorno paralela(s) identificada(s) por el profesional (cables de guarda, pantallas de cable, neutros, estructuras metálicas o mallas de tierra vecinas). Es una aproximación simplificada de ingeniería, no una curva de distribución de corriente exacta — para proyectos críticos se recomienda un estudio específico conforme a IEEE Std 80-2013 Annex C.`,
+  };
+}
+
+export interface FaultAnalysisInput {
+  If: number;              // A — corriente de falla simétrica
+  tFalla: number;          // s
+  xr: number;
+  freq?: number;
+  splitFactor: SplitFactorInput;
+}
+
+export interface FaultAnalysisResult {
+  If: number;
+  Df: number;
+  Ta: number;
+  Sf: number;
+  Ig: number;              // corriente de diseño oficial = If · Sf · Df
+  splitJustificacion: string;
+  confidence: 'alta' | 'media' | 'conservadora';
+}
+
+/** Corriente de diseño oficial del proyecto: Ig = If · Sf · Df. */
+export function computeFaultAnalysis(p: FaultAnalysisInput): FaultAnalysisResult {
+  const { Df, Ta } = computeDecrementFactor({ tFalla: p.tFalla, xr: p.xr, ...(p.freq !== undefined ? { freq: p.freq } : {}) });
+  const { Sf, justificacion } = computeSplitFactor(p.splitFactor);
+  const Ig = p.If * Sf * Df;
+  const confidence: FaultAnalysisResult['confidence'] =
+    p.splitFactor.method === 'manual' ? 'alta' :
+    p.splitFactor.method === 'estimated' ? 'media' : 'conservadora';
+  return { If: p.If, Df, Ta, Sf, Ig, splitJustificacion: justificacion, confidence };
+}
+
+// ============================================================================
+// MODELADO DEL SISTEMA — NIVELES DE CORTOCIRCUITO (para determinar If)
+// ============================================================================
+// El software nunca asume una corriente de falla fija: If puede ingresarse
+// directamente desde un estudio de cortocircuito existente, o calcularse
+// modelando el sistema real (red aguas arriba + transformador de poder) por
+// el método de componentes simétricas (Fortescue, 1918) con impedancias
+// equivalentes de cortocircuito según IEC 60909 (método simplificado de la
+// fuente de tensión equivalente en el punto de falla).
+//
+// Alcance deliberadamente acotado: este motor calcula ÚNICAMENTE la
+// corriente de falla (If) en el punto de interés para el diseño de la
+// puesta a tierra — trifásica simétrica y monofásica a tierra, las dos
+// que IEEE Std 80-2013 Cl. 15.9 considera para determinar la corriente
+// máxima de malla. No reemplaza un estudio de cortocircuito completo de
+// coordinación de protecciones (aportes de motores, múltiples fuentes en
+// paralelo, fallas evolutivas, etc.).
+
+export interface ImpedanceRX { R: number; X: number; Z: number } // Ω
+
+function splitRX(Z: number, xr: number): ImpedanceRX {
+  const R = Z / Math.sqrt(1 + xr * xr);
+  const X = R * xr;
+  return { R, X, Z };
+}
+function addRX(a: ImpedanceRX, b: ImpedanceRX): ImpedanceRX {
+  const R = a.R + b.R, X = a.X + b.X;
+  return { R, X, Z: Math.hypot(R, X) };
+}
+
+export interface SourceImpedanceInput {
+  un:     number;   // kV — tensión nominal en el punto de falla
+  ikss3:  number;   // kA — Icc trifásica simétrica de la red aguas arriba (dato de la empresa distribuidora u operador del sistema)
+  xr:     number;   // — relación X/R de la fuente en el punto de conexión
+  ik1?:   number;   // kA — Icc monofásica a tierra de la red, si está disponible (permite derivar Z0 real en vez de asumirla)
+  c?:     number;   // factor de tensión IEC 60909 (1.1 para cc máximo — el usado para dimensionar puesta a tierra; 1.0 para cc mínimo)
+}
+
+export interface SourceImpedanceResult {
+  Z1: ImpedanceRX;
+  Z0: ImpedanceRX;
+  z0Assumed: boolean; // true si no se entregó ik1 y Z0 se asumió igual a Z1
+}
+
+/**
+ * Impedancia equivalente de la red aguas arriba en el punto de falla —
+ * IEC 60909, método de la fuente de tensión equivalente:
+ *   Z1 = c·Un / (√3·I''kss3)
+ * Si se dispone de la Icc monofásica a tierra de la red (dato habitual en
+ * los estudios de las empresas distribuidoras chilenas), Z0 se despeja de
+ * forma exacta a partir de If(1φ) = √3·c·Un/(2·Z1+Z0). En caso contrario,
+ * se asume conservadoramente Z0 ≈ Z1 (redes de distribución efectivamente
+ * aterrizadas), dejando la hipótesis explícitamente señalada.
+ */
+export function computeSourceImpedance(p: SourceImpedanceInput): SourceImpedanceResult {
+  const c = p.c ?? 1.1;
+  const Z1mag = (c * p.un) / (Math.sqrt(3) * p.ikss3);
+  const Z1 = splitRX(Z1mag, p.xr);
+  if (p.ik1 && p.ik1 > 0) {
+    const Z0mag = Math.max((Math.sqrt(3) * c * p.un) / p.ik1 - 2 * Z1mag, 0.001);
+    return { Z1, Z0: splitRX(Z0mag, p.xr), z0Assumed: false };
+  }
+  return { Z1, Z0: Z1, z0Assumed: true };
+}
+
+export interface TransformerImpedanceInput {
+  sn:        number;   // kVA — potencia nominal
+  un:        number;   // kV — tensión nominal del lado en estudio
+  vcc:       number;   // % — tensión de cortocircuito nominal (placa)
+  xr:        number;   // — relación X/R del transformador
+  z0Factor?: number;   // Z0/Z1 del transformador (típico 0.85–1 para bancos trifásicos Dyn de 3 columnas; mayor en transformadores tipo shell/5 columnas). Si no se especifica, se asume 1.
+}
+
+export interface TransformerImpedanceResult {
+  Z1: ImpedanceRX;
+  Z0: ImpedanceRX;
+  z0Assumed: boolean;
+}
+
+/** Impedancia equivalente del transformador: Z1 = (Ucc%/100)·(Un²·1000/Sn). */
+export function computeTransformerImpedance(p: TransformerImpedanceInput): TransformerImpedanceResult {
+  const zBase = (1000 * p.un * p.un) / p.sn; // Ω
+  const Z1mag = (p.vcc / 100) * zBase;
+  const Z1 = splitRX(Z1mag, p.xr);
+  const z0Assumed = p.z0Factor === undefined;
+  const Z0 = splitRX(Z1mag * (p.z0Factor ?? 1), p.xr);
+  return { Z1, Z0, z0Assumed };
+}
+
+export type ShortCircuitFaultType = 'trifasica' | 'monofasica_tierra';
+
+export type GroundingConfig = 'solido' | 'resistencia' | 'reactancia' | 'aislado' | 'desconocido';
+
+export interface ShortCircuitInput {
+  fuente:         SourceImpedanceInput;
+  transformador?: TransformerImpedanceInput & { activo: boolean };
+  tipoFalla:      ShortCircuitFaultType;
+  zn?:            number;  // Ω — impedancia de puesta a tierra del neutro del transformador (0 = sólidamente aterrizado)
+  aterramiento?:  GroundingConfig; // configuración de puesta a tierra del neutro — solo orienta las recomendaciones, no altera el cálculo
+  c?:             number;
+}
+
+export interface ShortCircuitResult {
+  tipoFalla: ShortCircuitFaultType;
+  Z1: ImpedanceRX;
+  Z0: ImpedanceRX | null;
+  z0Assumed: boolean;
+  If: number;      // A — corriente de falla calculada, lista para usar en computeFaultAnalysis
+  un: number;      // kV
+  memoria: string[];        // pasos de sustitución numérica, para trazabilidad en la memoria de cálculo
+  recomendaciones: string[]; // orientación normativa sobre cómo usar/verificar el resultado
+  advertencias: string[];    // alertas de plausibilidad de los datos ingresados (fuera de rangos típicos IEEE/IEC)
+  confidence: 'alta' | 'media' | 'estimada'; // calidad del resultado según los datos disponibles y su plausibilidad
+}
+
+// Rangos típicos de referencia (IEEE/IEC), usados ÚNICAMENTE para generar advertencias
+// de plausibilidad de los datos ingresados — nunca para sustituir el valor del profesional.
+const XR_RED_TYPICAL = { min: 3, max: 30 };   // IEEE 141 (Red Book) — redes de la empresa distribuidora en el punto de conexión
+const XR_TRAFO_TYPICAL = { min: 4, max: 20 }; // IEEE C57.12.00 — transformadores de distribución y de poder
+
+/** Rango típico de Ucc% según potencia nominal — IEEE C57.12.00 / IEC 60076-5. */
+function typicalVccRange(snKva: number): { min: number; max: number } {
+  if (snKva <= 2500) return { min: 4.0, max: 6.5 };
+  if (snKva <= 10000) return { min: 5.5, max: 8.5 };
+  return { min: 7.0, max: 13.0 };
+}
+
+/**
+ * Corriente de cortocircuito en el punto de falla, combinando la red
+ * aguas arriba y (opcionalmente) el transformador de poder en serie,
+ * por componentes simétricas. Z2 se asume igual a Z1 (elementos
+ * estáticos — IEC 60909), práctica estándar para redes sin máquinas
+ * rotativas significativas en el aporte de falla.
+ *
+ * Además del resultado numérico, entrega recomendaciones normativas y
+ * advertencias de plausibilidad de los datos — el modelado del sistema de
+ * potencia debe ser tan intuitivo y seguro de usar como confiable en su
+ * resultado, sin ocultar nunca al profesional una hipótesis o un dato atípico.
+ */
+export function computeShortCircuit(p: ShortCircuitInput): ShortCircuitResult {
+  const c = p.c ?? 1.1;
+  const src = computeSourceImpedance({ ...p.fuente, c });
+  let Z1 = src.Z1;
+  let Z0: ImpedanceRX = src.Z0;
+  let z0Assumed = src.z0Assumed;
+  const memoria: string[] = [
+    `Z1 red = c·Un/(√3·I''kss3) = ${c}×${p.fuente.un} kV / (√3×${p.fuente.ikss3} kA) = ${src.Z1.Z.toFixed(4)} Ω (R=${src.Z1.R.toFixed(4)}, X=${src.Z1.X.toFixed(4)})`,
+  ];
+  const advertencias: string[] = [];
+  if (p.fuente.xr < XR_RED_TYPICAL.min || p.fuente.xr > XR_RED_TYPICAL.max) {
+    advertencias.push(`X/R de la fuente (${p.fuente.xr}) fuera del rango típico ${XR_RED_TYPICAL.min}–${XR_RED_TYPICAL.max} para redes en el punto de conexión (IEEE 141 — Red Book). Verificar el dato con la empresa distribuidora/operador del sistema.`);
+  }
+  if (p.transformador?.activo) {
+    const t = computeTransformerImpedance(p.transformador);
+    memoria.push(`Z1 transformador = (Ucc%/100)·(Un²·1000/Sn) = (${p.transformador.vcc}/100)×(${p.transformador.un}² × 1000 / ${p.transformador.sn}) = ${t.Z1.Z.toFixed(4)} Ω (R=${t.Z1.R.toFixed(4)}, X=${t.Z1.X.toFixed(4)})`);
+    Z1 = addRX(Z1, t.Z1);
+    Z0 = addRX(Z0, t.Z0);
+    z0Assumed = z0Assumed || t.z0Assumed;
+    if (p.transformador.xr < XR_TRAFO_TYPICAL.min || p.transformador.xr > XR_TRAFO_TYPICAL.max) {
+      advertencias.push(`X/R del transformador (${p.transformador.xr}) fuera del rango típico ${XR_TRAFO_TYPICAL.min}–${XR_TRAFO_TYPICAL.max} (IEEE C57.12.00). Verificar el dato de placa.`);
+    }
+    const vccRange = typicalVccRange(p.transformador.sn);
+    if (p.transformador.vcc < vccRange.min || p.transformador.vcc > vccRange.max) {
+      advertencias.push(`Ucc = ${p.transformador.vcc}% fuera del rango típico ${vccRange.min}–${vccRange.max}% para un transformador de ${p.transformador.sn} kVA (IEEE C57.12.00 / IEC 60076-5). Verificar el dato de placa del transformador.`);
+    }
+  }
+
+  const recomendaciones: string[] = [
+    'IEEE Std 80-2013 Cláusula 15.9 recomienda evaluar tanto la falla trifásica como la monofásica a tierra y usar, para el diseño de la malla, la condición que resulte en la mayor corriente de falla en el punto de interés — cambia el "Tipo de falla" y compara ambos resultados.',
+  ];
+  const aterramiento = p.aterramiento ?? 'desconocido';
+  if (aterramiento === 'solido' && p.tipoFalla === 'trifasica') {
+    recomendaciones.push('El sistema está declarado como sólidamente aterrizado — en esta configuración la falla monofásica a tierra suele aportar una corriente comparable o mayor a la malla que la trifásica; se recomienda calcular también con "Monofásica a tierra".');
+  }
+  if ((aterramiento === 'resistencia' || aterramiento === 'reactancia') && (p.zn ?? 0) === 0) {
+    recomendaciones.push(`El sistema está declarado como aterrizado por ${aterramiento === 'resistencia' ? 'resistencia' : 'reactancia'}, pero Zn = 0 (equivalente a sólidamente aterrizado). Ingresar la impedancia real del elemento de puesta a tierra del neutro para no sobrestimar If.`);
+  }
+  if (aterramiento === 'aislado' && p.tipoFalla === 'monofasica_tierra') {
+    recomendaciones.push('En sistemas aislados (sin conexión intencional a tierra), la corriente de falla monofásica a tierra depende de las capacitancias del sistema, no de este modelo de secuencias — la falla trifásica es la referencia más representativa para dimensionar la malla en este caso.');
+  }
+
+  const un = p.fuente.un;
+  if (p.tipoFalla === 'trifasica') {
+    const If = (c * un * 1000) / (Math.sqrt(3) * Z1.Z);
+    memoria.push(`Falla trifásica simétrica: If = c·Un/(√3·Z1) = ${c}×${un} kV / (√3×${Z1.Z.toFixed(4)} Ω) = ${(If / 1000).toFixed(3)} kA`);
+    const confidence: ShortCircuitResult['confidence'] = advertencias.length ? 'media' : 'alta';
+    return { tipoFalla: p.tipoFalla, Z1, Z0: null, z0Assumed: false, If, un, memoria, recomendaciones, advertencias, confidence };
+  }
+  const zn = p.zn ?? 0;
+  const denom = 2 * Z1.Z + Z0.Z + 3 * zn;
+  const If = (Math.sqrt(3) * c * un * 1000) / denom;
+  memoria.push(`Falla monofásica a tierra (Fortescue): If = 3·I1 = √3·c·Un / (2·Z1 + Z0 + 3·Zn) = √3×${c}×${un} kV / (2×${Z1.Z.toFixed(4)} + ${Z0.Z.toFixed(4)} + 3×${zn}) Ω = ${(If / 1000).toFixed(3)} kA`);
+  if (z0Assumed) {
+    memoria.push('Z0 se asumió igual a Z1 por no disponerse de datos de secuencia cero de la red (Ik1) ni del transformador — hipótesis conservadora habitual para transformadores trifásicos de tres columnas con conexión Dyn; para mayor precisión, ingresar Ik1 de la red o el factor Z0/Z1 de placa del transformador.');
+  }
+  const confidence: ShortCircuitResult['confidence'] =
+    z0Assumed ? (advertencias.length ? 'estimada' : 'media') : (advertencias.length ? 'media' : 'alta');
+  return { tipoFalla: p.tipoFalla, Z1, Z0, z0Assumed, If, un, memoria, recomendaciones, advertencias, confidence };
+}
+
+export * from "./normative.ts";
