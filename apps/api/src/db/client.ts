@@ -13,6 +13,10 @@ export interface User {
   country_code: string | null;
   normative_profile_id: string | null;
   rg_relaxed_conditions_met: boolean;
+  designer_title: string | null;
+  designer_license: string | null;
+  designer_company: string | null;
+  designer_logo: string | null;
   created_at: Date;
 }
 

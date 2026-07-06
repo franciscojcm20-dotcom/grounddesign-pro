@@ -621,6 +621,18 @@ export async function reportRoutes(app: FastifyInstance) {
     if (!body.meta?.projectName) return reply.code(400).send({ error: 'meta.projectName es requerido' });
     if (!body.sections?.length)  return reply.code(400).send({ error: 'sections no puede estar vacío' });
 
+    // El logo del proyectista viaja como data URL — se valida formato (solo PNG/JPEG
+    // base64) y tamaño (≤ 700 KB codificado ≈ 500 KB de imagen) antes de tocar PDFKit.
+    if (body.meta.logoDataUrl !== undefined) {
+      if (typeof body.meta.logoDataUrl !== 'string'
+        || !/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(body.meta.logoDataUrl)) {
+        return reply.code(400).send({ error: 'logoDataUrl debe ser una imagen PNG o JPEG en formato data URL base64' });
+      }
+      if (body.meta.logoDataUrl.length > 700_000) {
+        return reply.code(400).send({ error: 'El logo supera el tamaño máximo permitido (500 KB)' });
+      }
+    }
+
     const sections: ReportSection[] = body.sections.map(s => {
       const adapter = ADAPTERS[s.module];
       if (adapter) return adapter(s.inputs, s.outputs);

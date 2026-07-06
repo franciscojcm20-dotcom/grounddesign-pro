@@ -1,9 +1,36 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { AuthGuard } from '@/components/ui/AuthGuard';
 import { useToast } from '@/context/ToastContext';
 import { API_BASE as BASE } from '@/lib/apiBase';
+import { authApi } from '@/lib/auth';
+
+/**
+ * Redimensiona la imagen del logo a un máximo de 300×300 px y la convierte a
+ * data URL PNG — mantiene el payload bajo el tope del servidor (500 KB) sin
+ * pedirle al usuario que prepare la imagen él mismo.
+ */
+function fileToLogoDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const MAX = 300;
+      const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(img.width * scale));
+      canvas.height = Math.max(1, Math.round(img.height * scale));
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('No se pudo procesar la imagen')); return; }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('El archivo no es una imagen válida')); };
+    img.src = url;
+  });
+}
 
 const PLAN_INFO = {
   community:    { label: 'Community',    color: 'var(--blue)', desc: 'Gratis · 3 proyectos · PDF con marca de agua' },
@@ -46,6 +73,46 @@ export function ProfileClient() {
   const [newPwd,   setNewPwd]   = useState('');
   const [confPwd,  setConfPwd]  = useState('');
   const [pwdSave,  setPwdSave]  = useState(false);
+
+  // Identificación del proyectista (portada de informes)
+  const [dTitle,   setDTitle]   = useState(user?.designerTitle ?? '');
+  const [dLicense, setDLicense] = useState(user?.designerLicense ?? '');
+  const [dCompany, setDCompany] = useState(user?.designerCompany ?? '');
+  const [dLogo,    setDLogo]    = useState(user?.designerLogo ?? '');
+  const [dSaving,  setDSaving]  = useState(false);
+
+  // Sincroniza el formulario cuando la sesión termina de cargar (user llega async)
+  useEffect(() => {
+    setDTitle(user?.designerTitle ?? '');
+    setDLicense(user?.designerLicense ?? '');
+    setDCompany(user?.designerCompany ?? '');
+    setDLogo(user?.designerLogo ?? '');
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function saveDesigner() {
+    setDSaving(true);
+    try {
+      const d = await authApi.updateMe({
+        designerTitle: dTitle.trim(), designerLicense: dLicense.trim(),
+        designerCompany: dCompany.trim(), designerLogo: dLogo,
+      });
+      if (setUser) setUser(d.user);
+      toast.success('Identificación del proyectista guardada — se usará en la portada de tus informes');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al guardar');
+    } finally { setDSaving(false); }
+  }
+
+  async function onLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setDLogo(await fileToLogoDataUrl(file));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo cargar el logo');
+    }
+    e.target.value = '';
+  }
 
   // Strength
   const strength = [newPwd.length >= 8, /[A-Z]/.test(newPwd), /[0-9]/.test(newPwd), /[^A-Za-z0-9]/.test(newPwd)].filter(Boolean).length;
@@ -193,6 +260,51 @@ export function ProfileClient() {
               {pwdSave ? 'Guardando…' : 'Actualizar contraseña'}
             </button>
           </form>
+        </SectionCard>
+
+        {/* Identificación del proyectista — portada de informes */}
+        <SectionCard title="Identificación del proyectista (portada de informes)">
+          <p style={{ fontSize: 10, color: 'var(--faint)', marginTop: 0, marginBottom: 14, lineHeight: 1.6 }}>
+            Estos datos y tu logo aparecen en el bloque &quot;Proyectista responsable&quot; de la portada de todos los
+            informes PDF que generes. La portada misma (branding, normas aplicadas, fecha de emisión) la emite el
+            sistema y no es editable.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 9.5, color: 'var(--dim)', marginBottom: 4, fontFamily: 'var(--font-mono)' }}>Título profesional</label>
+              <input style={INPUT} value={dTitle} onChange={e => setDTitle(e.target.value)} placeholder="Ingeniero Civil Eléctrico" />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 9.5, color: 'var(--dim)', marginBottom: 4, fontFamily: 'var(--font-mono)' }}>Licencia / registro profesional</label>
+              <input style={INPUT} value={dLicense} onChange={e => setDLicense(e.target.value)} placeholder="Licencia SEC Clase A N°12345" />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 9.5, color: 'var(--dim)', marginBottom: 4, fontFamily: 'var(--font-mono)' }}>Empresa / consultora</label>
+              <input style={INPUT} value={dCompany} onChange={e => setDCompany(e.target.value)} placeholder="Consultora Eléctrica SpA" />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 9.5, color: 'var(--dim)', marginBottom: 4, fontFamily: 'var(--font-mono)' }}>Logo (PNG/JPEG — se redimensiona automáticamente)</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                {dLogo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={dLogo} alt="Logo del proyectista" style={{ width: 56, height: 56, objectFit: 'contain', border: '1px solid var(--line)', borderRadius: 4, background: '#fff' }} />
+                ) : (
+                  <div style={{ width: 56, height: 56, border: '1px dashed var(--line)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, color: 'var(--faint)' }}>
+                    sin logo
+                  </div>
+                )}
+                <input type="file" accept="image/png,image/jpeg" onChange={onLogoFile} style={{ fontSize: 10, color: 'var(--dim)' }} />
+                {dLogo && (
+                  <button type="button" onClick={() => setDLogo('')} style={{ background: 'none', border: '1px solid var(--line)', color: 'var(--faint)', fontSize: 10, padding: '4px 10px', borderRadius: 3, cursor: 'pointer' }}>
+                    Quitar
+                  </button>
+                )}
+              </div>
+            </div>
+            <button onClick={saveDesigner} disabled={dSaving} style={{ background: 'var(--copper)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 11, padding: '9px 0', borderRadius: 3, cursor: 'pointer', opacity: dSaving ? 0.6 : 1 }}>
+              {dSaving ? 'Guardando…' : 'Guardar identificación'}
+            </button>
+          </div>
         </SectionCard>
 
         {/* Norms */}

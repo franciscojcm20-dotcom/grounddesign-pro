@@ -1,12 +1,13 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import {
-  downloadReport, downloadValorizacionPdf, api,
+  downloadValorizacionPdf, api, fetchReportBlob,
   downloadGridDxf, downloadRodDxf, downloadStripDxf, downloadRadialDxf, downloadRingDxf, downloadCombinedDxf,
-  type ReportMeta, type CubicacionInput, type PreciosUnitariosCLP, type ValorizacionResult,
+  type ReportMeta, type ReportSectionInput, type CubicacionInput, type PreciosUnitariosCLP, type ValorizacionResult,
 } from '@/lib/api';
 import { useToast } from '@/context/ToastContext';
+import { useAuth } from '@/context/AuthContext';
 import { useSoilModel } from '@/context/SoilModelContext';
 import { useFaultAnalysis } from '@/context/FaultAnalysisContext';
 import { useI18n } from '@/context/I18nContext';
@@ -76,6 +77,16 @@ const MODULE_META: Record<string, { label: string; icon: string; group: string }
 
 const HEADLINE_KEYS = ['Rg', 'Rn', 'Rstar', 'Rring', 'Rc', 'Rh', 'Rtotal', 'rhoAvg', 'areaMm2'] as const;
 
+/** Etiqueta legible de un capítulo del informe, para la lista de selección de la previsualización. */
+function sectionLabel(module: string): string {
+  const synthetic: Record<string, string> = {
+    normativeProfile: 'Perfil normativo aplicado al proyecto',
+    soilModel: 'Modelo de suelo — VES (Schlumberger/Wenner)',
+    faultAnalysis: 'Corriente de diseño — Motor de Análisis de Falla',
+  };
+  return synthetic[module] ?? MODULE_META[module]?.label ?? module;
+}
+
 function summarize(outputs: Record<string, unknown>) {
   const compliance = outputs['compliance'] as Record<string, unknown> | undefined;
   let pass: boolean | null = null;
@@ -139,6 +150,7 @@ function timeAgo(iso: string) {
 
 export function ReportClient() {
   const toast = useToast();
+  const { user } = useAuth();
   const soilModel = useSoilModel();
   const faultAnalysis = useFaultAnalysis();
   const { t } = useI18n();
@@ -150,6 +162,15 @@ export function ReportClient() {
   const [loading, setLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [view, setView] = useState<'consolidado' | 'valorizacion' | 'dxf'>('consolidado');
+
+  // ── Previsualización del informe (modal con selección de capítulos) ──
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewMeta, setPreviewMeta] = useState<ReportMeta | null>(null);
+  const [previewSections, setPreviewSections] = useState<ReportSectionInput[]>([]);
+  const [included, setIncluded] = useState<boolean[]>([]);
+  const [previewStale, setPreviewStale] = useState(false);
+  const [previewRefreshing, setPreviewRefreshing] = useState(false);
+  const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
 
   // ── Cubicación y Valorización ──
   const [valResultId, setValResultId] = useState<string | null>(null);
@@ -354,76 +375,132 @@ export function ReportClient() {
     } finally { setDxfLoading(false); }
   }
 
-  async function generatePdf() {
-    if (!project || results.length === 0) return;
+  /**
+   * Construye el payload completo del informe oficial: metadatos (incluida la
+   * identificación del proyectista guardada en la cuenta) + capítulos en orden
+   * de ingeniería profesional. Base común de la previsualización y la descarga.
+   */
+  function buildFullReport(): { meta: ReportMeta; sections: ReportSectionInput[] } | null {
+    if (!project || results.length === 0) return null;
+    const meta: ReportMeta = {
+      projectName: project.name,
+      projectCode: `GDP-${project.id.slice(0, 8).toUpperCase()}-${new Date().toISOString().slice(0, 10)}`,
+      engineer: user?.name ?? 'Ingeniero de proyecto',
+      ...(user?.designerTitle ? { engineerTitle: user.designerTitle } : {}),
+      ...(user?.designerLicense ? { engineerLicense: user.designerLicense } : {}),
+      ...(user?.designerCompany ? { company: user.designerCompany } : {}),
+      ...(user?.designerLogo ? { logoDataUrl: user.designerLogo } : {}),
+      ...(project.description ? { location: project.description } : {}),
+      norm: `${normativeProfile.label} — ${normativeProfile.standard}`,
+    };
+    // El informe oficial incluye solo el sistema fijado como elegido — las demás
+    // topologías calculadas para comparar quedan excluidas de la memoria definitiva.
+    const chosenGeometryId = geometryResults.length <= 1 ? geometryResults[0]?.id : chosenId;
+    const sections: ReportSectionInput[] = results
+      .filter(r => !GEOMETRY_MODULES.has(r.module) || r.id === chosenGeometryId)
+      .map(r => ({ module: r.module, inputs: r.inputs, outputs: r.outputs, ...(r.norm !== undefined ? { norm: r.norm } : {}) }));
+    // Capítulos sintéticos previos a cualquier diseño de malla, en el orden de ingeniería
+    // profesional: 1) perfil normativo, 2) modelo de suelo, 3) corriente de diseño.
+    const prepend: ReportSectionInput[] = [];
+    prepend.push({
+      module: 'normativeProfile',
+      inputs: {
+        label: normativeProfile.label,
+        standard: normativeProfile.standard,
+        country: normativeProfile.country,
+        rgCritical: normativeProfile.rgCritical,
+        rgGeneral: normativeProfile.rgGeneral,
+        ...(normativeProfile.touchVoltageMaxV ? { touchVoltageMaxV: normativeProfile.touchVoltageMaxV } : {}),
+        notes: normativeProfile.notes,
+      },
+      outputs: {},
+      norm: normativeProfile.standard,
+    });
+    if (model) {
+      prepend.push({
+        module: 'soilModel',
+        inputs: {
+          rho1: model.rho1, rho2: model.rho2, h: model.h, rhoUniform: model.rhoUniform, source: model.source,
+          ...(model.validatedBy ? { validatedBy: model.validatedBy } : {}),
+          schlumbergerReadings: soilModel.schlumbergerReadings,
+          wennerReadings: soilModel.wennerReadings,
+        },
+        outputs: {},
+        norm: 'IEEE Std 81-2012 Cl. 8',
+      });
+    }
+    if (faultAnalysis.result) {
+      const fa = faultAnalysis.result;
+      prepend.push({
+        module: 'faultAnalysis',
+        inputs: {
+          If: fa.If, ifOrigin: fa.ifOrigin, shortCircuitModel: fa.shortCircuitModel,
+          tFalla: fa.tFalla, xr: fa.xr, freq: fa.freq, Ta: fa.Ta, Df: fa.Df, Sf: fa.Sf, Ig: fa.Ig,
+          splitMethod: fa.splitMethod, splitJustificacion: fa.splitJustificacion, confidence: fa.confidence,
+        },
+        outputs: {},
+        norm: 'IEEE Std 80-2013 Cl. 15.9–15.10',
+      });
+    }
+    sections.unshift(...prepend);
+    return { meta, sections };
+  }
+
+  async function openPreview() {
     if (needsChoice) {
       toast.error('Hay más de un sistema de puesta a tierra calculado en este proyecto — fija cuál es el elegido antes de generar el informe.');
       return;
     }
+    const full = buildFullReport();
+    if (!full) return;
     setPdfLoading(true);
     try {
-      const meta: ReportMeta = {
-        projectName: project.name,
-        projectCode: `GDP-${project.id.slice(0, 8).toUpperCase()}-${new Date().toISOString().slice(0, 10)}`,
-        engineer: 'Ingeniero de proyecto',
-        location: project.description ?? undefined,
-        norm: `${normativeProfile.label} — ${normativeProfile.standard}`,
-      };
-      // El informe oficial incluye solo el sistema fijado como elegido — las demás
-      // topologías calculadas para comparar quedan excluidas de la memoria definitiva.
-      const chosenGeometryId = geometryResults.length <= 1 ? geometryResults[0]?.id : chosenId;
-      const sections = results
-        .filter(r => !GEOMETRY_MODULES.has(r.module) || r.id === chosenGeometryId)
-        .map(r => ({ module: r.module, inputs: r.inputs, outputs: r.outputs, norm: r.norm }));
-      // Capítulos sintéticos previos a cualquier diseño de malla, en el orden de ingeniería
-      // profesional: 1) mediciones de terreno y modelo de suelo, 2) corriente de diseño.
-      const prepend: typeof sections = [];
-      prepend.push({
-        module: 'normativeProfile',
-        inputs: {
-          label: normativeProfile.label,
-          standard: normativeProfile.standard,
-          country: normativeProfile.country,
-          rgCritical: normativeProfile.rgCritical,
-          rgGeneral: normativeProfile.rgGeneral,
-          ...(normativeProfile.touchVoltageMaxV ? { touchVoltageMaxV: normativeProfile.touchVoltageMaxV } : {}),
-          notes: normativeProfile.notes,
-        },
-        outputs: {},
-        norm: normativeProfile.standard,
-      });
-      if (model) {
-        prepend.push({
-          module: 'soilModel',
-          inputs: {
-            rho1: model.rho1, rho2: model.rho2, h: model.h, rhoUniform: model.rhoUniform, source: model.source,
-            ...(model.validatedBy ? { validatedBy: model.validatedBy } : {}),
-            schlumbergerReadings: soilModel.schlumbergerReadings,
-            wennerReadings: soilModel.wennerReadings,
-          },
-          outputs: {},
-          norm: 'IEEE Std 81-2012 Cl. 8',
-        });
-      }
-      if (faultAnalysis.result) {
-        const fa = faultAnalysis.result;
-        prepend.push({
-          module: 'faultAnalysis',
-          inputs: {
-            If: fa.If, ifOrigin: fa.ifOrigin, shortCircuitModel: fa.shortCircuitModel,
-            tFalla: fa.tFalla, xr: fa.xr, freq: fa.freq, Ta: fa.Ta, Df: fa.Df, Sf: fa.Sf, Ig: fa.Ig,
-            splitMethod: fa.splitMethod, splitJustificacion: fa.splitJustificacion, confidence: fa.confidence,
-          },
-          outputs: {},
-          norm: 'IEEE Std 80-2013 Cl. 15.9–15.10',
-        });
-      }
-      sections.unshift(...prepend);
-      await downloadReport(meta, sections);
-      toast.success(`Informe completo de "${project.name}" generado — ${sections.length} secciones`);
+      const blob = await fetchReportBlob(full.meta, full.sections);
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setPreviewMeta(full.meta);
+      setPreviewSections(full.sections);
+      setIncluded(full.sections.map(() => true));
+      setPreviewStale(false);
+      setPreviewUrl(URL.createObjectURL(blob));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Error al generar el informe');
+      toast.error(e instanceof Error ? e.message : 'Error al generar la previsualización');
     } finally { setPdfLoading(false); }
+  }
+
+  /** Regenera la previsualización con los capítulos actualmente seleccionados. */
+  async function refreshPreview() {
+    if (!previewMeta) return;
+    const chosen = previewSections.filter((_, i) => included[i]);
+    if (chosen.length === 0) { toast.error('Selecciona al menos un capítulo para el informe.'); return; }
+    setPreviewRefreshing(true);
+    try {
+      const blob = await fetchReportBlob(previewMeta, chosen);
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(URL.createObjectURL(blob));
+      setPreviewStale(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Error al actualizar la previsualización');
+    } finally { setPreviewRefreshing(false); }
+  }
+
+  function closePreview() {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+    setPreviewMeta(null);
+    setPreviewSections([]);
+  }
+
+  function downloadFromPreview() {
+    if (!previewUrl || !previewMeta) return;
+    const a = document.createElement('a');
+    a.href = previewUrl;
+    a.download = `GDP-${previewMeta.projectCode ?? 'report'}.pdf`;
+    a.click();
+    toast.success('Informe PDF descargado');
+  }
+
+  function printFromPreview() {
+    previewFrameRef.current?.contentWindow?.print();
   }
 
   const grouped = results.reduce<Record<string, CalcResult[]>>((acc, r) => {
@@ -510,7 +587,7 @@ export function ReportClient() {
         {view === 'consolidado' && (
           <>
             <button
-              onClick={generatePdf}
+              onClick={openPreview}
               disabled={pdfLoading || !project || results.length === 0 || needsChoice}
               style={{
                 width: '100%', background: 'var(--copper)', border: 'none', color: '#fff',
@@ -518,8 +595,11 @@ export function ReportClient() {
                 opacity: (pdfLoading || !project || results.length === 0 || needsChoice) ? 0.6 : 1,
               }}
             >
-              {pdfLoading ? 'Generando…' : '📄 Generar informe PDF completo'}
+              {pdfLoading ? 'Generando…' : '👁 Previsualizar informe PDF'}
             </button>
+            <div style={{ fontSize: 9, color: 'var(--faint)', marginTop: 6, lineHeight: 1.5 }}>
+              Vista previa con portada oficial del sistema, índice profesional y selección de capítulos antes de descargar o imprimir.
+            </div>
             {needsChoice && (
               <div style={{ marginTop: 8, padding: '8px 10px', background: 'var(--danger-soft)', border: '1px solid var(--danger)', borderRadius: 3, fontSize: 9.5, color: 'var(--danger)', lineHeight: 1.6 }}>
                 Hay {geometryResults.length} sistemas de puesta a tierra calculados en este proyecto. Fija cuál es el elegido en el resumen (grupo "Malla") antes de generar el informe.
@@ -885,6 +965,109 @@ export function ReportClient() {
           </>
         )}
       </section>
+
+      {/* ── Modal de previsualización del informe ── */}
+      {previewUrl && previewMeta && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.72)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+        }}>
+          <div style={{
+            width: 'min(1200px, 96vw)', height: 'min(820px, 92vh)', background: 'var(--panel)',
+            border: '1px solid var(--line)', borderRadius: 6, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          }}>
+            {/* Barra superior */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid var(--line)', flexShrink: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 700 }}>Vista previa del informe</div>
+              <div style={{ fontSize: 9.5, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>{previewMeta.projectCode}</div>
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                <button onClick={downloadFromPreview} disabled={previewStale} title={previewStale ? 'Actualiza la vista previa antes de descargar' : undefined} style={{
+                  background: 'var(--copper)', border: 'none', color: '#fff', fontWeight: 700,
+                  fontSize: 10.5, padding: '7px 14px', borderRadius: 3, cursor: 'pointer', opacity: previewStale ? 0.5 : 1,
+                }}>
+                  ↓ Descargar PDF
+                </button>
+                <button onClick={printFromPreview} disabled={previewStale} title={previewStale ? 'Actualiza la vista previa antes de imprimir' : undefined} style={{
+                  background: 'var(--panel)', border: '1px solid var(--copper)', color: 'var(--copper)', fontWeight: 700,
+                  fontSize: 10.5, padding: '7px 14px', borderRadius: 3, cursor: 'pointer', opacity: previewStale ? 0.5 : 1,
+                }}>
+                  🖨 Imprimir
+                </button>
+                <button onClick={closePreview} style={{
+                  background: 'none', border: '1px solid var(--line)', color: 'var(--dim)',
+                  fontSize: 10.5, padding: '7px 12px', borderRadius: 3, cursor: 'pointer',
+                }}>
+                  ✕ Cerrar
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+              {/* Selección de capítulos */}
+              <div style={{ width: 300, borderRight: '1px solid var(--line)', overflowY: 'auto', padding: '12px 14px', flexShrink: 0 }}>
+                <div style={{ fontSize: 9.5, color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>
+                  Capítulos del informe
+                </div>
+                <div style={{ fontSize: 9, color: 'var(--faint)', lineHeight: 1.5, marginBottom: 10 }}>
+                  La portada y el índice siempre se incluyen y se regeneran según los capítulos seleccionados.
+                </div>
+                {previewSections.map((s, i) => (
+                  <label key={i} style={{
+                    display: 'flex', gap: 8, alignItems: 'flex-start', padding: '7px 8px', marginBottom: 4,
+                    borderRadius: 3, border: '1px solid var(--line)', cursor: 'pointer',
+                    background: included[i] ? 'var(--copper-soft)' : 'transparent',
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={included[i] ?? true}
+                      onChange={e => {
+                        setIncluded(arr => arr.map((v, j) => j === i ? e.target.checked : v));
+                        setPreviewStale(true);
+                      }}
+                      style={{ marginTop: 2 }}
+                    />
+                    <span style={{ fontSize: 10, color: included[i] ? 'var(--text)' : 'var(--faint)', lineHeight: 1.4 }}>
+                      {sectionLabel(s.module)}
+                      {s.norm && <span style={{ display: 'block', fontSize: 8, color: 'var(--faint)', marginTop: 1 }}>{s.norm}</span>}
+                    </span>
+                  </label>
+                ))}
+                <button
+                  onClick={refreshPreview}
+                  disabled={previewRefreshing || !previewStale}
+                  style={{
+                    width: '100%', marginTop: 8, background: previewStale ? 'var(--copper)' : 'var(--panel)',
+                    border: previewStale ? 'none' : '1px solid var(--line)',
+                    color: previewStale ? '#fff' : 'var(--faint)', fontWeight: 700, fontSize: 10.5,
+                    padding: 9, borderRadius: 3, cursor: 'pointer', opacity: previewRefreshing ? 0.6 : 1,
+                  }}
+                >
+                  {previewRefreshing ? 'Actualizando…' : previewStale ? '↻ Actualizar vista previa' : 'Vista previa al día'}
+                </button>
+              </div>
+
+              {/* Visor PDF */}
+              <div style={{ flex: 1, background: '#333', position: 'relative' }}>
+                <iframe
+                  ref={previewFrameRef}
+                  src={previewUrl}
+                  title="Previsualización del informe PDF"
+                  style={{ width: '100%', height: '100%', border: 'none', opacity: previewStale ? 0.35 : 1, transition: 'opacity .2s' }}
+                />
+                {previewStale && (
+                  <div style={{
+                    position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
+                  }}>
+                    <div style={{ background: 'var(--panel)', border: '1px solid var(--copper)', borderRadius: 4, padding: '10px 18px', fontSize: 11, color: 'var(--copper)', fontWeight: 700 }}>
+                      Selección modificada — presiona &quot;Actualizar vista previa&quot;
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

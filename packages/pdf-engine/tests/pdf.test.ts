@@ -43,6 +43,46 @@ describe('generateReportBuffer — PDF', () => {
     const buffer = await generateReportBuffer({ meta: META, sections: [minimal] });
     assert.strictEqual(buffer.subarray(0, 5).toString('latin1'), '%PDF-');
   });
+
+  it('genera portada + índice + capítulos con identificación completa del proyectista', async () => {
+    const meta: ReportMeta = {
+      ...META,
+      projectCode: 'GDP-TEST-01',
+      company: 'Consultora QA SpA',
+      engineerTitle: 'Ingeniero Civil Eléctrico',
+      engineerLicense: 'Licencia SEC Clase A N°12345',
+      location: 'Santiago, Chile',
+      norm: 'IEEE Std 80-2013',
+    };
+    const buffer = await generateReportBuffer({ meta, sections: [SECTION, { ...SECTION, title: 'Otra sección' }] });
+    assert.strictEqual(buffer.subarray(0, 5).toString('latin1'), '%PDF-');
+    // Portada (1) + índice (2) + al menos una página de cálculo (3)
+    assert.ok(buffer.length > 2000, 'un informe con portada e índice no debería ser tan pequeño');
+  });
+
+  it('acepta un logo PNG válido en data URL y no lanza', async () => {
+    // PNG 1×1 transparente (válido, mínimo)
+    const png1x1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+    const buffer = await generateReportBuffer({
+      meta: { ...META, logoDataUrl: `data:image/png;base64,${png1x1}` },
+      sections: [SECTION],
+    });
+    assert.strictEqual(buffer.subarray(0, 5).toString('latin1'), '%PDF-');
+  });
+
+  it('ignora un logo corrupto sin abortar el informe', async () => {
+    const buffer = await generateReportBuffer({
+      meta: { ...META, logoDataUrl: 'data:image/png;base64,QUJDRA==' }, // base64 válido pero no es un PNG
+      sections: [SECTION],
+    });
+    assert.strictEqual(buffer.subarray(0, 5).toString('latin1'), '%PDF-');
+  });
+
+  it('un informe con muchos capítulos pagina y no lanza (índice multi-página de cálculo)', async () => {
+    const sections = Array.from({ length: 15 }, (_, i) => ({ ...SECTION, title: `Capítulo ${i + 1}` }));
+    const buffer = await generateReportBuffer({ meta: META, sections });
+    assert.strictEqual(buffer.subarray(0, 5).toString('latin1'), '%PDF-');
+  });
 });
 
 describe('Generadores DXF — estructura mínima válida', () => {

@@ -26,7 +26,18 @@ interface PublicUser {
   countryCode: string | null;
   normativeProfileId: string | null;
   rgRelaxedConditionsMet: boolean;
+  designerTitle: string | null;
+  designerLicense: string | null;
+  designerCompany: string | null;
+  designerLogo: string | null;
 }
+
+// Identificación profesional del proyectista — el logo viaja como data URL PNG/JPEG
+// con tope de 700 KB codificado (≈500 KB de imagen); string vacío limpia el campo.
+const designerLogoSchema = z.string().max(700_000).refine(
+  v => v === '' || /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(v),
+  { message: 'El logo debe ser una imagen PNG o JPEG en formato data URL base64' },
+);
 
 const registerBodySchema = z.object({
   email: emailSchema, name: z.string().trim().min(1).max(200), password: passwordSchema,
@@ -42,6 +53,10 @@ const updateMeBodySchema = z.object({
   countryCode: countryCodeSchema.optional(),
   normativeProfileId: normativeProfileIdSchema.optional(),
   rgRelaxedConditionsMet: z.boolean().optional(),
+  designerTitle: z.string().trim().max(200).optional(),
+  designerLicense: z.string().trim().max(200).optional(),
+  designerCompany: z.string().trim().max(200).optional(),
+  designerLogo: designerLogoSchema.optional(),
 });
 
 export async function authRoutes(app: FastifyInstance) {
@@ -66,7 +81,9 @@ export async function authRoutes(app: FastifyInstance) {
       VALUES (${email}, ${name}, ${password_hash}, ${countryCode ?? null}, ${normativeProfileId})
       RETURNING id, email, name, plan, created_at,
         country_code AS "countryCode", normative_profile_id AS "normativeProfileId",
-        rg_relaxed_conditions_met AS "rgRelaxedConditionsMet"
+        rg_relaxed_conditions_met AS "rgRelaxedConditionsMet",
+        designer_title AS "designerTitle", designer_license AS "designerLicense",
+        designer_company AS "designerCompany", designer_logo AS "designerLogo"
     `;
     if (!user) return reply.code(500).send({ error: 'No se pudo crear el usuario' });
 
@@ -100,6 +117,8 @@ export async function authRoutes(app: FastifyInstance) {
         id: user.id, email: user.email, name: user.name, plan: user.plan,
         countryCode: user.country_code, normativeProfileId: user.normative_profile_id,
         rgRelaxedConditionsMet: user.rg_relaxed_conditions_met,
+        designerTitle: user.designer_title, designerLicense: user.designer_license,
+        designerCompany: user.designer_company, designerLogo: user.designer_logo,
       },
     };
   });
@@ -165,7 +184,9 @@ export async function authRoutes(app: FastifyInstance) {
     const [user] = await sql<PublicUser[]>`
       SELECT id, email, name, plan, created_at,
         country_code AS "countryCode", normative_profile_id AS "normativeProfileId",
-        rg_relaxed_conditions_met AS "rgRelaxedConditionsMet"
+        rg_relaxed_conditions_met AS "rgRelaxedConditionsMet",
+        designer_title AS "designerTitle", designer_license AS "designerLicense",
+        designer_company AS "designerCompany", designer_logo AS "designerLogo"
       FROM users WHERE id = ${sub}
     `;
     if (!user) throw { statusCode: 404, message: 'Usuario no encontrado' };
@@ -177,7 +198,8 @@ export async function authRoutes(app: FastifyInstance) {
     const { sub } = req.user as { sub: string };
     const body = parseBody(updateMeBodySchema, req, reply);
     if (!body) return;
-    const { name, currentPassword, newPassword, countryCode, normativeProfileId, rgRelaxedConditionsMet } = body;
+    const { name, currentPassword, newPassword, countryCode, normativeProfileId, rgRelaxedConditionsMet,
+      designerTitle, designerLicense, designerCompany, designerLogo } = body;
 
     const [user] = await sql<User[]>`SELECT * FROM users WHERE id = ${sub}`;
     if (!user) return reply.code(404).send({ error: 'Usuario no encontrado' });
@@ -215,10 +237,18 @@ export async function authRoutes(app: FastifyInstance) {
       await sql`UPDATE users SET rg_relaxed_conditions_met = ${rgRelaxedConditionsMet} WHERE id = ${sub}`;
     }
 
+    // Update identificación profesional del proyectista (string vacío limpia el campo)
+    if (designerTitle !== undefined)   await sql`UPDATE users SET designer_title   = ${designerTitle   || null} WHERE id = ${sub}`;
+    if (designerLicense !== undefined) await sql`UPDATE users SET designer_license = ${designerLicense || null} WHERE id = ${sub}`;
+    if (designerCompany !== undefined) await sql`UPDATE users SET designer_company = ${designerCompany || null} WHERE id = ${sub}`;
+    if (designerLogo !== undefined)    await sql`UPDATE users SET designer_logo    = ${designerLogo    || null} WHERE id = ${sub}`;
+
     const [updated] = await sql<PublicUser[]>`
       SELECT id, email, name, plan, created_at,
         country_code AS "countryCode", normative_profile_id AS "normativeProfileId",
-        rg_relaxed_conditions_met AS "rgRelaxedConditionsMet"
+        rg_relaxed_conditions_met AS "rgRelaxedConditionsMet",
+        designer_title AS "designerTitle", designer_license AS "designerLicense",
+        designer_company AS "designerCompany", designer_logo AS "designerLogo"
       FROM users WHERE id = ${sub}
     `;
     return { ok: true, user: updated };

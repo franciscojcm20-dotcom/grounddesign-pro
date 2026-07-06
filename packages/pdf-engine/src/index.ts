@@ -14,6 +14,17 @@ export interface ReportMeta {
   projectCode?: string;
   company?: string;
   engineer?: string;
+  /** Título profesional del proyectista (ej. "Ingeniero Civil Eléctrico"). */
+  engineerTitle?: string;
+  /** Registro/licencia profesional del proyectista (ej. "Licencia SEC Clase A N°12345"). */
+  engineerLicense?: string;
+  /**
+   * Logo del proyectista/empresa como data URL (data:image/png;base64,... o
+   * data:image/jpeg;base64,...). Se dibuja en el bloque de identificación del
+   * proyectista en la portada — la portada misma (branding, disclaimer, normas,
+   * fecha) es fija del sistema y no editable por el usuario.
+   */
+  logoDataUrl?: string;
   location?: string;
   date?: string;          // ISO string; defaults to today
   norm?: string;          // primary norm reference
@@ -178,92 +189,214 @@ function drawMeta(doc: PDFKit.PDFDocument, meta: ReportMeta): number {
   return y + 56 + 14;
 }
 
-// ─── Cover page ───────────────────────────────────────────────────────────────
+// ─── Cover page (bloqueada por el sistema) ────────────────────────────────────
+// La portada es un entregable fijo de GroundDesign Pro: branding, título,
+// disclaimer, normas aplicadas y fecha de emisión los define el sistema y no son
+// editables por el usuario. Los únicos datos de origen del usuario son los del
+// proyecto (nombre, código, ubicación) y el bloque de identificación del
+// proyectista (nombre, título, licencia, empresa, logo) en su recuadro designado.
+
+const SOFTWARE_VERSION = '1.0';
+
+function decodeLogo(logoDataUrl?: string): Buffer | null {
+  if (!logoDataUrl) return null;
+  const m = /^data:image\/(png|jpeg);base64,([A-Za-z0-9+/=]+)$/.exec(logoDataUrl);
+  if (!m) return null;
+  try { return Buffer.from(m[2]!, 'base64'); } catch { return null; }
+}
+
+function formatDate(iso?: string): string {
+  return (iso ? new Date(iso) : new Date())
+    .toLocaleDateString('es-CL', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+/** Normas únicas aplicadas en el informe (para listarlas en la portada). */
+function collectNorms(meta: ReportMeta, sections: ReportSection[]): string[] {
+  const norms = new Set<string>();
+  if (meta.norm) norms.add(meta.norm);
+  for (const s of sections) if (s.norm) norms.add(s.norm);
+  return [...norms];
+}
 
 function drawCoverPage(doc: PDFKit.PDFDocument, meta: ReportMeta, sections: ReportSection[], totalPages: number) {
-  drawHeader(doc, meta, 1, totalPages);
+  // ── Banda superior de branding del sistema (fija) ─────────────────────────
+  fillRect(doc, 0, 0, PAGE.width, 118, C.bg);
+  fillRect(doc, 0, 118, PAGE.width, 3, C.copper);
+  drawGroundSymbol(doc, MARGIN, 24, 1.6);
+  doc.fontSize(19).fillColor(hex(C.white)).font('Helvetica-Bold')
+    .text('GroundDesign', MARGIN + 32, 24, { lineBreak: false })
+    .fillColor(hex(C.copper))
+    .text('Pro', MARGIN + 152, 24, { lineBreak: false });
+  doc.fontSize(7.5).fillColor(hex(C.dim)).font('Helvetica')
+    .text('Plataforma de diseño de sistemas de puesta a tierra · Motor de cálculo IEEE Std 80-2013 / 81-2012', MARGIN + 32, 47, { lineBreak: false });
+  doc.fontSize(6.5).fillColor(hex(C.faint))
+    .text(safe(`Documento oficial generado por GroundDesign Pro v${SOFTWARE_VERSION} — portada emitida por el sistema, no editable`), MARGIN + 32, 59, { lineBreak: false });
+  doc.fontSize(7).fillColor(hex(C.dim))
+    .text(safe(`Emitido: ${formatDate(meta.date)}`), PAGE.width - MARGIN - 150, 28, { width: 150, align: 'right', lineBreak: false })
+    .text(`Pág. 1 / ${totalPages}`, PAGE.width - MARGIN - 150, 40, { width: 150, align: 'right', lineBreak: false });
 
-  // Meta rows in hero — declared before the hero band so its height can be sized to fit them
-  const mid = 200;
-  const entries = [
-    ['PROYECTO', meta.projectName],
-    ['CÓDIGO',   meta.projectCode ?? '—'],
-    ['EMPRESA',  meta.company     ?? '—'],
-    ['INGENIERO', meta.engineer   ?? '—'],
-    ['UBICACIÓN', meta.location   ?? '—'],
-    ['FECHA',     meta.date
-      ? new Date(meta.date).toLocaleDateString('es-CL', { year: 'numeric', month: 'long', day: 'numeric' })
-      : new Date().toLocaleDateString('es-CL', { year: 'numeric', month: 'long', day: 'numeric' })],
-    ['NORMA REF.', meta.norm ?? 'IEEE Std 80-2013 / 81-2012'],
-  ];
-
-  // Hero band — height derived from the meta row count so it never spills onto the plain
-  // page background (a fixed height here previously clipped rows once NORMA REF. was added).
-  const heroHeight = (mid - 60) + entries.length * 18 + 14;
-  fillRect(doc, 0, 60, PAGE.width, heroHeight, C.panel);
-  fillRect(doc, 0, 60, PAGE.width, 3, C.copper);
-
-  // Large ground symbol
-  drawGroundSymbol(doc, PAGE.width / 2 - 8, 82, 2.2);
-
-  // Title
-  doc.fontSize(22).fillColor(hex(C.white)).font('Helvetica-Bold')
-    .text('INFORME DE CÁLCULO', MARGIN, 128, { width: CONTENT, align: 'center', lineBreak: false });
+  // ── Título del documento ──────────────────────────────────────────────────
+  doc.fontSize(24).fillColor(hex(C.white)).font('Helvetica-Bold')
+    .text('INFORME DE CÁLCULO', MARGIN, 78, { width: CONTENT, align: 'left', lineBreak: false });
   doc.fontSize(11).fillColor(hex(C.copper)).font('Helvetica')
-    .text('SISTEMA DE PUESTA A TIERRA', MARGIN, 158, { width: CONTENT, align: 'center', lineBreak: false });
+    .text('MEMORIA DE CÁLCULO — SISTEMA DE PUESTA A TIERRA', MARGIN, 103, { lineBreak: false });
 
-  let ey = mid;
+  // ── Datos del proyecto ────────────────────────────────────────────────────
+  let y = 140;
+  lbl(doc, MARGIN, y, 'DATOS DEL PROYECTO', 7, C.faint);
+  y += 12;
+  const entries: Array<[string, string]> = [
+    ['PROYECTO',  meta.projectName],
+    ['CÓDIGO',    meta.projectCode ?? '—'],
+    ['UBICACIÓN', meta.location    ?? '—'],
+    ['FECHA DE EMISIÓN', formatDate(meta.date)],
+  ];
+  fillRect(doc, MARGIN, y, CONTENT, entries.length * 20 + 8, C.panel);
+  fillRect(doc, MARGIN, y, 3, entries.length * 20 + 8, C.copper);
+  let ey = y + 6;
   for (const [k, v] of entries) {
-    hRule(doc, ey, C.line);
-    lbl(doc, MARGIN + 10, ey + 4, k as string, 6.5, C.faint);
-    val(doc, MARGIN + 130, ey + 4, v as string, 8, C.text);
-    ey += 18;
+    lbl(doc, MARGIN + 12, ey + 3, k, 6.5, C.faint);
+    val(doc, MARGIN + 130, ey + 2, v, 9, k === 'PROYECTO' ? C.white : C.text, k === 'PROYECTO');
+    ey += 20;
   }
-  hRule(doc, ey, C.line);
+  y = ey + 14;
 
-  // Compliance summary table on cover
-  const hasPasses = sections.some(s => s.pass !== undefined);
-  if (hasPasses) {
-    const tY = ey + 20;
-    lbl(doc, MARGIN, tY, 'RESUMEN DE CUMPLIMIENTO NORMATIVO', 7, C.faint);
-    let rowY = tY + 14;
+  // ── Identificación del proyectista (datos + logo provistos por el usuario) ─
+  lbl(doc, MARGIN, y, 'PROYECTISTA RESPONSABLE', 7, C.faint);
+  y += 12;
+  const bh = 74;
+  fillRect(doc, MARGIN, y, CONTENT, bh, C.panelDark);
+  strokeRect(doc, MARGIN, y, CONTENT, bh, C.line);
 
-    // Header row
+  const logo = decodeLogo(meta.logoDataUrl);
+  const textX = logo ? MARGIN + 88 : MARGIN + 12;
+  if (logo) {
+    // Recuadro del logo — el dibujo se protege para que una imagen corrupta no
+    // aborte el informe completo (se omite el logo y se sigue sin él).
+    strokeRect(doc, MARGIN + 10, y + 10, 66, 54, C.line);
+    try { doc.image(logo, MARGIN + 13, y + 13, { fit: [60, 48], align: 'center', valign: 'center' }); }
+    catch { lbl(doc, MARGIN + 16, y + 34, 'logo inválido', 6, C.faint); }
+  }
+  val(doc, textX, y + 12, meta.engineer ?? '—', 11, C.white, true);
+  lbl(doc, textX, y + 28, meta.engineerTitle ?? 'Proyectista eléctrico / especialista', 7.5, C.dim);
+  if (meta.engineerLicense) lbl(doc, textX, y + 40, meta.engineerLicense, 7.5, C.copper);
+  if (meta.company) lbl(doc, textX, y + 52, meta.company, 7, C.faint);
+
+  // Recuadro de firma dentro del bloque de proyectista
+  strokeRect(doc, PAGE.width - MARGIN - 130, y + 10, 120, 54, C.line);
+  lbl(doc, PAGE.width - MARGIN - 124, y + 15, 'Firma / Sello profesional', 6, C.faint);
+  y += bh + 14;
+
+  // ── Normas aplicadas (recopiladas por el sistema desde los capítulos) ─────
+  const norms = collectNorms(meta, sections).slice(0, 7);
+  lbl(doc, MARGIN, y, 'NORMAS Y MÉTODOS APLICADOS EN ESTE INFORME', 7, C.faint);
+  y += 12;
+  fillRect(doc, MARGIN, y, CONTENT, norms.length * 14 + 10, C.panel);
+  strokeRect(doc, MARGIN, y, CONTENT, norms.length * 14 + 10, C.line);
+  let ny = y + 6;
+  for (const n of norms) {
+    fillRect(doc, MARGIN + 10, ny + 3, 3, 3, C.copper);
+    lbl(doc, MARGIN + 20, ny, n, 7, C.dim);
+    ny += 14;
+  }
+  y += norms.length * 14 + 10 + 14;
+
+  // ── Resumen de cumplimiento normativo ─────────────────────────────────────
+  const passSections = sections.filter(s => s.pass !== undefined);
+  if (passSections.length) {
+    // Altura disponible antes del pie fijo — se recorta la tabla si no cabe completa
+    // (el detalle completo vive en la memoria de cálculo; el índice lista todo).
+    const footTop = PAGE.height - 64;
+    const maxRows = Math.max(0, Math.floor((footTop - y - 16 - 16 - 10) / 18));
+    const rows = passSections.slice(0, maxRows);
+
+    lbl(doc, MARGIN, y, 'RESUMEN DE CUMPLIMIENTO NORMATIVO', 7, C.faint);
+    let rowY = y + 12;
     fillRect(doc, MARGIN, rowY, CONTENT, 16, C.bg);
-    lbl(doc, MARGIN + 8,       rowY + 5, 'MÓDULO / CÁLCULO',     7, C.faint);
-    lbl(doc, MARGIN + 260,     rowY + 5, 'NORMA',                7, C.faint);
-    lbl(doc, PAGE.width - MARGIN - 70, rowY + 5, 'RESULTADO',    7, C.faint);
+    lbl(doc, MARGIN + 8,   rowY + 5, 'CAPÍTULO / CÁLCULO', 7, C.faint);
+    lbl(doc, MARGIN + 280, rowY + 5, 'NORMA', 7, C.faint);
+    lbl(doc, PAGE.width - MARGIN - 70, rowY + 5, 'RESULTADO', 7, C.faint);
     rowY += 16;
-
-    for (const sec of sections) {
-      if (sec.pass === undefined) continue;
-      const bg = rowY % 36 < 18 ? C.panelDark : C.panel;
-      fillRect(doc, MARGIN, rowY, CONTENT, 18, bg);
-      val(doc, MARGIN + 8,   rowY + 5, sec.title,         7.5, C.text);
-      val(doc, MARGIN + 260, rowY + 5, sec.norm ?? '—',   7,   C.dim);
-
+    for (let i = 0; i < rows.length; i++) {
+      const sec = rows[i]!;
+      fillRect(doc, MARGIN, rowY, CONTENT, 18, i % 2 === 0 ? C.panelDark : C.panel);
+      doc.font('Helvetica').fontSize(7.5).fillColor(hex(C.text))
+        .text(safe(sec.title), MARGIN + 8, rowY + 5, { lineBreak: false, width: 262, ellipsis: true });
+      doc.font('Helvetica').fontSize(7).fillColor(hex(C.dim))
+        .text(safe(sec.norm ?? '—'), MARGIN + 280, rowY + 5, { lineBreak: false, width: 170, ellipsis: true });
       const pColor = sec.pass ? C.safe : C.danger;
-      const pBg    = sec.pass ? C.safeBg : C.dangerBg;
-      const pTxt   = sec.pass ? '✓ CUMPLE' : '✗ NO CUMPLE';
-      fillRect(doc, PAGE.width - MARGIN - 80, rowY + 2, 80, 14, pBg);
-      val(doc, PAGE.width - MARGIN - 75, rowY + 5, pTxt, 7.5, pColor, true);
+      fillRect(doc, PAGE.width - MARGIN - 80, rowY + 2, 80, 14, sec.pass ? C.safeBg : C.dangerBg);
+      val(doc, PAGE.width - MARGIN - 75, rowY + 5, sec.pass ? '✓ CUMPLE' : '✗ NO CUMPLE', 7.5, pColor, true);
       rowY += 18;
     }
-    strokeRect(doc, MARGIN, tY + 14, CONTENT, rowY - tY - 14, C.line);
+    strokeRect(doc, MARGIN, y + 12, CONTENT, rowY - y - 12, C.line);
+    if (rows.length < passSections.length) {
+      lbl(doc, MARGIN, rowY + 4, `… y ${passSections.length - rows.length} capítulos más — ver índice y memoria de cálculo`, 6.5, C.faint);
+    }
   }
 
-  // Footer disclaimer
-  const fy = PAGE.height - 60;
-  hRule(doc, fy, C.line);
+  // ── Pie fijo del sistema (bloqueado) ──────────────────────────────────────
+  const fy = PAGE.height - 56;
+  fillRect(doc, 0, fy, PAGE.width, 56, C.bg);
+  fillRect(doc, 0, fy, PAGE.width, 1, C.copper);
   doc.fontSize(6.5).fillColor(hex(C.faint)).font('Helvetica')
-    .text('Este informe fue generado con GroundDesign Pro. Los cálculos se basan en las normas IEEE Std 80-2013 e IEEE Std 81-2012.', MARGIN, fy + 8, { width: CONTENT, lineBreak: true })
-    .text('El ingeniero responsable debe verificar que los parámetros de entrada correspondan a las condiciones reales del sitio.', MARGIN, fy + 18, { width: CONTENT, lineBreak: true });
+    .text(safe(`Documento generado por GroundDesign Pro v${SOFTWARE_VERSION} el ${formatDate(meta.date)} · ${sections.length} capítulos de cálculo · grounddesign.pro`), MARGIN, fy + 10, { width: CONTENT, lineBreak: true })
+    .text('Los resultados de este informe deben ser validados y firmados por un ingeniero eléctrico competente antes de cualquier uso en construcción real. El profesional responsable debe verificar que los parámetros de entrada correspondan a las condiciones reales del sitio.', MARGIN, fy + 22, { width: CONTENT, lineBreak: true });
+}
 
-  if (meta.engineer) {
-    strokeRect(doc, PAGE.width - MARGIN - 110, fy + 4, 110, 32, C.line);
-    lbl(doc, PAGE.width - MARGIN - 105, fy + 9, 'Firma / Sello P.E.', 6, C.faint);
-    lbl(doc, PAGE.width - MARGIN - 105, fy + 22, meta.engineer, 6.5, C.dim);
+// ─── Índice (tabla de contenidos con paginación real) ─────────────────────────
+
+function drawTocPage(doc: PDFKit.PDFDocument, meta: ReportMeta, entries: Array<{ title: string; norm?: string; page: number }>, totalPages: number) {
+  drawHeader(doc, meta, 2, totalPages);
+
+  let y = 84;
+  doc.fontSize(15).fillColor(hex(C.white)).font('Helvetica-Bold')
+    .text('ÍNDICE', MARGIN, y, { lineBreak: false });
+  fillRect(doc, MARGIN, y + 20, 40, 2, C.copper);
+  y += 34;
+
+  const rows: Array<{ title: string; norm?: string; page: number }> = [
+    { title: 'Portada — Informe de cálculo', page: 1 },
+    { title: 'Índice', page: 2 },
+    ...entries,
+  ];
+
+  doc.font('Helvetica');
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i]!;
+    const rowH = r.norm ? 26 : 18;
+    if (y + rowH > PAGE.height - 46) break; // índice truncado con elegancia si hubiese decenas de capítulos
+    fillRect(doc, MARGIN, y, CONTENT, rowH, i % 2 === 0 ? C.panelDark : C.panel);
+
+    const numTxt = String(i + 1).padStart(2, '0');
+    doc.fontSize(7.5).fillColor(hex(C.copper)).font('Helvetica-Bold')
+      .text(numTxt, MARGIN + 8, y + 5, { lineBreak: false });
+    const titleX = MARGIN + 30;
+    const pageW = 34;
+    const titleTxt = safe(r.title);
+    doc.fontSize(8.5).fillColor(hex(C.text)).font('Helvetica')
+      .text(titleTxt, titleX, y + 5, { lineBreak: false, width: CONTENT - 30 - pageW - 60, ellipsis: true });
+
+    // Línea punteada conductora hasta el número de página
+    const titleWidth = Math.min(doc.widthOfString(titleTxt), CONTENT - 30 - pageW - 60);
+    const dotsStart = titleX + titleWidth + 6;
+    const dotsEnd = PAGE.width - MARGIN - pageW - 8;
+    if (dotsEnd > dotsStart) {
+      doc.save().moveTo(dotsStart, y + 11).lineTo(dotsEnd, y + 11)
+        .lineWidth(0.5).strokeColor(hex(C.faint)).dash(1, { space: 3 }).stroke().undash().restore();
+    }
+    doc.fontSize(8.5).fillColor(hex(C.copper)).font('Helvetica-Bold')
+      .text(String(r.page), PAGE.width - MARGIN - pageW, y + 5, { width: pageW, align: 'right', lineBreak: false });
+
+    if (r.norm) {
+      doc.fontSize(6.5).fillColor(hex(C.faint)).font('Helvetica')
+        .text(safe(r.norm), titleX, y + 16, { lineBreak: false, width: CONTENT - 30 - pageW - 60, ellipsis: true });
+    }
+    y += rowH;
   }
+
+  strokeRect(doc, MARGIN, 118, CONTENT, y - 118, C.line);
+  drawFooter(doc, meta, 2);
 }
 
 // ─── Section ──────────────────────────────────────────────────────────────────
@@ -391,7 +524,6 @@ export function generateReport(opts: ReportOptions): void {
   const doc = new PDFDocument({ size: 'A4', margin: 0, autoFirstPage: false });
   doc.pipe(stream);
 
-  const bodyHeight = PAGE.height - 80 - 40;
   // Observations wrap to multiple lines, so their height must be measured against the
   // real font metrics (doc.heightOfString) rather than assumed as a fixed single line —
   // otherwise pagination under-estimates section height and rows overflow past the page.
@@ -400,26 +532,45 @@ export function generateReport(opts: ReportOptions): void {
     doc.font('Helvetica').fontSize(7);
     return obs.reduce((sum, o) => sum + doc.heightOfString(safe(`•  ${o}`), { width: CONTENT - 16 }) + 8 + 1, 0);
   };
+  // Debe reflejar exactamente lo que dibuja drawSection (incluido el +6 tras las
+  // columnas): el índice publica números de página, así que la pre-pasada de
+  // paginación no puede divergir ni un punto del dibujo real.
   const sectionHeight = (sec: ReportSection) =>
-    24 + 13 + Math.max(sec.inputs.length, sec.results.length) * 18 +
+    24 + 13 + Math.max(sec.inputs.length, sec.results.length) * 18 + 6 +
     (sec.pass !== undefined ? 22 : 0) +
     observationsHeight(sec.observations) + 8;
 
-  // Page 1 = cover, remaining pages = calc sections
-  let used = 0;
-  let totalPages = 2; // cover + at least one calc page
-  for (const sec of sections) {
-    const h = sectionHeight(sec);
-    if (used + h > bodyHeight) { totalPages++; used = 0; }
-    used += h;
+  // ── Pre-pasada de paginación ─────────────────────────────────────────────
+  // Página 1 = portada, página 2 = índice, capítulos desde la página 3. Replica
+  // la misma acumulación del loop de dibujo para asignar página a cada capítulo.
+  const START_Y = 76 + 16;             // y inicial tras el encabezado de página de cálculo
+  const LIMIT_Y = PAGE.height - 46;    // límite inferior antes de saltar de página
+  const sectionPages: number[] = [];
+  {
+    let page = 3, y = START_Y;
+    for (const sec of sections) {
+      const h = sectionHeight(sec);
+      if (y + h > LIMIT_Y && y > START_Y) { page++; y = START_Y; }
+      sectionPages.push(page);
+      y += h;
+    }
   }
+  const totalPages = sectionPages.length ? sectionPages[sectionPages.length - 1]! : 3;
 
-  // ── Cover page ──────────────────────────────────────────────────────────
+  // ── Portada (página 1, bloqueada por el sistema) ─────────────────────────
   doc.addPage();
   drawCoverPage(doc, meta, sections, totalPages);
 
-  // ── Calculation pages ───────────────────────────────────────────────────
-  let pageNum = 1;
+  // ── Índice (página 2) ────────────────────────────────────────────────────
+  doc.addPage();
+  drawTocPage(
+    doc, meta,
+    sections.map((s, i) => ({ title: s.title, ...(s.norm !== undefined ? { norm: s.norm } : {}), page: sectionPages[i]! })),
+    totalPages,
+  );
+
+  // ── Páginas de cálculo (desde la página 3) ───────────────────────────────
+  let pageNum = 2;
   let y = 0;
 
   function newPage() {
@@ -437,7 +588,7 @@ export function generateReport(opts: ReportOptions): void {
 
   for (const sec of sections) {
     const h = sectionHeight(sec);
-    if (y + h > PAGE.height - 46) newPage();
+    if (y + h > LIMIT_Y && y > START_Y) newPage();
     y = drawSection(doc, sec, y);
     drawFooter(doc, meta, pageNum);
   }

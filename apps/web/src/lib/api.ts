@@ -167,22 +167,30 @@ export interface ReportMeta {
   projectCode?: string;
   company?: string;
   engineer?: string;
+  engineerTitle?: string;
+  engineerLicense?: string;
+  /** Logo del proyectista como data URL PNG/JPEG — se dibuja en el bloque de identificación de la portada. */
+  logoDataUrl?: string;
   location?: string;
   date?: string;
   norm?: string;
 }
 
-export async function downloadReport(
-  meta: ReportMeta,
-  sections: Array<{ module: string; inputs: Record<string, unknown>; outputs: Record<string, unknown>; norm?: string }>,
-): Promise<void> {
+export type ReportSectionInput = { module: string; inputs: Record<string, unknown>; outputs: Record<string, unknown>; norm?: string };
+
+/** Genera el informe en el servidor y devuelve el blob del PDF — base común de la previsualización y la descarga. */
+export async function fetchReportBlob(meta: ReportMeta, sections: ReportSectionInput[]): Promise<Blob> {
   const res = await fetch(`${BASE}/api/v1/report`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ meta, sections }),
   });
   if (!res.ok) throw new Error('Error al generar PDF');
-  const blob = await res.blob();
+  return res.blob();
+}
+
+export async function downloadReport(meta: ReportMeta, sections: ReportSectionInput[]): Promise<void> {
+  const blob = await fetchReportBlob(meta, sections);
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href     = url;

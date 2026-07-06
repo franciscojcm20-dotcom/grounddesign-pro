@@ -11,6 +11,14 @@ export interface AuthUser {
   normativeProfileId?: string | null;
   /** Declaración de la persona usuaria: la instalación cumple las condiciones de relajación del perfil (ej. RIC N°06 Cl. 6.2.1/6.2.2). */
   rgRelaxedConditionsMet?: boolean;
+  /** Título profesional del proyectista (ej. "Ingeniero Civil Eléctrico") — portada de informes. */
+  designerTitle?: string | null;
+  /** Licencia/registro profesional (ej. "Licencia SEC Clase A N°12345") — portada de informes. */
+  designerLicense?: string | null;
+  /** Empresa/consultora — portada de informes. */
+  designerCompany?: string | null;
+  /** Logo del proyectista como data URL PNG/JPEG — portada de informes. */
+  designerLogo?: string | null;
 }
 
 export class ApiError extends Error {
@@ -58,6 +66,7 @@ export const authApi = {
   updateMe: (patch: Partial<{
     name: string; currentPassword: string; newPassword: string;
     countryCode: string; normativeProfileId: string; rgRelaxedConditionsMet: boolean;
+    designerTitle: string; designerLicense: string; designerCompany: string; designerLogo: string;
   }>) =>
     apiFetch<{ ok: boolean; user: AuthUser }>('/api/v1/auth/me', {
       method: 'PUT', body: JSON.stringify(patch),
