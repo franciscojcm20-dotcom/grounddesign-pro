@@ -38,13 +38,14 @@ export const NORMATIVE_PROFILES: NormativeProfile[] = [
   {
     id: 'ieee80-sec-ric',
     label: 'IEEE 80/81 · SEC/RIC (Chile)',
-    standard: 'IEEE Std 80-2013 · IEEE Std 81-2012 · SEC RIC N°6',
+    standard: 'IEEE Std 80-2013 · IEEE Std 81-2012 · SEC Pliego Técnico Normativo RIC N°06 (Res. Ex. N°33.877/2020) Cl. 6-7',
     country: 'Chile / genérico IEEE',
-    rgCritical: 1,
-    rgGeneral: 5,
+    rgCritical: 5,
+    rgGeneral: 20,
     bodyResistanceOhm: 1000,
     bodyWeightKg: 70,
-    notes: 'Perfil por defecto de la plataforma. Los límites 1 Ω/5 Ω son una referencia práctica habitual en subestaciones críticas y uso general; el criterio normativo completo es Etouch/Estep (Cl. 16.4-16.5) — ya modelado en el módulo de Tensiones.',
+    minConductorMm2: 25,
+    notes: 'Perfil por defecto de la plataforma. El RIC N°06 distingue "tierra de servicio" de "tierra de protección": rgGeneral = 20 Ω es el límite general de tierra de servicio (Cl. 6.1) para instalaciones de baja tensión; se acepta hasta 80 Ω solo si la instalación (potencia ≤10 kW) tiene esquema de neutralización con interruptor general de corte omnipolar y diferencial (300 mA en alimentadores, ≤30 mA en circuitos) — Cl. 6.2.1 —, o bien protección de sobretensión permanente (UNE-EN 50550) y transitoria (IEC 61643-11) — Cl. 6.2.2. Esta plataforma no verifica automáticamente esas condiciones de instalación; si se cumplen, un resultado entre 20 Ω y 80 Ω puede considerarse conforme aunque el indicador lo marque como no conforme. rgCritical = 5 Ω corresponde a la resistencia combinada de puestas a tierra de redes de distribución MT/BT (Cl. 6.7.3), un contexto distinto (red con subestación, no una instalación consumidora aislada); el diseño de puesta a tierra de subestaciones MT/AT se rige por el RPTD N°06 (DS N°109/2017), no verificado en este perfil. La "tierra de protección" (Cl. 7) no tiene techo de Ω fijo: se calcula como R_TP = V_S / I_0 (tensión de seguridad ÷ corriente de operación de la protección); el criterio sustantivo es Etouch/Estep, y el Anexo 6.1 del propio RIC N°06 adopta las fórmulas de IEEE Std 80 Cl. 16.4-16.5 — ya modeladas en el módulo de Tensiones. Sección mínima de conductor: 25 mm² de cobre desnudo para electrodo de tierra (Cl. 8.7); el conductor de protección sigue una tabla proporcional a la sección de fase (Anexo 6.7: ≤25mm²→igual a fase, 25-50mm²→25mm², >50mm²→mitad de fase), no un valor único.',
   },
   {
     id: 'retie-co',
