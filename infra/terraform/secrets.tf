@@ -40,3 +40,13 @@ resource "aws_secretsmanager_secret" "smtp_credentials" {
   name        = "${var.project}/${var.environment}/smtp-credentials"
   description = "JSON: {\"host\":\"\",\"port\":587,\"user\":\"\",\"pass\":\"\"}"
 }
+
+# Sentry DSN — mismo valor sirve para api y web (server-side); el frontend
+# además necesita este mismo valor expuesto como NEXT_PUBLIC_SENTRY_DSN
+# (ver apprunner.tf), ya que el DSN de Sentry no es un secreto sensible en sí
+# mismo (solo permite *enviar* eventos, no leerlos) pero se deja en Secrets
+# Manager por consistencia con el resto de la configuración opcional.
+resource "aws_secretsmanager_secret" "sentry_dsn" {
+  name        = "${var.project}/${var.environment}/sentry-dsn"
+  description = "Dejar vacío para deshabilitar el tracking de errores por completo"
+}

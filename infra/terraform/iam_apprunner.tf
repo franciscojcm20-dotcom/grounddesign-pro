@@ -44,6 +44,7 @@ data "aws_iam_policy_document" "apprunner_read_secrets" {
       aws_secretsmanager_secret.stripe_secret_key.arn,
       aws_secretsmanager_secret.stripe_webhook_secret.arn,
       aws_secretsmanager_secret.smtp_credentials.arn,
+      aws_secretsmanager_secret.sentry_dsn.arn,
     ]
   }
 }

@@ -13,6 +13,17 @@ RUN pnpm install --frozen-lockfile
 COPY packages/ ./packages/
 COPY apps/web/  ./apps/web/
 
+# Next.js hornea las variables NEXT_PUBLIC_* dentro del bundle del cliente en
+# build-time — deben declararse como ARG y reexportarse como ENV *antes* de
+# `pnpm run build`, o el valor pasado con --build-arg se ignora en silencio
+# (Docker no falla, simplemente no lo propaga) y el build cae al fallback de
+# apiBase.ts en producción, que no funciona igual entre servicios separados
+# (api y web) como los de AWS App Runner.
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_SENTRY_DSN
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
+
 WORKDIR /app/apps/web
 RUN pnpm run build
 

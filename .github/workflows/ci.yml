@@ -141,7 +141,7 @@ jobs:
   # y estos secrets/variables configurados en el repo:
   #   secrets:   AWS_ROLE_ARN
   #   variables: AWS_REGION, ECR_API_REPO, ECR_WEB_REPO, API_SERVICE_ARN,
-  #              WEB_SERVICE_ARN, NEXT_PUBLIC_API_URL
+  #              WEB_SERVICE_ARN, NEXT_PUBLIC_API_URL, NEXT_PUBLIC_SENTRY_DSN (opcional)
   deploy:
     name: Deploy — AWS App Runner
     runs-on: ubuntu-latest
@@ -195,6 +195,7 @@ jobs:
             ${{ vars.ECR_WEB_REPO }}:${{ github.sha }}
           build-args: |
             NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
+            NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Disparar deployment — api

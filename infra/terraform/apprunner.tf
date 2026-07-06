@@ -22,6 +22,7 @@ resource "aws_apprunner_service" "api" {
           JWT_SECRET             = aws_secretsmanager_secret.jwt_secret.arn
           STRIPE_SECRET_KEY      = aws_secretsmanager_secret.stripe_secret_key.arn
           STRIPE_WEBHOOK_SECRET  = aws_secretsmanager_secret.stripe_webhook_secret.arn
+          SENTRY_DSN             = aws_secretsmanager_secret.sentry_dsn.arn
         }
       }
     }
@@ -65,8 +66,12 @@ resource "aws_apprunner_service" "web" {
         port = "3000"
         runtime_environment_variables = {
           NODE_ENV = "production"
-          # NEXT_PUBLIC_API_URL se hornea en build-time (build-arg del Dockerfile),
-          # no se puede setear en runtime — ver DEPLOYMENT.md, paso de bootstrap.
+          # NEXT_PUBLIC_API_URL y NEXT_PUBLIC_SENTRY_DSN se hornean en build-time
+          # (build-arg del Dockerfile), no se pueden setear en runtime — ver
+          # DEPLOYMENT.md, paso de bootstrap.
+        }
+        runtime_environment_secrets = {
+          SENTRY_DSN = aws_secretsmanager_secret.sentry_dsn.arn # server-side (sentry.server.config.ts) — sí puede ir en runtime
         }
       }
     }

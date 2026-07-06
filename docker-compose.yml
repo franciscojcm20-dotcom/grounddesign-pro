@@ -43,6 +43,8 @@ services:
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       STRIPE_PRICE_INDIVIDUAL: ${STRIPE_PRICE_INDIVIDUAL:-}
       STRIPE_PRICE_PROFESSIONAL: ${STRIPE_PRICE_PROFESSIONAL:-}
+      # Sentry (optional — sin SENTRY_DSN, el tracking de errores queda deshabilitado)
+      SENTRY_DSN: ${SENTRY_DSN:-}
     ports:
       - "3001:3001"
     healthcheck:
@@ -61,6 +63,8 @@ services:
         condition: service_healthy
     environment:
       NEXT_PUBLIC_API_URL: ${API_URL:-http://localhost:3001}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
     ports:
       - "3000:3000"
 

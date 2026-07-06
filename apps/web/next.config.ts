@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { withSentryConfig } from '@sentry/nextjs';
 
 // No se define un valor por defecto para NEXT_PUBLIC_API_URL aquí: si esta
 // clave existe (aunque sea con un fallback fijo), Next.js la inyecta siempre
@@ -11,4 +12,12 @@ const config: NextConfig = {
   },
 };
 
-export default config;
+// withSentryConfig solo instrumenta el build (source maps, etc.) — sin
+// SENTRY_AUTH_TOKEN configurado, omite silenciosamente la subida de source
+// maps mediante `silent: true` y el build sigue funcionando igual.
+export default withSentryConfig(config, {
+  silent: true,
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  webpack: { treeshake: { removeDebugLogging: true } },
+});

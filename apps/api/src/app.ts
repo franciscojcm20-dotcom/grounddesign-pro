@@ -4,6 +4,8 @@ import jwt from '@fastify/jwt';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 
+import { initSentry, captureException } from './lib/sentry.ts';
+
 import { routesSoil }      from './routes/soil.ts';
 import { faultAnalysisRoutes } from './routes/faultAnalysis.ts';
 import { routesGrid }      from './routes/grid.ts';
@@ -24,6 +26,8 @@ import { valorizacionRoutes } from './routes/valorizacion.ts';
  * en tests (vía app.inject()) sin abrir un socket real.
  */
 export async function buildApp(): Promise<FastifyInstance> {
+  initSentry();
+
   const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-in-production';
   const HOST       = process.env.HOST ?? '127.0.0.1';
 
@@ -35,7 +39,23 @@ export async function buildApp(): Promise<FastifyInstance> {
     throw new Error('JWT_SECRET debe configurarse explícitamente cuando HOST no es 127.0.0.1 (despliegue expuesto).');
   }
 
-  const app = Fastify({ logger: { level: process.env.NODE_ENV === 'test' ? 'silent' : 'info' } });
+  const app = Fastify({
+    logger: {
+      level: process.env.NODE_ENV === 'test' ? 'silent' : 'info',
+      // Cada línea de log ya trae reqId (correlación por request); se agrega
+      // el entorno para poder filtrar en CloudWatch cuando hay más de un
+      // ambiente (prod/staging) escribiendo al mismo log group.
+      base: { environment: process.env.NODE_ENV ?? 'development' },
+    },
+  });
+
+  // Reporta a Sentry (si está configurado) además del log habitual de Fastify —
+  // no reemplaza la respuesta de error, solo la observa. Nunca se envía el body
+  // del request (podría contener contraseñas u otros datos sensibles), solo
+  // método, ruta e id de request para poder correlacionar con los logs.
+  app.addHook('onError', async (req, _reply, error) => {
+    captureException(error, { method: req.method, url: req.url, reqId: req.id });
+  });
 
   const DEFAULT_WEB_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000'];
   await app.register(cors, {

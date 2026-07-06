@@ -67,7 +67,10 @@ Stripe y SMTP no se gestionan por Terraform (para no dejarlos en el state file).
 aws secretsmanager put-secret-value --secret-id grounddesign-pro/prod/stripe-secret-key --secret-string "sk_live_..."
 aws secretsmanager put-secret-value --secret-id grounddesign-pro/prod/stripe-webhook-secret --secret-string "whsec_..."
 aws secretsmanager put-secret-value --secret-id grounddesign-pro/prod/smtp-credentials --secret-string '{"host":"smtp.resend.com","port":587,"user":"resend","pass":"..."}'
+aws secretsmanager put-secret-value --secret-id grounddesign-pro/prod/sentry-dsn --secret-string "https://xxx@oyyy.ingest.sentry.io/zzz"
 ```
+
+`sentry-dsn` es opcional — mientras quede vacío (valor por defecto de Terraform), el tracking de errores queda deshabilitado por completo, sin afectar el funcionamiento del resto de la app.
 
 Luego actualiza `apps/api/src/lib/mailer.ts` / `apps/api/src/routes/billing.ts` si hace falta adaptar cómo se leen (hoy leen variables de entorno planas `SMTP_HOST`, `SMTP_USER`, etc. — si usas el JSON de `smtp-credentials`, ajusta `apprunner.tf` para inyectarlas como variables separadas en vez de un solo JSON, o cambia el código para parsear el JSON).
 
@@ -85,6 +88,7 @@ En **Settings → Secrets and variables → Actions** del repo:
 - `API_SERVICE_ARN` = ARN del servicio api (`aws apprunner list-services`)
 - `WEB_SERVICE_ARN` = ARN del servicio web
 - `NEXT_PUBLIC_API_URL` = el `api_url` del output
+- `NEXT_PUBLIC_SENTRY_DSN` = (opcional) el mismo DSN configurado en `sentry-dsn` de Secrets Manager, si quieres tracking de errores también en el navegador
 
 Desde este punto, cada push a `main` que pase CI construye ambas imágenes, las sube a ECR con tag `latest` + el SHA del commit, y dispara el deployment en App Runner automáticamente (job `deploy` en `ci.yml`).
 
@@ -107,5 +111,5 @@ aws apprunner start-deployment --service-arn <arn>
 ## Lo que este setup NO resuelve todavía
 
 - Migraciones de base de datos versionadas (sigue siendo `schema.sql` aplicado una vez) — próximo ítem del roadmap de auditoría.
-- Observabilidad (Sentry/métricas/alerting).
+- Métricas/alerting más allá del tracking de errores de Sentry (ya integrado — ver `sentry-dsn` arriba).
 - Ambiente de staging separado (hoy Terraform soporta `environment = "staging"` como variable, pero requiere un segundo `terraform apply` con su propio `.tfvars` y, idealmente, state remoto separado).
