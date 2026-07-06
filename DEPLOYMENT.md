@@ -59,7 +59,25 @@ terraform output   # anota api_url y web_url
    ```
 2. Edita `terraform.tfvars`: `web_url = "<web_url del output>"` y vuelve a aplicar (`terraform apply`) para que la API acepte ese origen en CORS.
 
-## 4. Completar los secretos que Terraform deja vacíos
+## 4. Aplicar las migraciones a RDS
+
+El esquema ya no se aplica una sola vez con un script fijo — vive versionado en `apps/api/src/db/migrations/*.sql`, aplicado por `pnpm --filter @gdp/api migrate` (ver `apps/api/src/db/migrate.ts`). Cada archivo se ejecuta una única vez y queda registrado en la tabla `_migrations`; agregar un cambio de esquema futuro es simplemente sumar un archivo nuevo (`0002_...sql`) y correr el comando de nuevo — nunca edites un archivo de migración ya aplicado en producción.
+
+**Limitación conocida:** RDS está en subnets privadas (`publicly_accessible = false`), solo alcanzable desde dentro de la VPC — ni tu máquina ni los runners de GitHub Actions pueden conectarse directamente. Para correr las migraciones contra RDS necesitas un túnel hacia la VPC. La forma más simple sin infraestructura adicional:
+
+```bash
+# Opción rápida: túnel SSH a través de una instancia EC2 temporal en la misma VPC
+# (o cualquier instancia con acceso a la subred privada, ej. un bastion existente):
+ssh -L 5432:<rds-endpoint-del-output>:5432 ec2-user@<ip-del-bastion>
+
+# En otra terminal, con el túnel activo:
+DATABASE_URL="postgres://gdp:<password>@localhost:5432/grounddesign" \
+  pnpm --filter @gdp/api migrate
+```
+
+Si no tienes un bastion, la alternativa mínima es levantar una instancia EC2 `t4g.nano` temporal en una subnet pública de la misma VPC (no incluida aún en este Terraform), correr el túnel, y luego destruirla. Formalizar esto con un bastion permanente vía AWS Systems Manager (sin puerto SSH expuesto) queda pendiente como mejora futura — ver sección final.
+
+## 5. Completar los secretos que Terraform deja vacíos
 
 Stripe y SMTP no se gestionan por Terraform (para no dejarlos en el state file). Complétalos en la consola de Secrets Manager o por CLI:
 
@@ -74,7 +92,7 @@ aws secretsmanager put-secret-value --secret-id grounddesign-pro/prod/sentry-dsn
 
 Luego actualiza `apps/api/src/lib/mailer.ts` / `apps/api/src/routes/billing.ts` si hace falta adaptar cómo se leen (hoy leen variables de entorno planas `SMTP_HOST`, `SMTP_USER`, etc. — si usas el JSON de `smtp-credentials`, ajusta `apprunner.tf` para inyectarlas como variables separadas en vez de un solo JSON, o cambia el código para parsear el JSON).
 
-## 5. Configurar GitHub Actions (CD automático)
+## 6. Configurar GitHub Actions (CD automático)
 
 En **Settings → Secrets and variables → Actions** del repo:
 
@@ -92,7 +110,7 @@ En **Settings → Secrets and variables → Actions** del repo:
 
 Desde este punto, cada push a `main` que pase CI construye ambas imágenes, las sube a ECR con tag `latest` + el SHA del commit, y dispara el deployment en App Runner automáticamente (job `deploy` en `ci.yml`).
 
-## 6. Dominio propio (cuando lo compres)
+## 7. Dominio propio (cuando lo compres)
 
 1. Añade un registro CNAME desde tu dominio hacia la URL de App Runner (o usa Route 53 + `aws_apprunner_custom_domain_association` en Terraform).
 2. Actualiza `FROM_EMAIL`, `NEXT_PUBLIC_API_URL`, `web_url`/`WEB_URL` y vuelve a construir/aplicar.
@@ -110,6 +128,6 @@ aws apprunner start-deployment --service-arn <arn>
 
 ## Lo que este setup NO resuelve todavía
 
-- Migraciones de base de datos versionadas (sigue siendo `schema.sql` aplicado una vez) — próximo ítem del roadmap de auditoría.
+- Bastion/túnel permanente hacia RDS para correr migraciones sin depender de una instancia EC2 temporal manual (ver limitación en la Sección 4) — candidato: instancia bastion vía AWS Systems Manager Session Manager, sin puerto SSH expuesto.
 - Métricas/alerting más allá del tracking de errores de Sentry (ya integrado — ver `sentry-dsn` arriba).
 - Ambiente de staging separado (hoy Terraform soporta `environment = "staging"` como variable, pero requiere un segundo `terraform apply` con su propio `.tfvars` y, idealmente, state remoto separado).

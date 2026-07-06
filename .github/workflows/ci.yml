@@ -48,8 +48,10 @@ jobs:
         with: { version: 9 }
       - name: Install
         run: pnpm install --frozen-lockfile
-      - name: Apply schema
-        run: psql "postgres://postgres:postgres@localhost:5432/grounddesign" -f apps/api/src/db/schema.sql
+      - name: Run migrations
+        run: pnpm --filter @gdp/api migrate
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/grounddesign
       - name: Test
         run: pnpm --filter @gdp/api test
         env:

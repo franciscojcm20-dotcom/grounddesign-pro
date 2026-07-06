@@ -8,7 +8,6 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-gdpdev}
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./apps/api/src/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
     ports:
       - "5432:5432"
     healthcheck:
@@ -16,6 +15,20 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  # Aplica las migraciones pendientes (apps/api/src/db/migrations/) y termina —
+  # no es un servicio de larga duración, por eso `api` espera a que complete
+  # con éxito (service_completed_successfully) en vez de service_healthy.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://gdp:${DB_PASSWORD:-gdpdev}@db:5432/grounddesign
+    entrypoint: ["node", "--experimental-strip-types", "src/db/migrate.ts"]
 
   api:
     build:
@@ -25,6 +38,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       PORT: 3001
       HOST: 0.0.0.0

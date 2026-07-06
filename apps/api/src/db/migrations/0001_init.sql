@@ -1,5 +1,4 @@
--- GroundDesign Pro — PostgreSQL schema
--- Run once: psql -U postgres -d grounddesign -f schema.sql
+-- 0001_init.sql — esquema inicial (equivalente al antiguo schema.sql aplicado una sola vez)
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
