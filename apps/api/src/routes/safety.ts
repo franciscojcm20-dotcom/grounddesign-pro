@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import {
   surfaceFactorCs,
   permissibleTouch,
@@ -6,25 +7,13 @@ import {
   meshVoltage,
   stepVoltageReal,
 } from '@gdp/engines-math';
+import { parseBody, pos, nonNeg, intMin1, peso } from '../lib/validate.ts';
 
-interface SafetyVerifyBody {
-  // Soil / surface treatment
-  rho:            number; // Ω·m — native soil resistivity
-  rhoSuperficial: number; // Ω·m — surface layer (e.g. crushed rock)
-  hSuperficial:   number; // m   — surface layer thickness
-
-  // Grid / mesh geometry (from the grid-resistance design already computed)
-  Ig:     number; // A — grid fault/discharge current
-  D:      number; // m — typical mesh spacing
-  d:      number; // m — conductor diameter
-  h:      number; // m — burial depth
-  n:      number; // — number of parallel mesh conductors
-  Ltotal: number; // m — total buried conductor length
-
-  // Exposure / physiology
-  tFalla: number;      // s — fault/exposure clearing time
-  peso?:  50 | 70;     // kg — body weight class (IEEE 80 Cl. 8.3)
-}
+const safetyVerifyBodySchema = z.object({
+  rho: pos(), rhoSuperficial: pos(), hSuperficial: nonNeg(),
+  Ig: pos(), D: pos(), d: pos(), h: pos(), n: intMin1(), Ltotal: pos(),
+  tFalla: pos(), peso,
+});
 
 export async function routesSafety(app: FastifyInstance): Promise<void> {
 
@@ -33,12 +22,10 @@ export async function routesSafety(app: FastifyInstance): Promise<void> {
   // limits) for a given grid design. This closes the loop between grid
   // sizing (Rg, GPR) and whether the resulting voltages are actually safe
   // for a person standing near/on the grid during a fault.
-  app.post<{ Body: SafetyVerifyBody }>('/verify', async (req, reply) => {
-    const { rho, rhoSuperficial, hSuperficial, Ig, D, d, h, n, Ltotal, tFalla, peso = 70 } = req.body;
-
-    if (rho <= 0 || Ig <= 0 || Ltotal <= 0 || tFalla <= 0) {
-      return reply.code(400).send({ error: 'rho, Ig, Ltotal y tFalla deben ser positivos' });
-    }
+  app.post('/verify', async (req, reply) => {
+    const body = parseBody(safetyVerifyBodySchema, req, reply);
+    if (!body) return;
+    const { rho, rhoSuperficial, hSuperficial, Ig, D, d, h, n, Ltotal, tFalla, peso = 70 } = body;
 
     const Cs = surfaceFactorCs(rho, rhoSuperficial, hSuperficial);
     const eTouchTolerable = permissibleTouch(Cs, rhoSuperficial, tFalla, peso);

@@ -1,7 +1,11 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import Stripe from 'stripe';
+import { z } from 'zod';
 import { sql } from '../db/client.ts';
 import type { User } from '../db/client.ts';
+import { parseBody } from '../lib/validate.ts';
+
+const checkoutBodySchema = z.object({ plan: z.enum(['individual', 'professional']) });
 
 const STRIPE_SECRET  = process.env.STRIPE_SECRET_KEY  ?? '';
 const STRIPE_WEBHOOK = process.env.STRIPE_WEBHOOK_SECRET ?? '';
@@ -28,8 +32,10 @@ export async function billingRoutes(app: FastifyInstance) {
   // ── POST /api/v1/billing/checkout ──────────────────────────────────────────
   // Creates a Stripe Checkout session and returns the URL
   app.post('/checkout', { preHandler: [app.authenticate] }, async (req, reply) => {
-    const { plan } = req.body as { plan?: string };
-    const priceId  = PRICE_IDS[plan ?? ''];
+    const body = parseBody(checkoutBodySchema, req, reply);
+    if (!body) return;
+    const { plan } = body;
+    const priceId  = PRICE_IDS[plan];
 
     if (!priceId || priceId.includes('placeholder')) {
       return reply.code(503).send({ error: 'Stripe no configurado — añade STRIPE_SECRET_KEY y STRIPE_PRICE_* en .env' });
@@ -42,7 +48,7 @@ export async function billingRoutes(app: FastifyInstance) {
       payment_method_types: ['card'],
       line_items: [{ price: priceId, quantity: 1 }],
       customer_email: email,
-      metadata: { user_id: sub, plan: plan! },
+      metadata: { user_id: sub, plan },
       success_url: `${WEB_URL}/dashboard?upgrade=success`,
       cancel_url:  `${WEB_URL}/pricing?upgrade=cancelled`,
     });

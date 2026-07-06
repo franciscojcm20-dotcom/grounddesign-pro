@@ -237,3 +237,87 @@ describe('Billing — Stripe (planes públicos, checkout protegido, webhook firm
     assert.notStrictEqual(res.statusCode, 200);
   });
 });
+
+describe('Validación de esquema (zod) — firewall de tipos en endpoints de cálculo', () => {
+  let userCookie: string;
+
+  before(async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/api/v1/auth/login',
+      payload: { email: USER_EMAIL, password: 'TestPass1234' },
+    });
+    userCookie = setCookieToken(res);
+  });
+
+  it('POST /soil/wenner con "r" como string devuelve 400 en vez de propagar NaN a rhoA (200)', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/api/v1/soil/wenner',
+      payload: { readings: [{ a: 1, r: 'no-es-un-numero' }] },
+    });
+    assert.strictEqual(res.statusCode, 400);
+    assert.match((res.json() as { error: string }).error, /r/);
+  });
+
+  it('POST /soil/wenner con readings vacío devuelve 400', async () => {
+    const res = await app.inject({ method: 'POST', url: '/api/v1/soil/wenner', payload: { readings: [] } });
+    assert.strictEqual(res.statusCode, 400);
+  });
+
+  it('POST /grid/rod sin el campo "n" devuelve 400 (antes: undefined pasaba al motor sin control)', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/api/v1/grid/rod',
+      payload: { rho: 100, L: 2.4, radius: 0.008, spacing: 3, iFalla: 8000 },
+    });
+    assert.strictEqual(res.statusCode, 400);
+  });
+
+  it('POST /grid/rod con rho negativo devuelve 400 (antes: "rho<=0" nunca se validaba en este endpoint)', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/api/v1/grid/rod',
+      payload: { rho: -100, L: 2.4, radius: 0.008, n: 4, spacing: 3, iFalla: 8000 },
+    });
+    assert.strictEqual(res.statusCode, 400);
+  });
+
+  it('POST /fault-analysis con tipoFalla fuera del enum es rechazado', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/api/v1/fault-analysis/short-circuit',
+      payload: { fuente: { un: 13.2, ikss3: 8, xr: 5 }, tipoFalla: 'DROP TABLE users' },
+    });
+    assert.strictEqual(res.statusCode, 400);
+  });
+
+  it('POST /fault-analysis con splitFactor.method="manual" sin manualValue es rechazado', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/api/v1/fault-analysis',
+      payload: { If: 8000, tFalla: 0.5, xr: 20, splitFactor: { method: 'manual' } },
+    });
+    assert.strictEqual(res.statusCode, 400);
+  });
+
+  it('GET /projects/:id con un id no-UUID devuelve 400 (antes: 500 de Postgres por sintaxis de uuid inválida)', async () => {
+    const res = await app.inject({
+      method: 'GET', url: '/api/v1/projects/no-es-un-uuid',
+      headers: { cookie: userCookie },
+    });
+    assert.strictEqual(res.statusCode, 400);
+  });
+
+  it('POST /auth/register con email inválido devuelve 400', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/api/v1/auth/register',
+      payload: { email: 'no-es-un-email', name: 'X', password: 'TestPass1234' },
+    });
+    assert.strictEqual(res.statusCode, 400);
+  });
+
+  it('un payload válido sigue funcionando end-to-end tras agregar la validación (sin regresión)', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/api/v1/grid/rod',
+      payload: { rho: 100, L: 2.4, radius: 0.008, n: 4, spacing: 3, iFalla: 8000 },
+    });
+    assert.strictEqual(res.statusCode, 200);
+    const body = res.json() as { Rn: number };
+    assert.ok(body.Rn > 0);
+  });
+});

@@ -1,13 +1,32 @@
 import type { FastifyInstance } from 'fastify';
-import { computeValorizacion, estimateTrenchVolume, DEFAULT_PRECIOS_CLP, type CubicacionInput, type PreciosUnitariosCLP } from '@gdp/engines-math';
+import { z } from 'zod';
+import { computeValorizacion, estimateTrenchVolume, DEFAULT_PRECIOS_CLP, type PreciosUnitariosCLP } from '@gdp/engines-math';
+import { parseBody, pos, nonNeg, intNonNeg } from '../lib/validate.ts';
+
+const preciosSchema = z.object({
+  conductorPorMetroPorMm2: pos(), varillaPorUnidad: pos(), conectorPorUnidad: pos(),
+  gelPorKg: pos(), excavacionPorM3: pos(), manoObraPct: nonNeg(), imprevistosPct: nonNeg(),
+}).partial();
+
+const cubicacionBodySchema = z.object({
+  conductorMetros: pos(), conductorSeccionMm2: pos(),
+  varillasCantidad: intNonNeg(), varillaLongitudM: nonNeg(),
+  conectoresCantidad: intNonNeg(), gelActivo: z.boolean(), gelKg: nonNeg(), zanjaM3: nonNeg(),
+  precios: preciosSchema.optional(),
+});
+
+const estimarZanjaBodySchema = z.object({
+  conductorMetros: pos(), anchoM: pos().optional(), profundidadM: pos().optional(),
+});
 
 export async function valorizacionRoutes(app: FastifyInstance): Promise<void> {
 
   // POST /api/v1/valorizacion — cubicación y valorización económica del sistema elegido
-  app.post<{ Body: CubicacionInput & { precios?: Partial<PreciosUnitariosCLP> } }>('/', async (req, reply) => {
-    const { precios, ...input } = req.body;
-    if (input.conductorMetros <= 0) return reply.code(400).send({ error: 'conductorMetros debe ser positivo' });
-    const fullPrecios: PreciosUnitariosCLP = { ...DEFAULT_PRECIOS_CLP, ...precios };
+  app.post('/', async (req, reply) => {
+    const body = parseBody(cubicacionBodySchema, req, reply);
+    if (!body) return;
+    const { precios, ...input } = body;
+    const fullPrecios = { ...DEFAULT_PRECIOS_CLP, ...precios } as PreciosUnitariosCLP;
     const result = computeValorizacion(input, fullPrecios);
     return { ...result, precios: fullPrecios, norm: 'Cubicación propia — sin fuente de precios externa' };
   });
@@ -16,8 +35,10 @@ export async function valorizacionRoutes(app: FastifyInstance): Promise<void> {
   app.get('/precios-default', async () => DEFAULT_PRECIOS_CLP);
 
   // POST /api/v1/valorizacion/estimar-zanja
-  app.post<{ Body: { conductorMetros: number; anchoM?: number; profundidadM?: number } }>('/estimar-zanja', async (req) => {
-    const { conductorMetros, anchoM, profundidadM } = req.body;
+  app.post('/estimar-zanja', async (req, reply) => {
+    const body = parseBody(estimarZanjaBodySchema, req, reply);
+    if (!body) return;
+    const { conductorMetros, anchoM, profundidadM } = body;
     return { zanjaM3: estimateTrenchVolume(conductorMetros, anchoM, profundidadM) };
   });
 }

@@ -1,5 +1,15 @@
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { computeConductor, onderdonkArea, CONDUCTOR_TABLE } from '@gdp/engines-math';
+import { parseBody, pos, num } from '../lib/validate.ts';
+
+const sizeBodySchema = z.object({
+  iFalla: pos(), tFalla: pos(), tempAmbiente: num(), tempMaxFusion: num(),
+  calibreSeleccionado: z.string().max(20).optional(),
+});
+const onderdonkBodySchema = z.object({
+  Ifalla_kA: pos(), tFalla: pos(), tempAmbiente: num(), tempMaxFusion: num(),
+});
 
 export async function routesConductor(app: FastifyInstance): Promise<void> {
 
@@ -8,20 +18,10 @@ export async function routesConductor(app: FastifyInstance): Promise<void> {
 
   // POST /api/v1/conductor/size
   // Body: { iFalla, tFalla, tempAmbiente, tempMaxFusion, calibreSeleccionado? }
-  app.post<{
-    Body: {
-      iFalla:              number;
-      tFalla:              number;
-      tempAmbiente:        number;
-      tempMaxFusion:       number;
-      calibreSeleccionado?: string;
-    };
-  }>('/size', async (req, reply) => {
-    const { iFalla, tFalla, tempAmbiente, tempMaxFusion, calibreSeleccionado } = req.body;
-
-    if (iFalla <= 0 || tFalla <= 0) {
-      return reply.code(400).send({ error: 'iFalla y tFalla deben ser positivos' });
-    }
+  app.post('/size', async (req, reply) => {
+    const body = parseBody(sizeBodySchema, req, reply);
+    if (!body) return;
+    const { iFalla, tFalla, tempAmbiente, tempMaxFusion, calibreSeleccionado } = body;
 
     const input = calibreSeleccionado
       ? { iFalla, tFalla, tempAmbiente, tempMaxFusion, calibreSeleccionado }
@@ -44,10 +44,10 @@ export async function routesConductor(app: FastifyInstance): Promise<void> {
 
   // POST /api/v1/conductor/onderdonk
   // Body: { Ifalla_kA, tFalla, tempAmbiente, tempMaxFusion }
-  app.post<{
-    Body: { Ifalla_kA: number; tFalla: number; tempAmbiente: number; tempMaxFusion: number };
-  }>('/onderdonk', async (req) => {
-    const result = onderdonkArea(req.body);
+  app.post('/onderdonk', async (req, reply) => {
+    const body = parseBody(onderdonkBodySchema, req, reply);
+    if (!body) return;
+    const result = onderdonkArea(body);
     return { ...result, norm: 'IEEE Std 80-2013 Ec. 37 (Onderdonk)' };
   });
 }
