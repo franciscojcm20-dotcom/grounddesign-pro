@@ -66,22 +66,50 @@ compliance, tensiones y el reporte final.
 ## Plataforma
 
 - Autenticación JWT real, historial de proyectos y resultados persistidos en PostgreSQL
+- Planes de suscripción (Community/Individual/Professional) con facturación vía Stripe
+- Panel de administración con control de acceso restringido por lista explícita de correos
+- Validación de esquema (zod) en todos los endpoints de cálculo antes de procesar datos
 - Reportes PDF profesionales (memoria de cálculo completa, firmable)
 - Exportación DXF de la geometría de cada topología
 - Comparación de sistemas calculados para elegir el diseño final (técnico + económico)
 - i18n: 8 idiomas (ES/EN/PT/FR/DE/IT/JA/ZH)
 
+## Calidad y despliegue
+
+- Suite de pruebas automatizadas (motor de cálculo, API e interfaz), ejecutada en cada
+  cambio mediante integración continua (CI)
+- Tracking de errores en producción (Sentry, opcional — deshabilitado si no se configura)
+- Migraciones de base de datos versionadas (`apps/api/src/db/migrations/`)
+- Despliegue a AWS (App Runner + RDS + ECR) vía infraestructura como código (Terraform)
+  y entrega continua (CD) — ver `DEPLOYMENT.md`
+
+## Alcance actual y roadmap
+
+Este repositorio implementa, con cálculo real y trazable, únicamente **IEEE Std 80-2013**,
+**IEEE Std 81-2012** y los perfiles normativos de país listados arriba (RETIE, REBT, NBR,
+SEC/RIC). Normas mencionadas en la visión de producto más amplia pero **no implementadas
+todavía** en este código:
+
+- IEC 60364, IEC 61936, IEC 62305, IEC 62561
+- IEEE Std 142, IEEE Std 837, IEEE Std 998
+- NFPA 70, NFPA 780
+
+Un producto separado orientado a protección contra rayos (Strike Ground Design / LPS,
+IEC 62305) está en etapa de planificación, sin código implementado aún, y no forma parte
+de este monorepo por ahora.
+
 ## Desarrollo
 
 ```bash
 pnpm install
-pnpm dev          # apps/api (puerto 3001) + apps/web (puerto 3000)
+pnpm --filter @gdp/api migrate   # aplica el esquema (apps/api/src/db/migrations/)
+pnpm dev                         # apps/api (puerto 3001) + apps/web (puerto 3000)
 pnpm -r typecheck
 pnpm -r test
 ```
 
 Requiere una instancia de PostgreSQL corriendo localmente (ver `apps/api/.env`
-para la cadena de conexión).
+para la cadena de conexión, o `docker compose up` que la levanta y migra automáticamente).
 
 ## Advertencia
 
