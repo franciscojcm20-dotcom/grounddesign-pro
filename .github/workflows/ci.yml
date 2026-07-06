@@ -136,21 +136,28 @@ jobs:
       id-token: write
       contents: read
     steps:
-      # El contexto `secrets` no se puede usar en el `if` de un job (solo de un step),
-      # así que cada step de despliegue se salta individualmente hasta que exista
-      # AWS_ROLE_ARN — evita romper CI en rojo mientras no se complete el bootstrap
-      # de infra/terraform (ver DEPLOYMENT.md).
       - uses: actions/checkout@v4
+      - name: Comprobar si el despliegue AWS está configurado
+        id: check
+        env:
+          ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+        run: |
+          if [ -n "$ROLE_ARN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "AWS_ROLE_ARN no está configurado — se salta el despliegue (ver DEPLOYMENT.md)."
+          fi
       - uses: aws-actions/configure-aws-credentials@v4
-        if: ${{ secrets.AWS_ROLE_ARN != '' }}
+        if: steps.check.outputs.enabled == 'true'
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
       - uses: aws-actions/amazon-ecr-login@v2
-        if: ${{ secrets.AWS_ROLE_ARN != '' }}
+        if: steps.check.outputs.enabled == 'true'
         id: ecr-login
       - name: Build y push imagen api
-        if: ${{ secrets.AWS_ROLE_ARN != '' }}
+        if: steps.check.outputs.enabled == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -162,7 +169,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Build y push imagen web
-        if: ${{ secrets.AWS_ROLE_ARN != '' }}
+        if: steps.check.outputs.enabled == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -176,8 +183,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Disparar deployment — api
-        if: ${{ secrets.AWS_ROLE_ARN != '' }}
+        if: steps.check.outputs.enabled == 'true'
         run: aws apprunner start-deployment --service-arn "${{ vars.API_SERVICE_ARN }}"
       - name: Disparar deployment — web
-        if: ${{ secrets.AWS_ROLE_ARN != '' }}
+        if: steps.check.outputs.enabled == 'true'
         run: aws apprunner start-deployment --service-arn "${{ vars.WEB_SERVICE_ARN }}"
