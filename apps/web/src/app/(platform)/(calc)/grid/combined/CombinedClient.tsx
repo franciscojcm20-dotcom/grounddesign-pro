@@ -17,7 +17,7 @@ import { FaultCurrentField } from '@/components/ui/FaultCurrentField';
 import { useFaultAnalysis } from '@/context/FaultAnalysisContext';
 import { useNormativeProfile } from '@/context/NormativeProfileContext';
 import { NormativeProfileSelector } from '@/components/ui/NormativeProfileSelector';
-import { evaluateRgCompliance } from '@gdp/engines-math';
+import { evaluateRgCompliance, effectiveRgGeneral } from '@gdp/engines-math';
 import { usePersistedState } from '@/lib/usePersistedState';
 import type { GelParams } from '@/lib/api';
 
@@ -67,7 +67,7 @@ function CombinedDiagram({ largo, ancho, nL, nW, nRods }: { largo: number; ancho
 
 export function CombinedClient() {
   const faultAnalysis = useFaultAnalysis();
-  const { profile } = useNormativeProfile();
+  const { profile, relaxedConditionsMet } = useNormativeProfile();
   const [form, setForm] = usePersistedState('gdp-form-combined', DEFAULTS);
   const [gel, setGel] = useState<GelParams | null>(null);
   const [result, setResult] = useState<CombinedResult | null>(null);
@@ -138,8 +138,8 @@ export function CombinedClient() {
     { label: 'Rc ≤ 1 Ω (subestaciones críticas)', pass: result.compliance.rg1, detail: `Rc calculada = ${result.Rc.toFixed(3)} Ω (mejora ${result.mejora.toFixed(1)}% vs malla sola).` },
     { label: 'Rc ≤ 5 Ω (uso general)', pass: result.compliance.rg5, detail: `Rc calculada = ${result.Rc.toFixed(3)} Ω.` },
     {
-      label: `Rc ≤ ${profile.rgGeneral} Ω — ${profile.label}`,
-      pass: evaluateRgCompliance(result.Rc, profile).rgGeneral,
+      label: `Rc ≤ ${effectiveRgGeneral(profile, relaxedConditionsMet)} Ω — ${profile.label}${relaxedConditionsMet && profile.rgRelaxed !== undefined ? ' (relajado, declarado por el usuario)' : ''}`,
+      pass: evaluateRgCompliance(result.Rc, profile, relaxedConditionsMet).rgGeneral,
       detail: `${profile.standard}. ${profile.notes}`,
     },
   ] : [];

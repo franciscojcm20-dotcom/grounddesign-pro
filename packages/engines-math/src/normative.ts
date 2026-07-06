@@ -17,6 +17,17 @@ export interface NormativeProfile {
   rgCritical: number;
   /** Ω — referencia para uso general (baja tensión, distribución). */
   rgGeneral: number;
+  /**
+   * Ω — límite relajado que la norma admite en vez de rgGeneral, solo si la
+   * instalación cumple condiciones de protección específicas (ver
+   * rgRelaxedConditions). La persona usuaria debe validar y declarar
+   * explícitamente que esas condiciones se cumplen — la plataforma no las
+   * verifica de forma automática. Solo se define cuando la norma contempla
+   * una relajación condicional explícita y verificable.
+   */
+  rgRelaxed?: number;
+  /** Condiciones de instalación exigidas para poder usar rgRelaxed en vez de rgGeneral. */
+  rgRelaxedConditions?: string;
   /** Ω — resistencia del cuerpo humano usada en los cálculos de tensión admisible. */
   bodyResistanceOhm: number;
   /** kg — peso corporal de referencia para Etouch/Estep admisibles (IEEE 80 Cl. 16). */
@@ -42,10 +53,12 @@ export const NORMATIVE_PROFILES: NormativeProfile[] = [
     country: 'Chile / genérico IEEE',
     rgCritical: 5,
     rgGeneral: 20,
+    rgRelaxed: 80,
+    rgRelaxedConditions: 'Potencia instalada ≤10 kW, esquema de neutralización (RIC N°05 Cl. 6.4), interruptor/disyuntor general de corte omnipolar y protección diferencial (300 mA en todos los alimentadores, ≤30 mA en todos los circuitos) — RIC N°06 Cl. 6.2.1; o bien esquema de neutralización, interruptor general de corte omnipolar y protección de sobretensión permanente (UNE-EN 50550) más transitoria (IEC 61643-11) en todos los tableros — Cl. 6.2.2. Basta con cumplir una de las dos condiciones.',
     bodyResistanceOhm: 1000,
     bodyWeightKg: 70,
     minConductorMm2: 25,
-    notes: 'Perfil por defecto de la plataforma. El RIC N°06 distingue "tierra de servicio" de "tierra de protección": rgGeneral = 20 Ω es el límite general de tierra de servicio (Cl. 6.1) para instalaciones de baja tensión; se acepta hasta 80 Ω solo si la instalación (potencia ≤10 kW) tiene esquema de neutralización con interruptor general de corte omnipolar y diferencial (300 mA en alimentadores, ≤30 mA en circuitos) — Cl. 6.2.1 —, o bien protección de sobretensión permanente (UNE-EN 50550) y transitoria (IEC 61643-11) — Cl. 6.2.2. Esta plataforma no verifica automáticamente esas condiciones de instalación; si se cumplen, un resultado entre 20 Ω y 80 Ω puede considerarse conforme aunque el indicador lo marque como no conforme. rgCritical = 5 Ω corresponde a la resistencia combinada de puestas a tierra de redes de distribución MT/BT (Cl. 6.7.3), un contexto distinto (red con subestación, no una instalación consumidora aislada); el diseño de puesta a tierra de subestaciones MT/AT se rige por el RPTD N°06 (DS N°109/2017), no verificado en este perfil. La "tierra de protección" (Cl. 7) no tiene techo de Ω fijo: se calcula como R_TP = V_S / I_0 (tensión de seguridad ÷ corriente de operación de la protección); el criterio sustantivo es Etouch/Estep, y el Anexo 6.1 del propio RIC N°06 adopta las fórmulas de IEEE Std 80 Cl. 16.4-16.5 — ya modeladas en el módulo de Tensiones. Sección mínima de conductor: 25 mm² de cobre desnudo para electrodo de tierra (Cl. 8.7); el conductor de protección sigue una tabla proporcional a la sección de fase (Anexo 6.7: ≤25mm²→igual a fase, 25-50mm²→25mm², >50mm²→mitad de fase), no un valor único.',
+    notes: 'Perfil por defecto de la plataforma. El RIC N°06 distingue "tierra de servicio" de "tierra de protección": rgGeneral = 20 Ω es el límite general de tierra de servicio (Cl. 6.1) para instalaciones de baja tensión; rgRelaxed = 80 Ω solo aplica si la instalación cumple las condiciones de protección de Cl. 6.2.1 o 6.2.2 (ver rgRelaxedConditions) — la persona usuaria debe validarlas y declararlas explícitamente, la plataforma no las verifica de forma automática. rgCritical = 5 Ω corresponde a la resistencia combinada de puestas a tierra de redes de distribución MT/BT (Cl. 6.7.3), un contexto distinto (red con subestación, no una instalación consumidora aislada); el diseño de puesta a tierra de subestaciones MT/AT se rige por el RPTD N°06 (DS N°109/2017), no verificado en este perfil. La "tierra de protección" (Cl. 7) no tiene techo de Ω fijo: se calcula como R_TP = V_S / I_0 (tensión de seguridad ÷ corriente de operación de la protección); el criterio sustantivo es Etouch/Estep, y el Anexo 6.1 del propio RIC N°06 adopta las fórmulas de IEEE Std 80 Cl. 16.4-16.5 — ya modeladas en el módulo de Tensiones. Sección mínima de conductor: 25 mm² de cobre desnudo para electrodo de tierra (Cl. 8.7); el conductor de protección sigue una tabla proporcional a la sección de fase (Anexo 6.7: ≤25mm²→igual a fase, 25-50mm²→25mm², >50mm²→mitad de fase), no un valor único.',
   },
   {
     id: 'retie-co',
@@ -91,7 +104,19 @@ export function getNormativeProfile(id: string): NormativeProfile {
 
 export interface RgCompliance { rgCritical: boolean; rgGeneral: boolean }
 
-/** Evalúa una resistencia de puesta a tierra calculada contra los límites de referencia del perfil normativo seleccionado. */
-export function evaluateRgCompliance(Rg: number, profile: NormativeProfile): RgCompliance {
-  return { rgCritical: Rg <= profile.rgCritical, rgGeneral: Rg <= profile.rgGeneral };
+/**
+ * Evalúa una resistencia de puesta a tierra calculada contra los límites de referencia
+ * del perfil normativo seleccionado. Si `relaxedConditionsMet` es true y el perfil define
+ * `rgRelaxed`, se usa ese límite relajado en vez de `rgGeneral` — la persona usuaria es
+ * quien declara que la instalación cumple las condiciones de protección exigidas
+ * (`rgRelaxedConditions`); esta función no las verifica.
+ */
+export function evaluateRgCompliance(Rg: number, profile: NormativeProfile, relaxedConditionsMet = false): RgCompliance {
+  const generalLimit = relaxedConditionsMet && profile.rgRelaxed !== undefined ? profile.rgRelaxed : profile.rgGeneral;
+  return { rgCritical: Rg <= profile.rgCritical, rgGeneral: Rg <= generalLimit };
+}
+
+/** Límite general efectivo del perfil, considerando la relajación condicional si aplica. */
+export function effectiveRgGeneral(profile: NormativeProfile, relaxedConditionsMet = false): number {
+  return relaxedConditionsMet && profile.rgRelaxed !== undefined ? profile.rgRelaxed : profile.rgGeneral;
 }

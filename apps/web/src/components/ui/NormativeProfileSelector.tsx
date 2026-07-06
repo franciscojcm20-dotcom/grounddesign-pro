@@ -11,7 +11,7 @@ import { inputStyle } from './CalcShared';
  * el criterio de cumplimiento (Rg crítico/general) según la norma elegida.
  */
 export function NormativeProfileSelector() {
-  const { profile, profileId, setProfileId, profiles } = useNormativeProfile();
+  const { profile, profileId, setProfileId, profiles, relaxedConditionsMet, setRelaxedConditionsMet } = useNormativeProfile();
   const { t } = useI18n();
   const [showInfo, setShowInfo] = useState(false);
 
@@ -39,6 +39,25 @@ export function NormativeProfileSelector() {
           <div>Rg {t('rgCriticalWord')} ≤ {profile.rgCritical} Ω · Rg {t('rgGeneralWord')} ≤ {profile.rgGeneral} Ω{profile.touchVoltageMaxV ? ` · U${t('touchVoltageWord')} ≤ ${profile.touchVoltageMaxV} V` : ''}</div>
           <div style={{ marginTop: 4 }}>{profile.notes}</div>
         </div>
+      )}
+      {profile.rgRelaxed !== undefined && (
+        <label style={{
+          display: 'flex', gap: 6, alignItems: 'flex-start', marginTop: 6, padding: '6px 8px',
+          background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 3, cursor: 'pointer',
+        }}>
+          <input
+            type="checkbox"
+            checked={relaxedConditionsMet}
+            onChange={e => setRelaxedConditionsMet(e.target.checked)}
+            style={{ marginTop: 2 }}
+          />
+          <span style={{ fontSize: 9, color: 'var(--dim)', lineHeight: 1.5 }}>
+            {t('rgRelaxedCheckbox')} ({t('rgRelaxedUpTo')} {profile.rgRelaxed} Ω)
+            {profile.rgRelaxedConditions && (
+              <div style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 2 }}>{profile.rgRelaxedConditions}</div>
+            )}
+          </span>
+        </label>
       )}
     </div>
   );

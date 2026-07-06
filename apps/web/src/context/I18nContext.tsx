@@ -55,6 +55,7 @@ const DICT = {
     tabConsolidated: 'Informe Consolidado', tabValorization: 'Cubicación y Valorización', tabDxf: 'Plano DXF (AutoCAD)',
     normativeProfile: 'Perfil normativo', normativeProfileReference: 'referencia',
     rgCriticalWord: 'crítico', rgGeneralWord: 'general', touchVoltageWord: 'contacto',
+    rgRelaxedCheckbox: 'La instalación cumple las condiciones de relajación normativa', rgRelaxedUpTo: 'hasta',
   },
   en: {
     dashboard: 'Dashboard', projects: 'Projects', pricing: 'Pricing', profile: 'My profile',
@@ -95,6 +96,7 @@ const DICT = {
     tabConsolidated: 'Consolidated Report', tabValorization: 'Quantity Takeoff & Valuation', tabDxf: 'DXF Drawing (AutoCAD)',
     normativeProfile: 'Normative profile', normativeProfileReference: 'reference',
     rgCriticalWord: 'critical', rgGeneralWord: 'general', touchVoltageWord: 'contact',
+    rgRelaxedCheckbox: 'The installation meets the normative relaxation conditions', rgRelaxedUpTo: 'up to',
   },
   pt: {
     dashboard: 'Painel de controle', projects: 'Projetos', pricing: 'Preços', profile: 'Meu perfil',
@@ -135,6 +137,7 @@ const DICT = {
     tabConsolidated: 'Relatório Consolidado', tabValorization: 'Quantitativo e Valorização', tabDxf: 'Desenho DXF (AutoCAD)',
     normativeProfile: 'Perfil normativo', normativeProfileReference: 'referência',
     rgCriticalWord: 'crítico', rgGeneralWord: 'geral', touchVoltageWord: 'contato',
+    rgRelaxedCheckbox: 'A instalação cumpre as condições de relaxamento normativo', rgRelaxedUpTo: 'até',
   },
   fr: {
     dashboard: 'Tableau de bord', projects: 'Projets', pricing: 'Tarifs', profile: 'Mon profil',
@@ -175,6 +178,7 @@ const DICT = {
     tabConsolidated: 'Rapport Consolidé', tabValorization: 'Métré et Valorisation', tabDxf: 'Plan DXF (AutoCAD)',
     normativeProfile: 'Profil normatif', normativeProfileReference: 'référence',
     rgCriticalWord: 'critique', rgGeneralWord: 'général', touchVoltageWord: 'contact',
+    rgRelaxedCheckbox: "L'installation respecte les conditions d'assouplissement normatif", rgRelaxedUpTo: "jusqu'à",
   },
   de: {
     dashboard: 'Übersicht', projects: 'Projekte', pricing: 'Preise', profile: 'Mein Profil',
@@ -215,6 +219,7 @@ const DICT = {
     tabConsolidated: 'Konsolidierter Bericht', tabValorization: 'Mengenermittlung & Bewertung', tabDxf: 'DXF-Zeichnung (AutoCAD)',
     normativeProfile: 'Normprofil', normativeProfileReference: 'Referenz',
     rgCriticalWord: 'kritisch', rgGeneralWord: 'allgemein', touchVoltageWord: 'Berührung',
+    rgRelaxedCheckbox: 'Die Anlage erfüllt die normativen Lockerungsbedingungen', rgRelaxedUpTo: 'bis zu',
   },
   it: {
     dashboard: 'Pannello di controllo', projects: 'Progetti', pricing: 'Prezzi', profile: 'Il mio profilo',
@@ -255,6 +260,7 @@ const DICT = {
     tabConsolidated: 'Relazione Consolidata', tabValorization: 'Computo Metrico e Valorizzazione', tabDxf: 'Disegno DXF (AutoCAD)',
     normativeProfile: 'Profilo normativo', normativeProfileReference: 'riferimento',
     rgCriticalWord: 'critico', rgGeneralWord: 'generale', touchVoltageWord: 'contatto',
+    rgRelaxedCheckbox: "L'impianto soddisfa le condizioni di rilassamento normativo", rgRelaxedUpTo: 'fino a',
   },
   ja: {
     dashboard: 'ダッシュボード', projects: 'プロジェクト', pricing: '料金プラン', profile: 'マイプロフィール',
@@ -295,6 +301,7 @@ const DICT = {
     tabConsolidated: '統合報告書', tabValorization: '数量積算と原価評価', tabDxf: 'DXF図面（AutoCAD）',
     normativeProfile: '規格プロファイル', normativeProfileReference: '参照',
     rgCriticalWord: '重要', rgGeneralWord: '一般', touchVoltageWord: '接触',
+    rgRelaxedCheckbox: '当該設備は規格の緩和条件を満たしている', rgRelaxedUpTo: '最大',
   },
   zh: {
     dashboard: '仪表盘', projects: '项目', pricing: '价格方案', profile: '我的资料',
@@ -335,6 +342,7 @@ const DICT = {
     tabConsolidated: '综合报告', tabValorization: '工程量清单与估价', tabDxf: 'DXF图纸（AutoCAD）',
     normativeProfile: '规范配置', normativeProfileReference: '参考',
     rgCriticalWord: '关键', rgGeneralWord: '通用', touchVoltageWord: '接触',
+    rgRelaxedCheckbox: '该安装符合规范放宽条件', rgRelaxedUpTo: '最高',
   },
 } as const;
 

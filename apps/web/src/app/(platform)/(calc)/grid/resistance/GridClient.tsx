@@ -15,7 +15,7 @@ import { FaultCurrentField } from '@/components/ui/FaultCurrentField';
 import { useFaultAnalysis } from '@/context/FaultAnalysisContext';
 import { useNormativeProfile } from '@/context/NormativeProfileContext';
 import { NormativeProfileSelector } from '@/components/ui/NormativeProfileSelector';
-import { evaluateRgCompliance } from '@gdp/engines-math';
+import { evaluateRgCompliance, effectiveRgGeneral } from '@gdp/engines-math';
 import { usePersistedState } from '@/lib/usePersistedState';
 import type { GelParams } from '@/lib/api';
 
@@ -101,7 +101,7 @@ function GridDiagram({ largo, ancho, nL, nW, nVarillas }: {
 
 export function GridClient() {
   const faultAnalysis = useFaultAnalysis();
-  const { profile } = useNormativeProfile();
+  const { profile, relaxedConditionsMet } = useNormativeProfile();
   const [form, setForm] = usePersistedState('gdp-form-grid', DEFAULTS);
   const [gel, setGel] = useState<GelParams | null>(null);
   const [conductor, setConductor] = useState<{ diamMm: number; calibre: string } | null>(null);
@@ -155,8 +155,8 @@ export function GridClient() {
       detail: `Rg calculada = ${result.Rg.toFixed(3)} Ω, límite habitual para instalaciones de distribución MT.`,
     },
     {
-      label: `Rg ≤ ${profile.rgGeneral} Ω — ${profile.label}`,
-      pass: evaluateRgCompliance(result.Rg, profile).rgGeneral,
+      label: `Rg ≤ ${effectiveRgGeneral(profile, relaxedConditionsMet)} Ω — ${profile.label}${relaxedConditionsMet && profile.rgRelaxed !== undefined ? ' (relajado, declarado por el usuario)' : ''}`,
+      pass: evaluateRgCompliance(result.Rg, profile, relaxedConditionsMet).rgGeneral,
       detail: `${profile.standard}. ${profile.notes}`,
     },
   ] : [];

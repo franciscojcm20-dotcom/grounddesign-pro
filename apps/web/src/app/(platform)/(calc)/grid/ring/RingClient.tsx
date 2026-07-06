@@ -17,7 +17,7 @@ import { FaultCurrentField } from '@/components/ui/FaultCurrentField';
 import { useFaultAnalysis } from '@/context/FaultAnalysisContext';
 import { useNormativeProfile } from '@/context/NormativeProfileContext';
 import { NormativeProfileSelector } from '@/components/ui/NormativeProfileSelector';
-import { evaluateRgCompliance } from '@gdp/engines-math';
+import { evaluateRgCompliance, effectiveRgGeneral } from '@gdp/engines-math';
 import { usePersistedState } from '@/lib/usePersistedState';
 import type { GelParams } from '@/lib/api';
 
@@ -48,7 +48,7 @@ function RingDiagram({ largo, ancho }: { largo: number; ancho: number }) {
 
 export function RingClient() {
   const faultAnalysis = useFaultAnalysis();
-  const { profile } = useNormativeProfile();
+  const { profile, relaxedConditionsMet } = useNormativeProfile();
   const [form, setForm] = usePersistedState('gdp-form-ring', DEFAULTS);
   const [gel, setGel] = useState<GelParams | null>(null);
   const [result, setResult] = useState<RingResult | null>(null);
@@ -110,8 +110,8 @@ export function RingClient() {
     { label: 'Rring ≤ 1 Ω (subestaciones críticas)', pass: result.compliance.rg1, detail: `Rring calculada = ${result.Rring.toFixed(3)} Ω.` },
     { label: 'Rring ≤ 5 Ω (uso general)', pass: result.compliance.rg5, detail: `Rring calculada = ${result.Rring.toFixed(3)} Ω.` },
     {
-      label: `Rring ≤ ${profile.rgGeneral} Ω — ${profile.label}`,
-      pass: evaluateRgCompliance(result.Rring, profile).rgGeneral,
+      label: `Rring ≤ ${effectiveRgGeneral(profile, relaxedConditionsMet)} Ω — ${profile.label}${relaxedConditionsMet && profile.rgRelaxed !== undefined ? ' (relajado, declarado por el usuario)' : ''}`,
+      pass: evaluateRgCompliance(result.Rring, profile, relaxedConditionsMet).rgGeneral,
       detail: `${profile.standard}. ${profile.notes}`,
     },
   ] : [];

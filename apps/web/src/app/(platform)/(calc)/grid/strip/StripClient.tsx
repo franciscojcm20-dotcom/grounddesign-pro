@@ -17,7 +17,7 @@ import { FaultCurrentField } from '@/components/ui/FaultCurrentField';
 import { useFaultAnalysis } from '@/context/FaultAnalysisContext';
 import { useNormativeProfile } from '@/context/NormativeProfileContext';
 import { NormativeProfileSelector } from '@/components/ui/NormativeProfileSelector';
-import { evaluateRgCompliance } from '@gdp/engines-math';
+import { evaluateRgCompliance, effectiveRgGeneral } from '@gdp/engines-math';
 import { usePersistedState } from '@/lib/usePersistedState';
 import type { GelParams } from '@/lib/api';
 
@@ -46,7 +46,7 @@ function StripDiagram({ L, h }: { L: number; h: number }) {
 
 export function StripClient() {
   const faultAnalysis = useFaultAnalysis();
-  const { profile } = useNormativeProfile();
+  const { profile, relaxedConditionsMet } = useNormativeProfile();
   const [form, setForm] = usePersistedState('gdp-form-strip', DEFAULTS);
   const [gel, setGel] = useState<GelParams | null>(null);
   const [result, setResult] = useState<StripResult | null>(null);
@@ -100,8 +100,8 @@ export function StripClient() {
     { label: 'Rh ≤ 1 Ω (subestaciones críticas)', pass: result.compliance.rg1, detail: `Rh calculada = ${result.Rh.toFixed(3)} Ω.` },
     { label: 'Rh ≤ 5 Ω (uso general)', pass: result.compliance.rg5, detail: `Rh calculada = ${result.Rh.toFixed(3)} Ω.` },
     {
-      label: `Rh ≤ ${profile.rgGeneral} Ω — ${profile.label}`,
-      pass: evaluateRgCompliance(result.Rh, profile).rgGeneral,
+      label: `Rh ≤ ${effectiveRgGeneral(profile, relaxedConditionsMet)} Ω — ${profile.label}${relaxedConditionsMet && profile.rgRelaxed !== undefined ? ' (relajado, declarado por el usuario)' : ''}`,
+      pass: evaluateRgCompliance(result.Rh, profile, relaxedConditionsMet).rgGeneral,
       detail: `${profile.standard}. ${profile.notes}`,
     },
   ] : [];
