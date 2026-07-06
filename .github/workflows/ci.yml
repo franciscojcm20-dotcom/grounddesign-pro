@@ -131,21 +131,26 @@ jobs:
     name: Deploy — AWS App Runner
     runs-on: ubuntu-latest
     needs: [docker]
-    # Se salta hasta que se complete el bootstrap de infra/terraform (ver DEPLOYMENT.md)
-    # y se configure el secret AWS_ROLE_ARN — evita romper CI en rojo mientras tanto.
-    if: github.ref == 'refs/heads/main' && secrets.AWS_ROLE_ARN != ''
+    if: github.ref == 'refs/heads/main'
     permissions:
       id-token: write
       contents: read
     steps:
+      # El contexto `secrets` no se puede usar en el `if` de un job (solo de un step),
+      # así que cada step de despliegue se salta individualmente hasta que exista
+      # AWS_ROLE_ARN — evita romper CI en rojo mientras no se complete el bootstrap
+      # de infra/terraform (ver DEPLOYMENT.md).
       - uses: actions/checkout@v4
       - uses: aws-actions/configure-aws-credentials@v4
+        if: ${{ secrets.AWS_ROLE_ARN != '' }}
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
       - uses: aws-actions/amazon-ecr-login@v2
+        if: ${{ secrets.AWS_ROLE_ARN != '' }}
         id: ecr-login
       - name: Build y push imagen api
+        if: ${{ secrets.AWS_ROLE_ARN != '' }}
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -157,6 +162,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Build y push imagen web
+        if: ${{ secrets.AWS_ROLE_ARN != '' }}
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -170,6 +176,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Disparar deployment — api
+        if: ${{ secrets.AWS_ROLE_ARN != '' }}
         run: aws apprunner start-deployment --service-arn "${{ vars.API_SERVICE_ARN }}"
       - name: Disparar deployment — web
+        if: ${{ secrets.AWS_ROLE_ARN != '' }}
         run: aws apprunner start-deployment --service-arn "${{ vars.WEB_SERVICE_ARN }}"
