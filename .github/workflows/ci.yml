@@ -55,6 +55,21 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/grounddesign
 
+  # ── Frontend unit tests ───────────────────────────────────────────────────────
+  test-web:
+    name: Unit tests — web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Test
+        run: pnpm --filter @gdp/web test
+
   # ── TypeScript ───────────────────────────────────────────────────────────────
   typecheck:
     name: TypeScript — web + api
@@ -76,7 +91,7 @@ jobs:
   build-web:
     name: Next.js build
     runs-on: ubuntu-latest
-    needs: [test, typecheck]
+    needs: [test, test-web, typecheck]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
