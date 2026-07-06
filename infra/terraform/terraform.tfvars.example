@@ -1,0 +1,10 @@
+# Copiar a terraform.tfvars y ajustar. No commitear terraform.tfvars (ya está en .gitignore de infra/).
+
+aws_region  = "us-east-1"
+environment = "prod"
+
+# owner/repo exacto de GitHub — usado para restringir qué repo puede asumir el rol de CD.
+github_repo = "franciscojcm20-dotcom/grounddesign-pro"
+
+# Se deja vacío en el primer apply (bootstrap). Ver DEPLOYMENT.md paso 5.
+web_url = ""

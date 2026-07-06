@@ -27,6 +27,7 @@ services:
         condition: service_healthy
     environment:
       PORT: 3001
+      HOST: 0.0.0.0
       DATABASE_URL: postgres://gdp:${DB_PASSWORD:-gdpdev}@db:5432/grounddesign
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       WEB_URL: ${WEB_URL:-http://localhost:3000}
