@@ -5,6 +5,8 @@ import { useI18n, type Locale, LOCALES } from '@/context/I18nContext';
 import { useToast } from '@/context/ToastContext';
 import { useNormativeProfile } from '@/context/NormativeProfileContext';
 import { AuthGuard } from '@/components/ui/AuthGuard';
+import { authApi } from '@/lib/auth';
+import { COUNTRY_OPTIONS } from '@gdp/engines-math';
 
 function SettingRow({ label, description, children }: { label: string; description?: string; children: React.ReactNode }) {
   return (
@@ -21,15 +23,17 @@ function SettingRow({ label, description, children }: { label: string; descripti
   );
 }
 
-function Select({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
+function Select({ value, onChange, options, disabled }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; disabled?: boolean }) {
   return (
     <select
       value={value}
       onChange={e => onChange(e.target.value)}
+      disabled={disabled}
       style={{
         background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 3,
         color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 10,
-        padding: '6px 10px', cursor: 'pointer', outline: 'none',
+        padding: '6px 10px', cursor: disabled ? 'wait' : 'pointer', outline: 'none',
+        opacity: disabled ? 0.6 : 1,
       }}
     >
       {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -57,14 +61,25 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 }
 
 function SettingsContent() {
-  const { user }          = useAuth();
+  const { user, setUser } = useAuth();
   const { locale, setLocale, t } = useI18n();
   const toast             = useToast();
-  const { profile, profileId, setProfileId, profiles } = useNormativeProfile();
+  const { profile, profileId, setProfileId, profiles, relaxedConditionsMet, setRelaxedConditionsMet } = useNormativeProfile();
 
   const [emailNotif, setEmailNotif] = useState(true);
   const [pdfAttach,  setPdfAttach]  = useState(false);
   const [saved, setSaved]           = useState(false);
+  const [savingCountry, setSavingCountry] = useState(false);
+
+  async function saveCountry(code: string) {
+    setSavingCountry(true);
+    try {
+      const d = await authApi.updateMe({ countryCode: code });
+      setUser(d.user);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo actualizar el país');
+    } finally { setSavingCountry(false); }
+  }
 
   function save() {
     localStorage.setItem('gdp_email_notif', String(emailNotif));
@@ -120,6 +135,15 @@ function SettingsContent() {
           />
         </SettingRow>
 
+        <SettingRow label="País" description="Fija la norma nacional por defecto (o IEEE 80/81 si tu país aún no tiene norma local verificada)">
+          <Select
+            value={user?.countryCode ?? ''}
+            onChange={saveCountry}
+            disabled={savingCountry}
+            options={[{ value: '', label: 'Sin especificar' }, ...COUNTRY_OPTIONS.map(c => ({ value: c.code, label: c.label }))]}
+          />
+        </SettingRow>
+
         <SettingRow label={t('norm')} description={t('normDesc')}>
           <Select
             value={profileId}
@@ -130,6 +154,15 @@ function SettingsContent() {
         <div style={{ fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.5, marginTop: -6, marginBottom: 4 }}>
           {profile.standard} — Rg crítico ≤ {profile.rgCritical} Ω · Rg general ≤ {profile.rgGeneral} Ω
         </div>
+
+        {profile.rgRelaxed !== undefined && (
+          <SettingRow
+            label={t('rgRelaxedCheckbox')}
+            description={`(${t('rgRelaxedUpTo')} ${profile.rgRelaxed} Ω) ${profile.rgRelaxedConditions ?? ''}`}
+          >
+            <Toggle checked={relaxedConditionsMet} onChange={setRelaxedConditionsMet} />
+          </SettingRow>
+        )}
       </section>
 
       {/* Notifications */}

@@ -10,6 +10,9 @@ export interface User {
   name: string;
   password_hash: string;
   plan: 'community' | 'individual' | 'professional';
+  country_code: string | null;
+  normative_profile_id: string | null;
+  rg_relaxed_conditions_met: boolean;
   created_at: Date;
 }
 

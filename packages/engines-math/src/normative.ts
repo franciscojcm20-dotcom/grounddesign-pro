@@ -47,10 +47,21 @@ export interface NormativeProfile {
 
 export const NORMATIVE_PROFILES: NormativeProfile[] = [
   {
+    id: 'ieee80-generic',
+    label: 'IEEE 80/81 (genérico internacional)',
+    standard: 'IEEE Std 80-2013 · IEEE Std 81-2012',
+    country: 'Internacional / sin norma local verificada',
+    rgCritical: 1,
+    rgGeneral: 5,
+    bodyResistanceOhm: 1000,
+    bodyWeightKg: 70,
+    notes: 'Norma internacional "madre" usada como referencia por defecto para cualquier país que aún no tiene un perfil normativo local verificado en esta plataforma. IEEE Std 80/81 no fija un techo de Ω obligatorio: el criterio normativo real es que las tensiones de paso y contacto reales (Em, Es) no superen las admisibles (Etouch/Estep, Cl. 16.4-16.5) — ya modelado en el módulo de Tensiones. Los valores 1 Ω/5 Ω son solo una referencia práctica habitual en el sector (subestaciones críticas / uso general), no una cifra exigida por el estándar. Si tu país tiene una norma local propia y no aparece en el selector, contáctanos — agregamos perfiles país por país, verificando cada uno contra el texto oficial vigente antes de publicarlo (nunca se adivinan valores).',
+  },
+  {
     id: 'ieee80-sec-ric',
     label: 'IEEE 80/81 · SEC/RIC (Chile)',
     standard: 'IEEE Std 80-2013 · IEEE Std 81-2012 · SEC Pliego Técnico Normativo RIC N°06 (Res. Ex. N°33.877/2020) Cl. 6-7',
-    country: 'Chile / genérico IEEE',
+    country: 'Chile',
     rgCritical: 5,
     rgGeneral: 20,
     rgRelaxed: 80,
@@ -58,7 +69,7 @@ export const NORMATIVE_PROFILES: NormativeProfile[] = [
     bodyResistanceOhm: 1000,
     bodyWeightKg: 70,
     minConductorMm2: 25,
-    notes: 'Perfil por defecto de la plataforma. El RIC N°06 distingue "tierra de servicio" de "tierra de protección": rgGeneral = 20 Ω es el límite general de tierra de servicio (Cl. 6.1) para instalaciones de baja tensión; rgRelaxed = 80 Ω solo aplica si la instalación cumple las condiciones de protección de Cl. 6.2.1 o 6.2.2 (ver rgRelaxedConditions) — la persona usuaria debe validarlas y declararlas explícitamente, la plataforma no las verifica de forma automática. rgCritical = 5 Ω corresponde a la resistencia combinada de puestas a tierra de redes de distribución MT/BT (Cl. 6.7.3), un contexto distinto (red con subestación, no una instalación consumidora aislada); el diseño de puesta a tierra de subestaciones MT/AT se rige por el RPTD N°06 (DS N°109/2017), no verificado en este perfil. La "tierra de protección" (Cl. 7) no tiene techo de Ω fijo: se calcula como R_TP = V_S / I_0 (tensión de seguridad ÷ corriente de operación de la protección); el criterio sustantivo es Etouch/Estep, y el Anexo 6.1 del propio RIC N°06 adopta las fórmulas de IEEE Std 80 Cl. 16.4-16.5 — ya modeladas en el módulo de Tensiones. Sección mínima de conductor: 25 mm² de cobre desnudo para electrodo de tierra (Cl. 8.7); el conductor de protección sigue una tabla proporcional a la sección de fase (Anexo 6.7: ≤25mm²→igual a fase, 25-50mm²→25mm², >50mm²→mitad de fase), no un valor único.',
+    notes: 'El RIC N°06 distingue "tierra de servicio" de "tierra de protección": rgGeneral = 20 Ω es el límite general de tierra de servicio (Cl. 6.1) para instalaciones de baja tensión; rgRelaxed = 80 Ω solo aplica si la instalación cumple las condiciones de protección de Cl. 6.2.1 o 6.2.2 (ver rgRelaxedConditions) — la persona usuaria debe validarlas y declararlas explícitamente, la plataforma no las verifica de forma automática. rgCritical = 5 Ω corresponde a la resistencia combinada de puestas a tierra de redes de distribución MT/BT (Cl. 6.7.3), un contexto distinto (red con subestación, no una instalación consumidora aislada); el diseño de puesta a tierra de subestaciones MT/AT se rige por el RPTD N°06 (DS N°109/2017), no verificado en este perfil. La "tierra de protección" (Cl. 7) no tiene techo de Ω fijo: se calcula como R_TP = V_S / I_0 (tensión de seguridad ÷ corriente de operación de la protección); el criterio sustantivo es Etouch/Estep, y el Anexo 6.1 del propio RIC N°06 adopta las fórmulas de IEEE Std 80 Cl. 16.4-16.5 — ya modeladas en el módulo de Tensiones. Sección mínima de conductor: 25 mm² de cobre desnudo para electrodo de tierra (Cl. 8.7); el conductor de protección sigue una tabla proporcional a la sección de fase (Anexo 6.7: ≤25mm²→igual a fase, 25-50mm²→25mm², >50mm²→mitad de fase), no un valor único.',
   },
   {
     id: 'retie-co',
@@ -94,12 +105,60 @@ export const NORMATIVE_PROFILES: NormativeProfile[] = [
     rgGeneral: 5,
     bodyResistanceOhm: 1000,
     bodyWeightKg: 70,
-    notes: 'La NBR 15751 sigue una metodología equivalente a IEEE 80 (tensões de passo e toque admissíveis según resistividad superficial y tiempo de falla); no fija un techo universal de resistencia — se usan 1 Ω/5 Ω como referencia práctica habitual, igual que en el perfil IEEE por defecto. No se fija aquí una sección mínima de conductor: la NBR 5410 prohíbe TN-C bajo 10 mm² de cobre, pero no se encontró una cifra específica y confiable para malla de subestación (NBR 15751) — verifica directamente contra NBR 15751/5410 para el proyecto específico en vez de asumir un valor.',
+    notes: 'La NBR 15751 sigue una metodología equivalente a IEEE 80 (tensões de passo e toque admissíveis según resistividad superficial y tiempo de falla); no fija un techo universal de resistencia — se usan 1 Ω/5 Ω como referencia práctica habitual, igual que en el perfil "IEEE 80/81 (genérico internacional)". No se fija aquí una sección mínima de conductor: la NBR 5410 prohíbe TN-C bajo 10 mm² de cobre, pero no se encontró una cifra específica y confiable para malla de subestación (NBR 15751) — verifica directamente contra NBR 15751/5410 para el proyecto específico en vez de asumir un valor.',
   },
 ];
 
 export function getNormativeProfile(id: string): NormativeProfile {
   return NORMATIVE_PROFILES.find(p => p.id === id) ?? NORMATIVE_PROFILES[0]!;
+}
+
+export interface CountryOption {
+  /** ISO 3166-1 alpha-2, o 'OTHER' para "otro país / internacional". */
+  code: string;
+  label: string;
+  /** Perfil normativo asociado por defecto para este país. */
+  profileId: string;
+  /**
+   * true solo si el perfil asociado corresponde a una norma nacional propia,
+   * verificada contra el texto oficial vigente. false = todavía no existe un
+   * perfil local verificado para este país y se usa 'ieee80-generic' como
+   * referencia internacional mientras tanto — nunca se asume un valor sin
+   * verificarlo contra la norma real primero.
+   */
+  hasLocalProfile: boolean;
+}
+
+/**
+ * Países soportados para asociar automáticamente un perfil normativo a la cuenta
+ * de la persona usuaria. Los marcados con hasLocalProfile=false usan el perfil
+ * internacional genérico (IEEE 80/81) hasta que se verifique e implemente su
+ * norma nacional específica — agregar un país aquí sin verificar su norma real
+ * reproduciría el mismo error que se corrigió para Chile (RIC N°06).
+ */
+export const COUNTRY_OPTIONS: CountryOption[] = [
+  { code: 'CL', label: 'Chile',           profileId: 'ieee80-sec-ric', hasLocalProfile: true },
+  { code: 'CO', label: 'Colombia',        profileId: 'retie-co',       hasLocalProfile: true },
+  { code: 'ES', label: 'España',          profileId: 'rebt-es',        hasLocalProfile: true },
+  { code: 'BR', label: 'Brasil',          profileId: 'nbr-br',         hasLocalProfile: true },
+  { code: 'MX', label: 'México',          profileId: 'ieee80-generic', hasLocalProfile: false },
+  { code: 'AR', label: 'Argentina',       profileId: 'ieee80-generic', hasLocalProfile: false },
+  { code: 'PE', label: 'Perú',            profileId: 'ieee80-generic', hasLocalProfile: false },
+  { code: 'BO', label: 'Bolivia',         profileId: 'ieee80-generic', hasLocalProfile: false },
+  { code: 'VE', label: 'Venezuela',       profileId: 'ieee80-generic', hasLocalProfile: false },
+  { code: 'US', label: 'Estados Unidos',  profileId: 'ieee80-generic', hasLocalProfile: false },
+  { code: 'DE', label: 'Alemania',        profileId: 'ieee80-generic', hasLocalProfile: false },
+  { code: 'IT', label: 'Italia',          profileId: 'ieee80-generic', hasLocalProfile: false },
+  { code: 'OTHER', label: 'Otro país / internacional', profileId: 'ieee80-generic', hasLocalProfile: false },
+];
+
+export function getCountryOption(code?: string | null): CountryOption | undefined {
+  return COUNTRY_OPTIONS.find(c => c.code === code);
+}
+
+/** Perfil normativo asociado al país (código ISO 3166-1 alpha-2, o 'OTHER'); cae al genérico internacional si el país no está en la lista. */
+export function getProfileForCountry(countryCode?: string | null): NormativeProfile {
+  return getNormativeProfile(getCountryOption(countryCode)?.profileId ?? 'ieee80-generic');
 }
 
 export interface RgCompliance { rgCritical: boolean; rgGeneral: boolean }

@@ -5,6 +5,12 @@ export interface AuthUser {
   email: string;
   name: string;
   plan: 'community' | 'individual' | 'professional';
+  /** Código ISO 3166-1 alpha-2 (o 'OTHER'), fija el perfil normativo por defecto de la cuenta. */
+  countryCode?: string | null;
+  /** Override manual del perfil normativo — si es null, se deriva de countryCode. */
+  normativeProfileId?: string | null;
+  /** Declaración de la persona usuaria: la instalación cumple las condiciones de relajación del perfil (ej. RIC N°06 Cl. 6.2.1/6.2.2). */
+  rgRelaxedConditionsMet?: boolean;
 }
 
 export class ApiError extends Error {
@@ -33,9 +39,9 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const authApi = {
-  register: (email: string, name: string, password: string) =>
+  register: (email: string, name: string, password: string, countryCode?: string) =>
     apiFetch<{ user: AuthUser }>('/api/v1/auth/register', {
-      method: 'POST', body: JSON.stringify({ email, name, password }),
+      method: 'POST', body: JSON.stringify({ email, name, password, ...(countryCode ? { countryCode } : {}) }),
     }),
 
   login: (email: string, password: string) =>
@@ -48,6 +54,14 @@ export const authApi = {
 
   me: () =>
     apiFetch<{ user: AuthUser }>('/api/v1/auth/me'),
+
+  updateMe: (patch: Partial<{
+    name: string; currentPassword: string; newPassword: string;
+    countryCode: string; normativeProfileId: string; rgRelaxedConditionsMet: boolean;
+  }>) =>
+    apiFetch<{ ok: boolean; user: AuthUser }>('/api/v1/auth/me', {
+      method: 'PUT', body: JSON.stringify(patch),
+    }),
 };
 
 export const projectApi = {

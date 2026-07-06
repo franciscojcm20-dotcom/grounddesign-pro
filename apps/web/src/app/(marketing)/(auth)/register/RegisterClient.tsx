@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { inputStyle } from '@/components/ui/CalcShared';
+import { COUNTRY_OPTIONS, getCountryOption } from '@gdp/engines-math';
 
 const PLANS = [
   { id: 'community',    label: 'Community',     desc: 'Gratis · 3 proyectos · IEEE 80/81' },
@@ -19,16 +20,19 @@ export function RegisterClient() {
   const [name, setName]         = useState('');
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
+  const [countryCode, setCountryCode] = useState('');
   const [plan, setPlan]         = useState<'community' | 'individual' | 'professional'>('community');
   const [error, setError]       = useState<string | null>(null);
   const [loading, setLoading]   = useState(false);
+
+  const countryOpt = getCountryOption(countryCode);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (password.length < 8) { setError('La contraseña debe tener al menos 8 caracteres'); return; }
     setLoading(true); setError(null);
     try {
-      await register(email, name, password);
+      await register(email, name, password, countryCode || undefined);
       toast.success('Cuenta creada. ¡Bienvenido a GroundDesign Pro!');
       router.push('/dashboard');
     } catch (err) {
@@ -56,7 +60,21 @@ export function RegisterClient() {
 
         <label style={{ display: 'block', fontSize: 10, color: 'var(--dim)', marginBottom: 4 }}>Contraseña (mín. 8 caracteres)</label>
         <input type="password" required value={password} onChange={e => setPassword(e.target.value)}
-          style={{ ...inputStyle, marginBottom: 20 }} placeholder="••••••••" />
+          style={{ ...inputStyle, marginBottom: 14 }} placeholder="••••••••" />
+
+        <label style={{ display: 'block', fontSize: 10, color: 'var(--dim)', marginBottom: 4 }}>País (fija la norma por defecto)</label>
+        <select value={countryCode} onChange={e => setCountryCode(e.target.value)} style={{ ...inputStyle, marginBottom: 6 }}>
+          <option value="">Seleccionar…</option>
+          {COUNTRY_OPTIONS.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
+        </select>
+        {countryOpt && (
+          <div style={{ fontSize: 9, color: 'var(--faint)', marginBottom: 20, lineHeight: 1.4 }}>
+            {countryOpt.hasLocalProfile
+              ? `Norma nacional verificada disponible para ${countryOpt.label}.`
+              : `${countryOpt.label} aún no tiene una norma local verificada en la plataforma — se usará IEEE 80/81 (genérico internacional) como referencia por defecto. Puedes cambiar esto luego en Configuración.`}
+          </div>
+        )}
+        {!countryOpt && <div style={{ marginBottom: 20 }} />}
 
         <div style={{ fontSize: 10, color: 'var(--dim)', marginBottom: 8 }}>Plan</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>

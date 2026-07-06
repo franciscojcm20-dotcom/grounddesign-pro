@@ -8,7 +8,7 @@ interface AuthCtx {
   /** Error de conexión/servidor detectado al verificar la sesión — distinto de "no autenticado" (401). */
   authError: string | null;
   login:    (email: string, password: string) => Promise<void>;
-  register: (email: string, name: string, password: string) => Promise<void>;
+  register: (email: string, name: string, password: string, countryCode?: string) => Promise<void>;
   logout:   () => Promise<void>;
   setUser:  (u: AuthUser | null) => void;
 }
@@ -38,8 +38,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(d.user);
   }
 
-  async function register(email: string, name: string, password: string) {
-    const d = await authApi.register(email, name, password);
+  async function register(email: string, name: string, password: string, countryCode?: string) {
+    const d = await authApi.register(email, name, password, countryCode);
     setUser(d.user);
   }
 
