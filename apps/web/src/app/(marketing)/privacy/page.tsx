@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
   title: 'Política de privacidad',
-  description: 'Política de privacidad y tratamiento de datos de GroundDesing Pro.',
+  description: 'Política de privacidad y tratamiento de datos de GroundDesign Pro.',
 };
 
 export default function PrivacyPage() {
@@ -35,11 +35,11 @@ export default function PrivacyPage() {
         },
         {
           title: '5. Sus derechos',
-          body: 'Usted tiene derecho a: acceder a sus datos personales, rectificarlos, solicitar su eliminación, y oponerse a su tratamiento. Para ejercer estos derechos, contacte a privacidad@grounddesing.pro. Responderemos en un plazo máximo de 15 días hábiles.',
+          body: 'Usted tiene derecho a: acceder a sus datos personales, rectificarlos, solicitar su eliminación, y oponerse a su tratamiento. Para ejercer estos derechos, contacte a privacidad@grounddesign.pro. Responderemos en un plazo máximo de 15 días hábiles.',
         },
         {
           title: '6. Eliminación de cuenta',
-          body: 'Puede solicitar la eliminación permanente de su cuenta y todos sus datos enviando un correo a privacidad@grounddesing.pro. La eliminación se completará en 30 días, salvo obligaciones legales de retención.',
+          body: 'Puede solicitar la eliminación permanente de su cuenta y todos sus datos enviando un correo a privacidad@grounddesign.pro. La eliminación se completará en 30 días, salvo obligaciones legales de retención.',
         },
         {
           title: '7. Cambios a esta política',
@@ -47,7 +47,7 @@ export default function PrivacyPage() {
         },
         {
           title: '8. Contacto',
-          body: 'Para consultas sobre privacidad y protección de datos, contáctenos en privacidad@grounddesing.pro o a través del formulario de soporte en la Plataforma.',
+          body: 'Para consultas sobre privacidad y protección de datos, contáctenos en privacidad@grounddesign.pro o a través del formulario de soporte en la Plataforma.',
         },
       ].map(s => (
         <section key={s.title} style={{ marginBottom: 32 }}>
@@ -57,7 +57,7 @@ export default function PrivacyPage() {
       ))}
 
       <div style={{ marginTop: 48, paddingTop: 24, borderTop: '1px solid var(--line)', fontSize: 10, color: 'var(--faint)' }}>
-        Contacto privacidad: <a href="mailto:privacidad@grounddesing.pro" style={{ color: 'var(--copper)', textDecoration: 'none' }}>privacidad@grounddesing.pro</a>
+        Contacto privacidad: <a href="mailto:privacidad@grounddesign.pro" style={{ color: 'var(--copper)', textDecoration: 'none' }}>privacidad@grounddesign.pro</a>
       </div>
     </div>
   );

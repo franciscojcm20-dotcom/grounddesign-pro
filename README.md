@@ -1,4 +1,4 @@
-# GroundDesing Pro
+# GroundDesign Pro
 
 Plataforma SaaS de diseño de sistemas de puesta a tierra para ingenieros
 eléctricos. Motor de cálculo propio (sin librerías de matemática de terceros,

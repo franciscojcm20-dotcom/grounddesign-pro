@@ -31,7 +31,7 @@ export default function NotFound() {
         </Link>
       </div>
       <div style={{ fontSize: 9, color: 'var(--faint)', fontFamily: 'var(--font-mono)', marginTop: 16 }}>
-        GroundDesing Pro · IEEE 80/81
+        GroundDesign Pro · IEEE 80/81
       </div>
     </div>
   );

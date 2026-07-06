@@ -8,7 +8,7 @@ import { AuthGuard } from '@/components/ui/AuthGuard';
 const STEPS = [
   {
     icon: '⚡',
-    title: 'Bienvenido a GroundDesing Pro',
+    title: 'Bienvenido a GroundDesign Pro',
     body: 'La plataforma para el diseño profesional de sistemas de puesta a tierra conforme a IEEE 80-2013 / 81-2012.',
     cta: 'Comenzar',
   },

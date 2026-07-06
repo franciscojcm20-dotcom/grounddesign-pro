@@ -32,7 +32,7 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: grounddesing
+          POSTGRES_DB: grounddesign
         ports:
           - 5432:5432
         options: >-
@@ -49,11 +49,11 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
       - name: Apply schema
-        run: psql "postgres://postgres:postgres@localhost:5432/grounddesing" -f apps/api/src/db/schema.sql
+        run: psql "postgres://postgres:postgres@localhost:5432/grounddesign" -f apps/api/src/db/schema.sql
       - name: Test
         run: pnpm --filter @gdp/api test
         env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/grounddesing
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/grounddesign
 
   # ── TypeScript ───────────────────────────────────────────────────────────────
   typecheck:
@@ -106,7 +106,7 @@ jobs:
           context: .
           file: apps/api/Dockerfile
           push: false
-          tags: grounddesing-api:${{ github.sha }}
+          tags: grounddesign-api:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Build web image
@@ -115,7 +115,7 @@ jobs:
           context: .
           file: apps/web/Dockerfile
           push: false
-          tags: grounddesing-web:${{ github.sha }}
+          tags: grounddesign-web:${{ github.sha }}
           build-args: |
             NEXT_PUBLIC_API_URL=http://localhost:3001
           cache-from: type=gha

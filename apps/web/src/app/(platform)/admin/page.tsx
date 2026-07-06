@@ -3,7 +3,7 @@ import { AdminClient } from './AdminClient';
 
 export const metadata: Metadata = {
   title: 'Admin',
-  description: 'Panel de administración — GroundDesing Pro',
+  description: 'Panel de administración — GroundDesign Pro',
 };
 
 export default function AdminPage() {

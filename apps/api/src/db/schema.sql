@@ -1,5 +1,5 @@
--- GroundDesing Pro — PostgreSQL schema
--- Run once: psql -U postgres -d grounddesing -f schema.sql
+-- GroundDesign Pro — PostgreSQL schema
+-- Run once: psql -U postgres -d grounddesign -f schema.sql
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 

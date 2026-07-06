@@ -20,7 +20,7 @@ function createTransport() {
 }
 
 const transport = createTransport();
-const FROM = process.env.FROM_EMAIL ?? 'GroundDesing Pro <noreply@grounddesing.pro>';
+const FROM = process.env.FROM_EMAIL ?? 'GroundDesign Pro <noreply@grounddesign.pro>';
 const WEB  = process.env.WEB_URL    ?? 'http://localhost:3000';
 
 /* ── Templates ────────────────────────────────────────────────────────────── */
@@ -51,7 +51,7 @@ function baseHtml(title: string, body: string) {
                   </svg>
                 </td>
                 <td style="font-size:14px;font-weight:700;color:#e2e8f0;letter-spacing:.04em;">
-                  GroundDesing<span style="color:#E07A23;">Pro</span>
+                  GroundDesign<span style="color:#E07A23;">Pro</span>
                 </td>
               </tr>
             </table>
@@ -68,7 +68,7 @@ function baseHtml(title: string, body: string) {
           <td style="padding:16px 32px 24px;border-top:1px solid #1e2533;">
             <p style="margin:0;font-size:10px;color:#4a5568;line-height:1.6;">
               Motor IEEE propio · Sin dependencias externas de cálculo<br>
-              IEEE Std 80-2013 · IEEE Std 81-2012 · GroundDesing Pro
+              IEEE Std 80-2013 · IEEE Std 81-2012 · GroundDesign Pro
             </p>
           </td>
         </tr>
@@ -82,7 +82,7 @@ function baseHtml(title: string, body: string) {
 /* ── Mailer API ───────────────────────────────────────────────────────────── */
 export async function sendPasswordReset(opts: { to: string; name: string; token: string }) {
   const url  = `${WEB}/reset-password?token=${opts.token}`;
-  const html = baseHtml('Restablece tu contraseña — GroundDesing Pro', `
+  const html = baseHtml('Restablece tu contraseña — GroundDesign Pro', `
     <h1 style="margin:0 0 12px;font-size:18px;font-weight:700;color:#e2e8f0;">Restablece tu contraseña</h1>
     <p style="margin:0 0 8px;font-size:12px;color:#94a3b8;line-height:1.7;">
       Hola ${opts.name.split(' ')[0]},
@@ -113,9 +113,9 @@ export async function sendPasswordReset(opts: { to: string; name: string; token:
   const info = await transport.sendMail({
     from: FROM,
     to:   opts.to,
-    subject: 'Restablece tu contraseña — GroundDesing Pro',
+    subject: 'Restablece tu contraseña — GroundDesign Pro',
     html,
-    text: `Restablece tu contraseña de GroundDesing Pro: ${url}\n\nEl enlace expira en 1 hora.`,
+    text: `Restablece tu contraseña de GroundDesign Pro: ${url}\n\nEl enlace expira en 1 hora.`,
   });
 
   // In dev (jsonTransport), log the email to console
@@ -131,10 +131,10 @@ export async function sendPasswordReset(opts: { to: string; name: string; token:
 }
 
 export async function sendWelcome(opts: { to: string; name: string }) {
-  const html = baseHtml('Bienvenido a GroundDesing Pro', `
+  const html = baseHtml('Bienvenido a GroundDesign Pro', `
     <h1 style="margin:0 0 12px;font-size:18px;font-weight:700;color:#e2e8f0;">¡Bienvenido, ${opts.name.split(' ')[0]}!</h1>
     <p style="margin:0 0 16px;font-size:12px;color:#94a3b8;line-height:1.7;">
-      Tu cuenta en <strong style="color:#e2e8f0;">GroundDesing Pro</strong> está lista. Tienes acceso al plan <strong style="color:#93c5fd;">Community</strong> con todos los módulos de cálculo IEEE disponibles.
+      Tu cuenta en <strong style="color:#e2e8f0;">GroundDesign Pro</strong> está lista. Tienes acceso al plan <strong style="color:#93c5fd;">Community</strong> con todos los módulos de cálculo IEEE disponibles.
     </p>
     <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin-bottom:24px;">
       ${[
@@ -167,9 +167,9 @@ export async function sendWelcome(opts: { to: string; name: string }) {
   const info = await transport.sendMail({
     from: FROM,
     to:   opts.to,
-    subject: '¡Bienvenido a GroundDesing Pro!',
+    subject: '¡Bienvenido a GroundDesign Pro!',
     html,
-    text: `Bienvenido ${opts.name} a GroundDesing Pro. Accede en: ${WEB}/dashboard`,
+    text: `Bienvenido ${opts.name} a GroundDesign Pro. Accede en: ${WEB}/dashboard`,
   });
 
   if (!process.env.SMTP_HOST) {

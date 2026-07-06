@@ -29,7 +29,7 @@ export function RegisterClient() {
     setLoading(true); setError(null);
     try {
       await register(email, name, password);
-      toast.success('Cuenta creada. ¡Bienvenido a GroundDesing Pro!');
+      toast.success('Cuenta creada. ¡Bienvenido a GroundDesign Pro!');
       router.push('/dashboard');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error al crear cuenta';
@@ -42,7 +42,7 @@ export function RegisterClient() {
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: 24 }}>
       <form onSubmit={submit} style={{ width: 380, background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 6, padding: '32px 28px' }}>
         <div style={{ fontSize: 9, color: 'var(--copper)', fontFamily: 'var(--font-mono)', letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 6 }}>
-          GroundDesing Pro
+          GroundDesign Pro
         </div>
         <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 24 }}>Crear cuenta</h1>
 

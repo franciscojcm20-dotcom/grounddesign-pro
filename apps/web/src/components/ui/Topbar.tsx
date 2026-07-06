@@ -61,7 +61,7 @@ export function Topbar() {
           <circle cx="11" cy="2" r="1.5" fill="#E07A23"/>
         </svg>
         <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '.04em' }}>
-          GroundDesing<span style={{ color: 'var(--copper)' }}>Pro</span>
+          GroundDesign<span style={{ color: 'var(--copper)' }}>Pro</span>
         </span>
       </Link>
 

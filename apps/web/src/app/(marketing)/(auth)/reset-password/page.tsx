@@ -4,7 +4,7 @@ import { ResetPasswordClient } from './ResetPasswordClient';
 
 export const metadata: Metadata = {
   title: 'Restablecer contraseña',
-  description: 'Crea una nueva contraseña para tu cuenta de GroundDesing Pro.',
+  description: 'Crea una nueva contraseña para tu cuenta de GroundDesign Pro.',
 };
 
 export default function ResetPasswordPage() {

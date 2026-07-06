@@ -202,7 +202,7 @@ function buildSheetFrame(entities: string[], o: SheetOptions): void {
   entities.push(...rect('MALLA-CAJETIN', x1, y0, panelW, panelH));
   entities.push(...line('MALLA-CAJETIN', x1, y0 + panelH - th * 2, x1 + panelW, y0 + panelH - th * 2));
   const fecha = new Date().toISOString().slice(0, 10);
-  entities.push(...text('MALLA-CAJETIN', x1 + th * 0.5, y0 + panelH - th * 1.6, th * 1.1, 'GROUNDDESING PRO'));
+  entities.push(...text('MALLA-CAJETIN', x1 + th * 0.5, y0 + panelH - th * 1.6, th * 1.1, 'GROUNDDESIGN PRO'));
   entities.push(...text('MALLA-CAJETIN', x1 + th * 0.5, y0 + panelH - th * 3.4, thSmall, `Proyecto: ${o.proyecto ?? 'Sistema de puesta a tierra'}`));
   entities.push(...text('MALLA-CAJETIN', x1 + th * 0.5, y0 + panelH - th * 4.8, thSmall, `Sistema: ${o.sistema}`));
   entities.push(...text('MALLA-CAJETIN', x1 + th * 0.5, y0 + panelH - th * 6.2, thSmall, `Norma: ${o.norm ?? 'IEEE Std 80-2013'}`));

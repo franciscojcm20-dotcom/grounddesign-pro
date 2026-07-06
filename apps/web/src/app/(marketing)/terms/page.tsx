@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
   title: 'Términos de servicio',
-  description: 'Términos y condiciones de uso de GroundDesing Pro.',
+  description: 'Términos y condiciones de uso de GroundDesign Pro.',
 };
 
 export default function TermsPage() {
@@ -19,15 +19,15 @@ export default function TermsPage() {
       {[
         {
           title: '1. Aceptación de los términos',
-          body: 'Al acceder y utilizar GroundDesing Pro ("la Plataforma"), usted acepta quedar vinculado por estos Términos de Servicio. Si no está de acuerdo con alguno de estos términos, no utilice la Plataforma.',
+          body: 'Al acceder y utilizar GroundDesign Pro ("la Plataforma"), usted acepta quedar vinculado por estos Términos de Servicio. Si no está de acuerdo con alguno de estos términos, no utilice la Plataforma.',
         },
         {
           title: '2. Descripción del servicio',
-          body: 'GroundDesing Pro es una plataforma SaaS para el diseño profesional de sistemas de puesta a tierra conforme a normas IEEE 80, IEEE 81 y otras normativas internacionales. La Plataforma proporciona herramientas de cálculo, generación de reportes PDF y gestión de proyectos de ingeniería.',
+          body: 'GroundDesign Pro es una plataforma SaaS para el diseño profesional de sistemas de puesta a tierra conforme a normas IEEE 80, IEEE 81 y otras normativas internacionales. La Plataforma proporciona herramientas de cálculo, generación de reportes PDF y gestión de proyectos de ingeniería.',
         },
         {
           title: '3. Uso responsable',
-          body: 'Los resultados generados por la Plataforma son herramientas de apoyo al ingeniería profesional. El usuario es responsable de verificar los resultados con un ingeniero habilitado antes de su implementación en obras reales. GroundDesing Pro no asume responsabilidad por daños derivados del uso de los resultados sin verificación profesional.',
+          body: 'Los resultados generados por la Plataforma son herramientas de apoyo al ingeniería profesional. El usuario es responsable de verificar los resultados con un ingeniero habilitado antes de su implementación en obras reales. GroundDesign Pro no asume responsabilidad por daños derivados del uso de los resultados sin verificación profesional.',
         },
         {
           title: '4. Planes y facturación',
@@ -35,7 +35,7 @@ export default function TermsPage() {
         },
         {
           title: '5. Propiedad intelectual',
-          body: 'Todos los motores de cálculo, algoritmos, interfaces y contenidos de GroundDesing Pro son propiedad exclusiva de sus desarrolladores. Los reportes PDF generados son propiedad del usuario que los creó.',
+          body: 'Todos los motores de cálculo, algoritmos, interfaces y contenidos de GroundDesign Pro son propiedad exclusiva de sus desarrolladores. Los reportes PDF generados son propiedad del usuario que los creó.',
         },
         {
           title: '6. Limitación de responsabilidad',
@@ -57,7 +57,7 @@ export default function TermsPage() {
       ))}
 
       <div style={{ marginTop: 48, paddingTop: 24, borderTop: '1px solid var(--line)', fontSize: 10, color: 'var(--faint)' }}>
-        Consultas legales: <a href="mailto:legal@grounddesing.pro" style={{ color: 'var(--copper)', textDecoration: 'none' }}>legal@grounddesing.pro</a>
+        Consultas legales: <a href="mailto:legal@grounddesign.pro" style={{ color: 'var(--copper)', textDecoration: 'none' }}>legal@grounddesign.pro</a>
       </div>
     </div>
   );

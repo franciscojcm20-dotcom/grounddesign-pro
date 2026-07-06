@@ -476,7 +476,7 @@ export function FaultAnalysisClient() {
                 Df = √(1 + (Ta/tf)·(1 − e^(−2tf/Ta))) · Ta = (X/R)/(2πf)
               </div>
               <p><strong style={{ color: 'var(--text)' }}>Variables:</strong> If = corriente de falla simétrica (A), Sf = factor de división de corriente, Df = factor de decremento, tf = tiempo de despeje (s), X/R = relación reactancia/resistencia en el punto de falla, f = frecuencia del sistema (Hz).</p>
-              <p style={{ marginTop: 8 }}><strong style={{ color: 'var(--text)' }}>Regla fundamental:</strong> GroundDesing Pro no inicia el diseño de la malla sin una corriente de diseño oficial validada por este motor — todos los módulos posteriores (malla, GPR, tensiones, conductor, optimización, sistema experto, memoria y exportaciones) usan Ig automáticamente.</p>
+              <p style={{ marginTop: 8 }}><strong style={{ color: 'var(--text)' }}>Regla fundamental:</strong> GroundDesign Pro no inicia el diseño de la malla sin una corriente de diseño oficial validada por este motor — todos los módulos posteriores (malla, GPR, tensiones, conductor, optimización, sistema experto, memoria y exportaciones) usan Ig automáticamente.</p>
               <p style={{ marginTop: 12, fontSize: 9, color: 'var(--faint)' }}>IEEE Std 80-2013, Cláusula 15.9–15.10, Ecuación 79 · IEEE Std 80-2013 Annex C (factor de división)</p>
             </FundBtn>
           </>

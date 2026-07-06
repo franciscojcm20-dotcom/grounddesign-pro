@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'GroundDesing Pro — Diseño de sistemas de puesta a tierra IEEE 80/81',
+  title: 'GroundDesign Pro — Diseño de sistemas de puesta a tierra IEEE 80/81',
   description: 'Plataforma SaaS para ingenieros eléctricos. 7 módulos IEEE normados, reportes PDF profesionales, gestión de proyectos. Motor matemático propio.',
   keywords: 'puesta a tierra, earthing system, grounding design, IEEE 80, IEEE 81, resistividad suelo, Wenner, Schlumberger',
 };
@@ -125,7 +125,7 @@ export default function LandingPage() {
       <section style={{ padding: '64px 40px', maxWidth: 960, margin: '0 auto' }}>
         <div style={{ textAlign: 'center', marginBottom: 44 }}>
           <div style={{ fontSize: 9, color: 'var(--faint)', fontFamily: 'var(--font-mono)', letterSpacing: '.1em', textTransform: 'uppercase', marginBottom: 12 }}>
-            Por qué GroundDesing Pro
+            Por qué GroundDesign Pro
           </div>
           <h2 style={{ fontSize: 28, fontWeight: 700 }}>Todo lo que necesitas en un solo lugar</h2>
         </div>

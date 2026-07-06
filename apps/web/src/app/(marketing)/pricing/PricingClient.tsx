@@ -20,7 +20,7 @@ const PLANS = [
     id: 'professional', name: 'Professional', price: 79900, interval: 'mes',
     color: 'var(--safe)', badge: null,
     features: ['5 usuarios incluidos', 'API access REST', 'Normas IEC 60364 / RETIE', 'Soporte prioritario', 'Onboarding técnico 1:1', 'Factura electrónica'],
-    cta: 'Contactar ventas', ctaHref: 'mailto:ventas@grounddesing.pro',
+    cta: 'Contactar ventas', ctaHref: 'mailto:ventas@grounddesign.pro',
   },
 ];
 
@@ -55,7 +55,7 @@ export function PricingClient() {
           Planes y precios
         </div>
         <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 10, letterSpacing: '-.02em' }}>
-          Elige tu plan de GroundDesing Pro
+          Elige tu plan de GroundDesign Pro
         </h1>
         <p style={{ fontSize: 12, color: 'var(--dim)', lineHeight: 1.7, maxWidth: 520, margin: '0 auto' }}>
           Motor IEEE propio en todos los planes. Sin dependencias externas de cálculo. Precios en CLP con IVA incluido.

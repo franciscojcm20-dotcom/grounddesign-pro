@@ -128,7 +128,7 @@ function drawHeader(doc: PDFKit.PDFDocument, meta: ReportMeta, pageNum: number, 
   drawGroundSymbol(doc, MARGIN, 14);
 
   doc.fontSize(14).fillColor(hex(C.white)).font('Helvetica-Bold')
-    .text('GroundDesing', MARGIN + 20, 16, { lineBreak: false })
+    .text('GroundDesign', MARGIN + 20, 16, { lineBreak: false })
     .fillColor(hex(C.copper))
     .text('Pro', MARGIN + 111, 16, { lineBreak: false });
   doc.fontSize(7).fillColor(hex(C.dim)).font('Helvetica')
@@ -256,7 +256,7 @@ function drawCoverPage(doc: PDFKit.PDFDocument, meta: ReportMeta, sections: Repo
   const fy = PAGE.height - 60;
   hRule(doc, fy, C.line);
   doc.fontSize(6.5).fillColor(hex(C.faint)).font('Helvetica')
-    .text('Este informe fue generado con GroundDesing Pro. Los cálculos se basan en las normas IEEE Std 80-2013 e IEEE Std 81-2012.', MARGIN, fy + 8, { width: CONTENT, lineBreak: true })
+    .text('Este informe fue generado con GroundDesign Pro. Los cálculos se basan en las normas IEEE Std 80-2013 e IEEE Std 81-2012.', MARGIN, fy + 8, { width: CONTENT, lineBreak: true })
     .text('El ingeniero responsable debe verificar que los parámetros de entrada correspondan a las condiciones reales del sitio.', MARGIN, fy + 18, { width: CONTENT, lineBreak: true });
 
   if (meta.engineer) {
@@ -371,7 +371,7 @@ function drawFooter(doc: PDFKit.PDFDocument, meta: ReportMeta, pageNum: number) 
   fillRect(doc, 0, y, PAGE.width, 1, C.line);
 
   doc.font('Helvetica').fontSize(6.5).fillColor(hex(C.faint))
-    .text('GroundDesing Pro · Motor IEEE Std 80-2013 / 81-2012 · grounddesing.pro', MARGIN, y + 8, { lineBreak: false });
+    .text('GroundDesign Pro · Motor IEEE Std 80-2013 / 81-2012 · grounddesign.pro', MARGIN, y + 8, { lineBreak: false });
   if (meta.engineer) {
     doc.text(safe(`Ingeniero responsable: ${meta.engineer}`), MARGIN, y + 18, { lineBreak: false });
   }

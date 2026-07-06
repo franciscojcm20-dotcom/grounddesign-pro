@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-export const metadata = { title: 'Changelog — GroundDesing Pro' };
+export const metadata = { title: 'Changelog — GroundDesign Pro' };
 
 const RELEASES = [
   {
@@ -69,7 +69,7 @@ const RELEASES = [
     tag: 'fase 15',
     items: [
       'Panel de administración (/admin): usuarios, proyectos, calcs, distribución por plan',
-      'Route /api/v1/admin/stats con guard de email @grounddesing.pro',
+      'Route /api/v1/admin/stats con guard de email @grounddesign.pro',
       'Rate-limiting global: 100 req/min con @fastify/rate-limit',
       'MiniBar: componente visual de barras de progreso para el panel admin',
     ],
@@ -162,7 +162,7 @@ const RELEASES = [
     tag: 'fase 6',
     items: [
       'Módulo Schlumberger: interpretación ρa por mínimos cuadrados',
-      'Engines extraídos como paquete puro @grounddesing/engines-math',
+      'Engines extraídos como paquete puro @grounddesign/engines-math',
       'Suite de tests unitarios con casos de referencia IEEE Std 81-2012',
     ],
   },
@@ -212,7 +212,7 @@ const RELEASES = [
     date: '2026-06-13',
     tag: 'fase 1',
     items: [
-      'Prototipo inicial index.html — concepto GroundDesing Pro',
+      'Prototipo inicial index.html — concepto GroundDesign Pro',
       'Definición de arquitectura: monorepo, Next.js 15, Fastify v5, PostgreSQL',
       'Sistema de diseño: paleta oscura, tokens CSS, tipografía monoespaciada',
     ],
@@ -241,7 +241,7 @@ export default function ChangelogPage() {
         Changelog
       </h1>
       <p style={{ fontSize: 11, color: 'var(--faint)', marginBottom: 48, lineHeight: 1.7 }}>
-        Historial completo de versiones de <strong style={{ color: 'var(--text)' }}>GroundDesing Pro</strong>. Cada versión corresponde a una fase de desarrollo con funcionalidades verificadas.
+        Historial completo de versiones de <strong style={{ color: 'var(--text)' }}>GroundDesign Pro</strong>. Cada versión corresponde a una fase de desarrollo con funcionalidades verificadas.
       </p>
 
       {/* Timeline */}
@@ -294,7 +294,7 @@ export default function ChangelogPage() {
       </div>
 
       <div style={{ marginTop: 40, paddingTop: 24, borderTop: '1px solid var(--line)', fontSize: 9, color: 'var(--faint)', textAlign: 'center' }}>
-        GroundDesing Pro · IEEE 80 / 81 · Actualizado {RELEASES[0]!.date}
+        GroundDesign Pro · IEEE 80 / 81 · Actualizado {RELEASES[0]!.date}
       </div>
     </main>
   );

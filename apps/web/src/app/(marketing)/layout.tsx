@@ -11,7 +11,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
       }}>
         <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
           <span style={{ color: 'var(--copper)', fontWeight: 900, fontSize: 14, letterSpacing: '-.02em' }}>⏚</span>
-          <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>GroundDesing<span style={{ color: 'var(--copper)' }}>Pro</span></span>
+          <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>GroundDesign<span style={{ color: 'var(--copper)' }}>Pro</span></span>
         </Link>
         <div style={{ flex: 1 }} />
         <Link href="/pricing" style={{ fontSize: 11, color: 'var(--dim)', textDecoration: 'none' }}>Precios</Link>
@@ -35,7 +35,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
         background: 'var(--panel)',
       }}>
         <div style={{ fontSize: 10, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>
-          © 2026 GroundDesing Pro · Motor IEEE propio · Sin dependencias externas
+          © 2026 GroundDesign Pro · Motor IEEE propio · Sin dependencias externas
         </div>
         <div style={{ display: 'flex', gap: 20 }}>
           <Link href="/pricing" style={{ fontSize: 10, color: 'var(--faint)', textDecoration: 'none' }}>Precios</Link>
