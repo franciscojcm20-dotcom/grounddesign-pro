@@ -2,7 +2,10 @@ import postgres from 'postgres';
 
 const DATABASE_URL = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/grounddesign';
 
-export const sql = postgres(DATABASE_URL, { max: 10 });
+// onnotice silencioso: los NOTICE de Postgres ("la relación ya existe, omitiendo"
+// de los CREATE ... IF NOT EXISTS en migraciones) son informativos, no errores —
+// imprimirlos como objetos crudos en consola solo genera ruido y falsas alarmas.
+export const sql = postgres(DATABASE_URL, { max: 10, onnotice: () => {} });
 
 export interface User {
   id: string;

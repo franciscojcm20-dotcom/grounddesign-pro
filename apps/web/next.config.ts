@@ -10,6 +10,20 @@ const config: NextConfig = {
   env: {
     ...(process.env.NEXT_PUBLIC_API_URL ? { NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL } : {}),
   },
+  // Estabilidad del dev server bajo OneDrive: la sincronización toca metadatos
+  // de archivos continuamente, lo que dispara recompilaciones/reinicios en loop
+  // y llegó a corromper .next. Se excluyen del watcher los directorios que el
+  // código fuente nunca modifica y se agrupan los cambios en una ventana corta.
+  webpack: (cfg, { dev }) => {
+    if (dev) {
+      cfg.watchOptions = {
+        ...cfg.watchOptions,
+        ignored: ['**/node_modules/**', '**/.next/**', '**/.git/**'],
+        aggregateTimeout: 300,
+      };
+    }
+    return cfg;
+  },
 };
 
 // withSentryConfig solo instrumenta el build (source maps, etc.) — sin

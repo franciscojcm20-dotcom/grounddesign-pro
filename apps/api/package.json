@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --watch --experimental-strip-types src/server.ts",
+    "dev": "node --watch --watch-path=./src --watch-path=../../packages/engines-math/src --watch-path=../../packages/pdf-engine/src --experimental-strip-types src/server.ts",
     "start": "node --experimental-strip-types src/server.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test tests/api.test.ts",

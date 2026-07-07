@@ -105,6 +105,10 @@ export async function buildApp(): Promise<FastifyInstance> {
     pdf: '@gdp/pdf-engine@0.1.0',
   }));
 
+  // Raíz informativa — los health checks genéricos (load balancers, tooling de
+  // preview) consultan GET/HEAD / y un 404 solo genera ruido en los logs.
+  app.get('/', async () => ({ name: 'GroundDesign Pro API', status: 'ok', health: '/health', api: '/api/v1' }));
+
   // ─── Motores de cálculo ───────────────────────────────────────────────────────
   await app.register(routesSoil,      { prefix: '/api/v1/soil' });
   await app.register(faultAnalysisRoutes, { prefix: '/api/v1/fault-analysis' });
