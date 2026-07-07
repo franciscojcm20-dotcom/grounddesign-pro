@@ -77,12 +77,34 @@ const MODULE_META: Record<string, { label: string; icon: string; group: string }
 
 const HEADLINE_KEYS = ['Rg', 'Rn', 'Rstar', 'Rring', 'Rc', 'Rh', 'Rtotal', 'rhoAvg', 'areaMm2'] as const;
 
+/**
+ * Orden lógico de ingeniería del informe — no el orden en que el profesional
+ * fue guardando resultados en el proyecto: 1) criterio normativo aplicado,
+ * 2) caracterización del suelo (se calcula justo después de las pruebas de
+ * campo, no al final), 3) corriente de diseño, 4) todos los métodos de malla
+ * evaluados, 5) conductor, 6) verificación de tensiones, 7) GPR, 8) juicio
+ * técnico de cierre. Los capítulos con el mismo número mantienen su orden
+ * relativo original (Array.prototype.sort es estable).
+ */
+const MODULE_ORDER: Record<string, number> = {
+  normativeProfile: 0,
+  field: 10, schlumberger: 11, wenner: 12, nlayer: 13, soilModel: 14,
+  faultAnalysis: 20,
+  gel: 29,
+  grid: 30, rod: 31, strip: 32, radial: 33, ring: 34, combined: 35,
+  conductor: 40,
+  voltages: 41,
+  gpr: 42,
+  technicalJudgment: 90,
+};
+
 /** Etiqueta legible de un capítulo del informe, para la lista de selección de la previsualización. */
 function sectionLabel(module: string): string {
   const synthetic: Record<string, string> = {
     normativeProfile: 'Perfil normativo aplicado al proyecto',
     soilModel: 'Modelo de suelo — VES (Schlumberger/Wenner)',
     faultAnalysis: 'Corriente de diseño — Motor de Análisis de Falla',
+    technicalJudgment: 'Juicio Técnico y Responsabilidad Profesional',
   };
   return synthetic[module] ?? MODULE_META[module]?.label ?? module;
 }
@@ -377,10 +399,15 @@ export function ReportClient() {
 
   /**
    * Construye el payload completo del informe oficial: metadatos (incluida la
-   * identificación del proyectista guardada en la cuenta) + capítulos en orden
-   * de ingeniería profesional. Base común de la previsualización y la descarga.
+   * identificación del proyectista guardada en la cuenta) + todos los capítulos
+   * evaluados, ordenados según la secuencia lógica de ingeniería (MODULE_ORDER)
+   * en vez del orden en que se fueron guardando en el proyecto. Como se evalúan
+   * varios métodos de malla para comparar, TODOS quedan disponibles como
+   * capítulos exportables — por defecto solo el sistema elegido va marcado,
+   * pero el profesional puede incluir los demás desde la previsualización.
+   * Base común de la previsualización y la descarga.
    */
-  function buildFullReport(): { meta: ReportMeta; sections: ReportSectionInput[] } | null {
+  function buildFullReport(): { meta: ReportMeta; sections: ReportSectionInput[]; defaultIncluded: boolean[] } | null {
     if (!project || results.length === 0) return null;
     const meta: ReportMeta = {
       projectName: project.name,
@@ -393,57 +420,99 @@ export function ReportClient() {
       ...(project.description ? { location: project.description } : {}),
       norm: `${normativeProfile.label} — ${normativeProfile.standard}`,
     };
-    // El informe oficial incluye solo el sistema fijado como elegido — las demás
-    // topologías calculadas para comparar quedan excluidas de la memoria definitiva.
+
     const chosenGeometryId = geometryResults.length <= 1 ? geometryResults[0]?.id : chosenId;
-    const sections: ReportSectionInput[] = results
-      .filter(r => !GEOMETRY_MODULES.has(r.module) || r.id === chosenGeometryId)
-      .map(r => ({ module: r.module, inputs: r.inputs, outputs: r.outputs, ...(r.norm !== undefined ? { norm: r.norm } : {}) }));
-    // Capítulos sintéticos previos a cualquier diseño de malla, en el orden de ingeniería
-    // profesional: 1) perfil normativo, 2) modelo de suelo, 3) corriente de diseño.
-    const prepend: ReportSectionInput[] = [];
-    prepend.push({
-      module: 'normativeProfile',
-      inputs: {
-        label: normativeProfile.label,
-        standard: normativeProfile.standard,
-        country: normativeProfile.country,
-        rgCritical: normativeProfile.rgCritical,
-        rgGeneral: normativeProfile.rgGeneral,
-        ...(normativeProfile.touchVoltageMaxV ? { touchVoltageMaxV: normativeProfile.touchVoltageMaxV } : {}),
-        notes: normativeProfile.notes,
-      },
-      outputs: {},
-      norm: normativeProfile.standard,
-    });
-    if (model) {
-      prepend.push({
-        module: 'soilModel',
+    const chosenResult = results.find(r => r.id === chosenGeometryId);
+    const chosenLabel = chosenResult ? (MODULE_META[chosenResult.module]?.label ?? chosenResult.module) : '—';
+
+    type Item = { section: ReportSectionInput; order: number; defaultInclude: boolean };
+    const items: Item[] = [];
+
+    items.push({
+      order: MODULE_ORDER['normativeProfile']!, defaultInclude: true,
+      section: {
+        module: 'normativeProfile',
         inputs: {
-          rho1: model.rho1, rho2: model.rho2, h: model.h, rhoUniform: model.rhoUniform, source: model.source,
-          ...(model.validatedBy ? { validatedBy: model.validatedBy } : {}),
-          schlumbergerReadings: soilModel.schlumbergerReadings,
-          wennerReadings: soilModel.wennerReadings,
+          label: normativeProfile.label,
+          standard: normativeProfile.standard,
+          country: normativeProfile.country,
+          rgCritical: normativeProfile.rgCritical,
+          rgGeneral: normativeProfile.rgGeneral,
+          ...(normativeProfile.touchVoltageMaxV ? { touchVoltageMaxV: normativeProfile.touchVoltageMaxV } : {}),
+          notes: normativeProfile.notes,
         },
         outputs: {},
-        norm: 'IEEE Std 81-2012 Cl. 8',
+        norm: normativeProfile.standard,
+      },
+    });
+    if (model) {
+      items.push({
+        order: MODULE_ORDER['soilModel']!, defaultInclude: true,
+        section: {
+          module: 'soilModel',
+          inputs: {
+            rho1: model.rho1, rho2: model.rho2, h: model.h, rhoUniform: model.rhoUniform, source: model.source,
+            ...(model.validatedBy ? { validatedBy: model.validatedBy } : {}),
+            schlumbergerReadings: soilModel.schlumbergerReadings,
+            wennerReadings: soilModel.wennerReadings,
+          },
+          outputs: {},
+          norm: 'IEEE Std 81-2012 Cl. 8',
+        },
       });
     }
     if (faultAnalysis.result) {
       const fa = faultAnalysis.result;
-      prepend.push({
-        module: 'faultAnalysis',
-        inputs: {
-          If: fa.If, ifOrigin: fa.ifOrigin, shortCircuitModel: fa.shortCircuitModel,
-          tFalla: fa.tFalla, xr: fa.xr, freq: fa.freq, Ta: fa.Ta, Df: fa.Df, Sf: fa.Sf, Ig: fa.Ig,
-          splitMethod: fa.splitMethod, splitJustificacion: fa.splitJustificacion, confidence: fa.confidence,
+      items.push({
+        order: MODULE_ORDER['faultAnalysis']!, defaultInclude: true,
+        section: {
+          module: 'faultAnalysis',
+          inputs: {
+            If: fa.If, ifOrigin: fa.ifOrigin, shortCircuitModel: fa.shortCircuitModel,
+            tFalla: fa.tFalla, xr: fa.xr, freq: fa.freq, Ta: fa.Ta, Df: fa.Df, Sf: fa.Sf, Ig: fa.Ig,
+            splitMethod: fa.splitMethod, splitJustificacion: fa.splitJustificacion, confidence: fa.confidence,
+          },
+          outputs: {},
+          norm: 'IEEE Std 80-2013 Cl. 15.9–15.10',
         },
-        outputs: {},
-        norm: 'IEEE Std 80-2013 Cl. 15.9–15.10',
       });
     }
-    sections.unshift(...prepend);
-    return { meta, sections };
+
+    // Todos los resultados guardados quedan disponibles como capítulos — incluidas
+    // las topologías de malla alternativas evaluadas para comparar. Por defecto solo
+    // el sistema elegido y los capítulos no-geométricos quedan marcados para incluir.
+    for (const r of results) {
+      const isAltGeometry = GEOMETRY_MODULES.has(r.module) && r.id !== chosenGeometryId;
+      items.push({
+        order: MODULE_ORDER[r.module] ?? 50,
+        defaultInclude: !isAltGeometry,
+        section: { module: r.module, inputs: r.inputs, outputs: r.outputs, ...(r.norm !== undefined ? { norm: r.norm } : {}) },
+      });
+    }
+
+    // Capítulo de cierre: juicio técnico de ingeniería + deslinde de responsabilidad
+    // profesional — síntesis basada en el desarrollo teórico de los capítulos previos.
+    items.push({
+      order: MODULE_ORDER['technicalJudgment']!, defaultInclude: true,
+      section: {
+        module: 'technicalJudgment',
+        inputs: {
+          globalStatus: allPass ? 'cumple' : anyFail ? 'revisar' : 'parcial',
+          chosenSystemLabel: chosenLabel,
+          normativeLabel: normativeProfile.label,
+          normativeStandard: normativeProfile.standard,
+          verifiedCount: determinable.length,
+          failedCount: determinable.filter(s => s.pass === false).length,
+          engineerName: user?.name ?? null,
+        },
+        outputs: {},
+      },
+    });
+
+    // sort() es estable (ES2019+) — capítulos con el mismo orden (ej. varias
+    // topologías de malla) conservan su posición relativa original.
+    items.sort((a, b) => a.order - b.order);
+    return { meta, sections: items.map(i => i.section), defaultIncluded: items.map(i => i.defaultInclude) };
   }
 
   async function openPreview() {
@@ -455,11 +524,12 @@ export function ReportClient() {
     if (!full) return;
     setPdfLoading(true);
     try {
-      const blob = await fetchReportBlob(full.meta, full.sections);
+      const initialSections = full.sections.filter((_, i) => full.defaultIncluded[i]);
+      const blob = await fetchReportBlob(full.meta, initialSections);
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       setPreviewMeta(full.meta);
       setPreviewSections(full.sections);
-      setIncluded(full.sections.map(() => true));
+      setIncluded(full.defaultIncluded);
       setPreviewStale(false);
       setPreviewUrl(URL.createObjectURL(blob));
     } catch (e) {

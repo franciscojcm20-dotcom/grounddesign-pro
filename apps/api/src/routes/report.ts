@@ -589,6 +589,49 @@ function normativeProfileSection(inputs: Record<string, unknown>): ReportSection
   };
 }
 
+/**
+ * Capítulo de cierre del informe: síntesis del juicio técnico de ingeniería
+ * (fundamento teórico ya desarrollado en los capítulos anteriores) y el
+ * deslinde explícito de responsabilidad profesional — GroundDesign Pro es
+ * una herramienta de asistencia de cálculo, no un reemplazo del criterio ni
+ * de la firma del profesional responsable.
+ */
+function technicalJudgmentSection(inputs: Record<string, unknown>): ReportSection {
+  const globalStatus = String(inputs['globalStatus'] ?? 'parcial'); // 'cumple' | 'revisar' | 'parcial'
+  const chosenSystemLabel = String(inputs['chosenSystemLabel'] ?? '—');
+  const normativeLabel = String(inputs['normativeLabel'] ?? '—');
+  const normativeStandard = String(inputs['normativeStandard'] ?? '—');
+  const verifiedCount = Number(inputs['verifiedCount'] ?? 0);
+  const failedCount = Number(inputs['failedCount'] ?? 0);
+  const engineerName = inputs['engineerName'] as string | null | undefined;
+
+  const pass = globalStatus === 'cumple' ? true : globalStatus === 'revisar' ? false : undefined;
+
+  return {
+    title: 'Juicio Técnico y Responsabilidad Profesional',
+    norm: 'Criterio de ingeniería — GroundDesign Pro',
+    inputs: [
+      { label: 'Sistema de puesta a tierra elegido', value: chosenSystemLabel, unit: '' },
+      { label: 'Perfil normativo aplicado', value: normativeLabel, unit: '' },
+    ],
+    results: [
+      { label: 'Capítulos verificados', value: verifiedCount, unit: '' },
+      { label: 'Capítulos con incumplimiento', value: failedCount, unit: '', highlight: failedCount > 0 },
+    ],
+    ...(pass !== undefined ? {
+      pass,
+      passLabel: pass
+        ? 'El desarrollo teórico de este informe respalda el cumplimiento del diseño propuesto bajo los parámetros ingresados'
+        : `${failedCount} capítulo(s) no cumplen el criterio normativo aplicable — requieren ajuste antes de dar el diseño por definitivo`,
+    } : {}),
+    observations: [
+      `Juicio técnico: los resultados de este informe se obtuvieron aplicando, de forma trazable, los fundamentos físicos y matemáticos documentados en cada capítulo — modelo de suelo (Wait/Orellana-Mooney), corriente de diseño (componentes simétricas de Fortescue), resistencia de puesta a tierra (Sverak/Dwight/Sunde/Schwarz/Laurent-Niemann), dimensionamiento de conductor (Onderdonk) y verificación de tensiones de paso/contacto (Dalziel) — contrastados contra el criterio de ${normativeLabel} (${normativeStandard}). ${failedCount > 0 ? `Se identificaron ${failedCount} capítulo(s) que no cumplen el criterio aplicable; deben resolverse ajustando la geometría, el tratamiento del suelo o el conductor antes de ejecutar la instalación.` : 'No se identificaron incumplimientos en los capítulos verificables bajo los parámetros ingresados en este proyecto.'}`,
+      'Alcance de la asistencia del software: GroundDesign Pro automatiza fórmulas de ingeniería reconocidas (IEEE Std 80-2013/81-2012 y las normas nacionales aplicables) con cálculo propio y trazable; no reemplaza el juicio profesional ni releva de la obligación de validar en terreno que los parámetros de entrada (resistividad, corriente de falla, geometría real, condiciones del sitio) correspondan a las condiciones efectivas de la instalación.',
+      `Responsabilidad profesional: el ajuste final del sistema de puesta a tierra propuesto, su adaptación a las condiciones reales del sitio, y la decisión de aceptar, modificar o rechazar el diseño son responsabilidad exclusiva del instalador o ingeniero eléctrico responsable que suscribe este informe${engineerName && engineerName !== '—' ? ` (${engineerName})` : ''}, o de quien solicitó su elaboración utilizando GroundDesign Pro como herramienta de asistencia técnica, conforme a la normativa vigente aplicable indicada en este informe y a la reglamentación eléctrica del país de la instalación.`,
+    ],
+  };
+}
+
 const ADAPTERS: Record<string, (i: Record<string, unknown>, o: Record<string, unknown>) => ReportSection> = {
   wenner:       wennerSection,
   grid:         gridSection,
@@ -604,6 +647,7 @@ const ADAPTERS: Record<string, (i: Record<string, unknown>, o: Record<string, un
   soilModel:    (i) => soilModelSection(i),
   faultAnalysis: (i) => faultAnalysisSection(i),
   normativeProfile: (i) => normativeProfileSection(i),
+  technicalJudgment: (i) => technicalJudgmentSection(i),
 };
 
 // ─── Route ────────────────────────────────────────────────────────────────────
