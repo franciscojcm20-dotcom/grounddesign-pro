@@ -4,6 +4,87 @@ export const metadata = { title: 'Changelog — GroundDesign Pro' };
 
 const RELEASES = [
   {
+    version: 'v0.30',
+    date: '2026-07-07',
+    tag: 'estabilidad',
+    items: [
+      'Servidores de desarrollo estabilizados: watch acotado a código fuente propio (evita reinicios en loop)',
+      'Logs de Postgres y de health checks silenciados/limpiados',
+      'Build de producción y suite completa (152 tests) verificados en verde',
+    ],
+  },
+  {
+    version: 'v0.29',
+    date: '2026-07-07',
+    tag: 'fase 30',
+    items: [
+      'Clasificación automática de curvas patrón de Orellana & Mooney (Homogéneo, Ascendente/Descendente, H/K/Q/A y combinaciones de 4 capas) desde las lecturas de campo',
+      'Repositorio navegable de curvas patrón con descripción e implicancia de diseño de cada familia',
+      'Diagrama de estratificación rediseñado: estratos legibles con profundidad acumulada por interfaz',
+      'Motor de Análisis de Falla: modelado de tramos de línea aérea/cable en serie (Z1/Z0 por km) hasta el punto de falla',
+    ],
+  },
+  {
+    version: 'v0.28',
+    date: '2026-07-06',
+    tag: 'fase 29',
+    items: [
+      'Portada oficial de informes PDF bloqueada por el sistema, con índice profesional paginado',
+      'Previsualización del informe en el navegador con selección de capítulos antes de descargar/imprimir',
+      'Identificación del proyectista (título, licencia, empresa, logo) persistida en la cuenta y aplicada a la portada',
+    ],
+  },
+  {
+    version: 'v0.27',
+    date: '2026-07-06',
+    tag: 'fase 28',
+    items: [
+      'País y perfil normativo asociados a la cuenta, con la norma internacional IEEE 80/81 como referencia por defecto',
+      'Declaración de condiciones de relajación normativa (ej. RIC N°06 Cl. 6.2.1/6.2.2) por proyecto',
+      'Corrección del perfil normativo de Chile con los criterios reales del RIC N°06 (antes usaba valores genéricos)',
+    ],
+  },
+  {
+    version: 'v0.26',
+    date: '2026-07-06',
+    tag: 'fase 27',
+    items: [
+      'Sistema de migraciones de base de datos versionadas (reemplaza el schema.sql aplicado una sola vez)',
+      'Tracking de errores en producción con Sentry (backend y frontend, opcional sin DSN)',
+      'Validación de esquema (zod) en todos los endpoints de cálculo de la API',
+    ],
+  },
+  {
+    version: 'v0.25',
+    date: '2026-07-05',
+    tag: 'fase 26',
+    items: [
+      'Pipeline de despliegue a AWS (App Runner + RDS + ECR) con entrega continua vía OIDC',
+      'Suite de integración de API (auth, proyectos, admin, billing) corriendo en CI',
+      'Suite de tests de frontend con Vitest + Testing Library',
+      'Corrección de nombre de producto (GroundDesing → GroundDesign) en todo el repositorio',
+    ],
+  },
+  {
+    version: 'v0.24',
+    date: '2026-07-05',
+    tag: 'fase 25',
+    items: [
+      'Motor de Análisis de Falla: determinación y justificación de la corriente de diseño (Ig)',
+      'Motor de cortocircuito por componentes simétricas para modelar Ig sin estudio previo',
+      'Motor de optimización adaptativo (bandit) para sugerir ajustes de diseño',
+      'Exportación DXF y módulo de cubicación y valorización económica (CLP)',
+    ],
+  },
+  {
+    version: 'v0.23',
+    date: '2026-06-30',
+    tag: 'fase 24',
+    items: [
+      '5 nuevas topologías de electrodo de puesta a tierra (radial, anillo, combinada malla+picas, entre otras)',
+    ],
+  },
+  {
     version: 'v0.22',
     date: '2026-06-30',
     tag: 'fase 26',
