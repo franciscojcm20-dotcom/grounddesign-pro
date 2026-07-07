@@ -256,10 +256,102 @@ export interface LayerFitCandidate extends LayeredEarthModel {
   nLayers: number;
   rmsError: number;
   curve: RhoPoint[];
+  /** Código de la familia de curva patrón de Orellana & Mooney a la que pertenece el modelo (H, K, Q, A, combinaciones, etc.). */
+  curveType: string;
 }
 export interface LayerFitResult {
   best: LayerFitCandidate;
   candidates: LayerFitCandidate[];
+}
+
+// ─── Clasificación de curvas patrón (Orellana & Mooney, 1966) ────────────────
+//
+// La nomenclatura clásica de los sondeos eléctricos verticales clasifica las
+// curvas ρa(a) por la relación entre las resistividades de estratos sucesivos:
+// para 3 capas existen 4 familias (H, K, Q, A) y para 4 capas la familia se
+// nombra concatenando los tipos de las dos ternas sucesivas (HK, KH, QQ, etc.).
+// El código se calcula por defecto para el modelo ajustado desde las lecturas
+// de campo — el profesional puede contrastarlo contra el catálogo impreso.
+
+export interface CurveFamilyInfo {
+  code: string;
+  /** Relación de resistividades que define la familia. */
+  pattern: string;
+  nLayers: number;
+  /** Explicación de la familia: qué forma tiene la curva y qué significa geológicamente. */
+  description: string;
+  /** Implicancia práctica para el diseño de puesta a tierra. */
+  designImplication: string;
+}
+
+/** Catálogo de familias de curvas patrón de Orellana & Mooney soportadas por el ajuste (1 a 4 estratos). */
+export const CURVE_FAMILIES: CurveFamilyInfo[] = [
+  {
+    code: 'Homogéneo', pattern: 'ρ constante', nLayers: 1,
+    description: 'Curva plana: la resistividad aparente no varía con el espaciamiento — el suelo se comporta como un medio homogéneo dentro de la profundidad explorada.',
+    designImplication: 'Cualquier profundidad de enterramiento es equivalente; el diseño se dimensiona directamente con la ρ única medida.',
+  },
+  {
+    code: 'Ascendente (2 capas)', pattern: 'ρ1 < ρ2', nLayers: 2,
+    description: 'Curva que sube con el espaciamiento: capa superficial más conductiva sobre un semi-espacio más resistivo (ej. suelo húmedo/orgánico sobre roca).',
+    designImplication: 'Conviene concentrar la malla y los electrodos dentro de la capa superior conductiva — profundizar más allá de h1 aporta poco o empeora.',
+  },
+  {
+    code: 'Descendente (2 capas)', pattern: 'ρ1 > ρ2', nLayers: 2,
+    description: 'Curva que baja con el espaciamiento: capa superficial resistiva sobre un semi-espacio más conductivo (ej. grava/arena seca sobre napa freática).',
+    designImplication: 'Electrodos verticales (picas) que alcancen la capa profunda conductiva son especialmente efectivos para reducir Rg.',
+  },
+  {
+    code: 'H', pattern: 'ρ1 > ρ2 < ρ3', nLayers: 3,
+    description: 'Curva en valle (mínimo intermedio): capa intermedia más conductiva que las que la rodean — típico de un estrato húmedo/arcilloso entre cobertura seca y roca basal.',
+    designImplication: 'La capa intermedia conductiva es el objetivo: enterrar la malla o llegar con picas hasta ella maximiza la reducción de Rg.',
+  },
+  {
+    code: 'K', pattern: 'ρ1 < ρ2 > ρ3', nLayers: 3,
+    description: 'Curva en campana (máximo intermedio): capa intermedia más resistiva que las que la rodean — típico de un lente de grava o roca fracturada seca entre suelos más conductivos.',
+    designImplication: 'Evitar terminar los electrodos dentro de la capa intermedia resistiva: o quedarse en la capa superior o atravesarla por completo hacia la capa basal conductiva.',
+  },
+  {
+    code: 'Q', pattern: 'ρ1 > ρ2 > ρ3', nLayers: 3,
+    description: 'Curva monótona descendente: la resistividad disminuye con la profundidad en tres escalones (también llamada tipo DH) — perfil característico de meteorización progresiva con humedad creciente.',
+    designImplication: 'Cuanto más profundo, mejor: picas largas o mallas profundas aprovechan las capas basales conductivas.',
+  },
+  {
+    code: 'A', pattern: 'ρ1 < ρ2 < ρ3', nLayers: 3,
+    description: 'Curva monótona ascendente: la resistividad aumenta con la profundidad en tres escalones — típico de suelo conductivo sobre roca cada vez más sana/compacta.',
+    designImplication: 'El diseño debe resolverse dentro de la capa superficial conductiva; profundizar encarece sin reducir Rg. Considerar mejoramiento químico si la capa útil es delgada.',
+  },
+];
+
+/** Clasifica la terna (ρa, ρb, ρc) en una de las 4 familias de 3 capas. */
+function classifyTriplet(a: number, b: number, c: number): 'H' | 'K' | 'Q' | 'A' {
+  if (a > b && b < c) return 'H';
+  if (a < b && b > c) return 'K';
+  if (a > b && b > c) return 'Q';
+  return 'A';
+}
+
+/**
+ * Código de la familia de curva patrón de Orellana & Mooney para un modelo de
+ * 1 a 4 estratos: 1 capa → Homogéneo; 2 capas → Ascendente/Descendente;
+ * 3 capas → H/K/Q/A; 4 capas → concatenación de las ternas sucesivas (HK, QH, …).
+ */
+export function classifyOrellanaMooneyCurve(rhos: number[]): string {
+  if (rhos.length <= 1) return 'Homogéneo';
+  if (rhos.length === 2) return rhos[0]! < rhos[1]! ? 'Ascendente (2 capas)' : 'Descendente (2 capas)';
+  let code = '';
+  for (let i = 0; i + 2 < rhos.length; i++) {
+    code += classifyTriplet(rhos[i]!, rhos[i + 1]!, rhos[i + 2]!);
+  }
+  return code;
+}
+
+/** Información de catálogo de la familia a la que pertenece un modelo (para códigos compuestos de 4 capas, la de cada terna). */
+export function getCurveFamilyInfo(code: string): CurveFamilyInfo[] {
+  const direct = CURVE_FAMILIES.find(f => f.code === code);
+  if (direct) return [direct];
+  // Código compuesto (4 capas, ej. "HK"): se explican las familias de cada terna.
+  return [...code].map(ch => CURVE_FAMILIES.find(f => f.code === ch)).filter((f): f is CurveFamilyInfo => Boolean(f));
 }
 
 function forwardCurveNLayer(spacings: number[], rhos: number[], hs: number[]): RhoPoint[] {
@@ -377,7 +469,7 @@ export function fitLayeredEarthModel(measured: RhoPoint[]): LayerFitResult {
 
   function evalModel(rhos: number[], hs: number[]): LayerFitCandidate {
     const curve = forwardCurveNLayer(spacings, rhos, hs);
-    return { nLayers: rhos.length, rhos, hs, rmsError: rmsRelError(curve, sorted), curve };
+    return { nLayers: rhos.length, rhos, hs, rmsError: rmsRelError(curve, sorted), curve, curveType: classifyOrellanaMooneyCurve(rhos) };
   }
 
   // n = 1: suelo homogéneo — la media geométrica minimiza el error relativo cuadrático medio.
@@ -1524,9 +1616,50 @@ export type ShortCircuitFaultType = 'trifasica' | 'monofasica_tierra';
 
 export type GroundingConfig = 'solido' | 'resistencia' | 'reactancia' | 'aislado' | 'desconocido';
 
+// ─── Líneas y cables (elementos serie del sistema de potencia) ────────────────
+
+export interface LineImpedanceInput {
+  /** Identificación libre del tramo (ej. "Línea 23 kV alimentador norte"). */
+  nombre?: string;
+  tipo: 'linea_aerea' | 'cable';
+  longitudKm: number;
+  /** Ω/km — resistencia de secuencia positiva por unidad de longitud (dato del conductor/catálogo). */
+  rOhmKm: number;
+  /** Ω/km — reactancia de secuencia positiva por unidad de longitud. */
+  xOhmKm: number;
+  /** Ω/km — parámetros de secuencia cero, si se conocen (retorno por tierra/pantallas). */
+  r0OhmKm?: number;
+  x0OhmKm?: number;
+}
+
+export interface LineImpedanceResult {
+  Z1: ImpedanceRX;
+  Z0: ImpedanceRX;
+  z0Assumed: boolean;
+}
+
+// Factor Z0/Z1 típico asumido cuando no se conocen los parámetros de secuencia
+// cero del tramo: ≈3 para líneas aéreas sin datos del cable de guarda (práctica
+// habitual IEEE/Westinghouse T&D), ≈1 para cables con retorno por pantalla.
+const LINE_Z0_FACTOR: Record<LineImpedanceInput['tipo'], number> = { linea_aerea: 3, cable: 1 };
+
+/** Impedancia serie de un tramo de línea aérea o cable: Z = z[Ω/km] × longitud[km]. */
+export function computeLineImpedance(p: LineImpedanceInput): LineImpedanceResult {
+  const R1 = p.rOhmKm * p.longitudKm;
+  const X1 = p.xOhmKm * p.longitudKm;
+  const Z1: ImpedanceRX = { R: R1, X: X1, Z: Math.hypot(R1, X1) };
+  const z0Assumed = p.r0OhmKm === undefined || p.x0OhmKm === undefined;
+  const factor = LINE_Z0_FACTOR[p.tipo];
+  const R0 = z0Assumed ? R1 * factor : p.r0OhmKm! * p.longitudKm;
+  const X0 = z0Assumed ? X1 * factor : p.x0OhmKm! * p.longitudKm;
+  return { Z1, Z0: { R: R0, X: X0, Z: Math.hypot(R0, X0) }, z0Assumed };
+}
+
 export interface ShortCircuitInput {
   fuente:         SourceImpedanceInput;
   transformador?: TransformerImpedanceInput & { activo: boolean };
+  /** Tramos de línea aérea/cable en serie entre la fuente (o el transformador) y el punto de falla. */
+  lineas?:        LineImpedanceInput[];
   tipoFalla:      ShortCircuitFaultType;
   zn?:            number;  // Ω — impedancia de puesta a tierra del neutro del transformador (0 = sólidamente aterrizado)
   aterramiento?:  GroundingConfig; // configuración de puesta a tierra del neutro — solo orienta las recomendaciones, no altera el cálculo
@@ -1595,6 +1728,28 @@ export function computeShortCircuit(p: ShortCircuitInput): ShortCircuitResult {
     const vccRange = typicalVccRange(p.transformador.sn);
     if (p.transformador.vcc < vccRange.min || p.transformador.vcc > vccRange.max) {
       advertencias.push(`Ucc = ${p.transformador.vcc}% fuera del rango típico ${vccRange.min}–${vccRange.max}% para un transformador de ${p.transformador.sn} kVA (IEEE C57.12.00 / IEC 60076-5). Verificar el dato de placa del transformador.`);
+    }
+  }
+
+  // Tramos de línea/cable en serie hasta el punto de falla — cada tramo suma su
+  // impedancia de secuencia positiva y cero, con la hipótesis Z0 explícita si no
+  // se ingresaron los parámetros de secuencia cero del conductor.
+  for (let i = 0; i < (p.lineas?.length ?? 0); i++) {
+    const linea = p.lineas![i]!;
+    if (linea.longitudKm <= 0) continue;
+    const l = computeLineImpedance(linea);
+    const nombre = linea.nombre?.trim() || `${linea.tipo === 'cable' ? 'Cable' : 'Línea aérea'} ${i + 1}`;
+    memoria.push(`Z1 ${nombre} = (${linea.rOhmKm} + j${linea.xOhmKm}) Ω/km × ${linea.longitudKm} km = ${l.Z1.Z.toFixed(4)} Ω (R=${l.Z1.R.toFixed(4)}, X=${l.Z1.X.toFixed(4)})`);
+    if (l.z0Assumed) {
+      memoria.push(`Z0 ${nombre} asumida como ${LINE_Z0_FACTOR[linea.tipo]}×Z1 = ${l.Z0.Z.toFixed(4)} Ω — no se ingresaron parámetros de secuencia cero del tramo (típico ${linea.tipo === 'cable' ? '≈1×Z1 para cables con retorno por pantalla' : '≈3×Z1 para líneas aéreas'}).`);
+    } else {
+      memoria.push(`Z0 ${nombre} = (${linea.r0OhmKm} + j${linea.x0OhmKm}) Ω/km × ${linea.longitudKm} km = ${l.Z0.Z.toFixed(4)} Ω`);
+    }
+    Z1 = addRX(Z1, l.Z1);
+    Z0 = addRX(Z0, l.Z0);
+    z0Assumed = z0Assumed || l.z0Assumed;
+    if (linea.longitudKm > 100) {
+      advertencias.push(`El tramo "${nombre}" tiene ${linea.longitudKm} km — para líneas largas el modelo de impedancia serie concentrada pierde precisión (efecto capacitivo); verificar con un estudio de cortocircuito completo.`);
     }
   }
 

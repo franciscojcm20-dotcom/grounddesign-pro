@@ -316,9 +316,20 @@ export interface SourceImpedanceInput {
 export interface TransformerImpedanceInput {
   activo: boolean; sn: number; un: number; vcc: number; xr: number; z0Factor?: number;
 }
+export interface LineImpedanceInput {
+  nombre?: string;
+  tipo: 'linea_aerea' | 'cable';
+  longitudKm: number;
+  rOhmKm: number;
+  xOhmKm: number;
+  r0OhmKm?: number;
+  x0OhmKm?: number;
+}
 export interface ShortCircuitInput {
   fuente: SourceImpedanceInput;
   transformador?: TransformerImpedanceInput;
+  /** Tramos de línea aérea/cable en serie hasta el punto de falla. */
+  lineas?: LineImpedanceInput[];
   tipoFalla: ShortCircuitFaultType;
   zn?: number;
   aterramiento?: GroundingConfig;

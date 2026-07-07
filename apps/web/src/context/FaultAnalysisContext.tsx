@@ -3,11 +3,12 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 
 export type SplitFactorMethod = 'manual' | 'conservative' | 'estimated';
 
-/** Traza del modelado del sistema (red + transformador) cuando If se calculó en vez de ingresarse manualmente. */
+/** Traza del modelado del sistema (red + transformador + líneas/cables) cuando If se calculó en vez de ingresarse manualmente. */
 export interface ShortCircuitTrace {
   tipoFalla: 'trifasica' | 'monofasica_tierra';
   fuente: { un: number; ikss3: number; xr: number; ik1?: number };
   transformador?: { sn: number; un: number; vcc: number; xr: number; z0Factor?: number };
+  lineas?: Array<{ nombre?: string; tipo: 'linea_aerea' | 'cable'; longitudKm: number; rOhmKm: number; xOhmKm: number; r0OhmKm?: number; x0OhmKm?: number }>;
   zn?: number;
   aterramiento?: 'solido' | 'resistencia' | 'reactancia' | 'aislado' | 'desconocido';
   Z1: { R: number; X: number; Z: number };

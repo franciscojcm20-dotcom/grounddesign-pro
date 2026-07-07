@@ -31,9 +31,20 @@ const transformadorSchema = z.object({
   .refine(t => !t.activo || (t.vcc !== undefined && t.vcc > 0), { message: 'transformador.vcc debe ser positivo', path: ['vcc'] })
   .refine(t => !t.activo || (t.xr !== undefined && t.xr >= 0), { message: 'transformador.xr debe ser un valor no negativo', path: ['xr'] });
 
+const lineaSchema = z.object({
+  nombre: z.string().max(120).optional(),
+  tipo: z.enum(['linea_aerea', 'cable']),
+  longitudKm: nonNeg(),
+  rOhmKm: nonNeg(),
+  xOhmKm: nonNeg(),
+  r0OhmKm: nonNeg().optional(),
+  x0OhmKm: nonNeg().optional(),
+});
+
 const shortCircuitBodySchema = z.object({
   fuente: sourceImpedanceSchema,
   transformador: transformadorSchema.optional(),
+  lineas: z.array(lineaSchema).max(20).optional(),
   tipoFalla: z.enum(['trifasica', 'monofasica_tierra']),
   zn: num().optional(),
   aterramiento: z.enum(['solido', 'resistencia', 'reactancia', 'aislado', 'desconocido']).optional(),

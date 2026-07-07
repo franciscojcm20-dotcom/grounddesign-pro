@@ -31,6 +31,11 @@ import {
   getNormativeProfile,
   evaluateRgCompliance,
   fitLayeredEarthModel,
+  classifyOrellanaMooneyCurve,
+  getCurveFamilyInfo,
+  CURVE_FAMILIES,
+  computeLineImpedance,
+  computeShortCircuit,
 } from '../src/index.ts';
 
 // ─── Tolerancia para comparaciones de punto flotante ─────────────────────────
@@ -581,5 +586,96 @@ describe('Tensiones reales Em y Es (Cl. 16.5, forma simplificada de Sverak)', ()
   it('Ki (factor de irregularidad) = 0.644 + 0.148·n', () => {
     const { Ki } = meshVoltage({ rho: MALLA.rho, Ig: MALLA.iFalla, D, d, h, n, Ltotal });
     assertClose(Ki, 0.644 + 0.148 * n, 1e-12, 'fórmula Ki');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CLASIFICACIÓN DE CURVAS PATRÓN (Orellana & Mooney, 1966)
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('Clasificación de curvas patrón Orellana & Mooney', () => {
+  it('1 capa → Homogéneo; 2 capas → Ascendente/Descendente', () => {
+    assert.strictEqual(classifyOrellanaMooneyCurve([100]), 'Homogéneo');
+    assert.strictEqual(classifyOrellanaMooneyCurve([50, 300]), 'Ascendente (2 capas)');
+    assert.strictEqual(classifyOrellanaMooneyCurve([300, 50]), 'Descendente (2 capas)');
+  });
+
+  it('3 capas → H, K, Q, A según la relación de resistividades', () => {
+    assert.strictEqual(classifyOrellanaMooneyCurve([300, 50, 400]), 'H');
+    assert.strictEqual(classifyOrellanaMooneyCurve([50, 400, 100]), 'K');
+    assert.strictEqual(classifyOrellanaMooneyCurve([400, 200, 50]), 'Q');
+    assert.strictEqual(classifyOrellanaMooneyCurve([50, 200, 400]), 'A');
+  });
+
+  it('4 capas → concatenación de ternas (ej. HK)', () => {
+    // ρ1>ρ2<ρ3 (H) y ρ2<ρ3>ρ4 (K)
+    assert.strictEqual(classifyOrellanaMooneyCurve([300, 50, 400, 100]), 'HK');
+    // ρ1<ρ2>ρ3 (K) y ρ2>ρ3<ρ4 (H)
+    assert.strictEqual(classifyOrellanaMooneyCurve([50, 400, 100, 500]), 'KH');
+  });
+
+  it('el ajuste automático incluye curveType en el mejor modelo y candidatos', () => {
+    const measured = WENNER_READINGS.map(p => ({ a: p.a, rho: wennerApparent(p.a, p.r) }));
+    const fit = fitLayeredEarthModel(measured);
+    assert.ok(fit.best.curveType.length > 0, 'best.curveType debe existir');
+    for (const c of fit.candidates) assert.ok(c.curveType.length > 0, `candidato ${c.nLayers} sin curveType`);
+    // Las lecturas de referencia son ascendentes (ρ1 < ρ2, ρa crece con a) — el tipo debe ser coherente
+    const twoLayer = fit.candidates.find(c => c.nLayers === 2)!;
+    assert.strictEqual(twoLayer.curveType, 'Ascendente (2 capas)');
+  });
+
+  it('getCurveFamilyInfo resuelve familias simples y compuestas contra el catálogo', () => {
+    assert.strictEqual(getCurveFamilyInfo('H').length, 1);
+    assert.strictEqual(getCurveFamilyInfo('H')[0]!.code, 'H');
+    const hk = getCurveFamilyInfo('HK');
+    assert.strictEqual(hk.length, 2);
+    assert.deepStrictEqual(hk.map(f => f.code), ['H', 'K']);
+    assert.ok(CURVE_FAMILIES.length >= 7, 'el catálogo debe cubrir 1-2 capas y las 4 familias de 3 capas');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// LÍNEAS/CABLES EN EL MOTOR DE CORTOCIRCUITO
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('Cortocircuito — tramos de línea/cable en serie', () => {
+  const FUENTE = { un: 23, ikss3: 10, xr: 10 };
+
+  it('computeLineImpedance escala por longitud y asume Z0 típica si no hay datos', () => {
+    const l = computeLineImpedance({ tipo: 'linea_aerea', longitudKm: 5, rOhmKm: 0.3, xOhmKm: 0.4 });
+    assertClose(l.Z1.R, 1.5, 1e-9, 'R1 = 0.3×5');
+    assertClose(l.Z1.X, 2.0, 1e-9, 'X1 = 0.4×5');
+    assert.ok(l.z0Assumed, 'sin r0/x0 la Z0 debe declararse asumida');
+    assertClose(l.Z0.R, 4.5, 1e-9, 'Z0 línea aérea asumida = 3×Z1');
+    const cable = computeLineImpedance({ tipo: 'cable', longitudKm: 2, rOhmKm: 0.1, xOhmKm: 0.1 });
+    assertClose(cable.Z0.R, 0.2, 1e-9, 'Z0 cable asumida = 1×Z1');
+    const exacta = computeLineImpedance({ tipo: 'linea_aerea', longitudKm: 5, rOhmKm: 0.3, xOhmKm: 0.4, r0OhmKm: 0.5, x0OhmKm: 1.2 });
+    assert.ok(!exacta.z0Assumed);
+    assertClose(exacta.Z0.R, 2.5, 1e-9, 'R0 = 0.5×5');
+  });
+
+  it('agregar una línea en serie reduce If (más impedancia hasta el punto de falla)', () => {
+    const sin = computeShortCircuit({ fuente: FUENTE, tipoFalla: 'trifasica' });
+    const con = computeShortCircuit({
+      fuente: FUENTE, tipoFalla: 'trifasica',
+      lineas: [{ tipo: 'linea_aerea', longitudKm: 8, rOhmKm: 0.3, xOhmKm: 0.42 }],
+    });
+    assert.ok(con.If < sin.If, `If con línea (${con.If.toFixed(0)}) debe ser menor que sin línea (${sin.If.toFixed(0)})`);
+    assert.ok(con.memoria.some(m => m.includes('Línea aérea 1')), 'la memoria debe registrar el tramo');
+  });
+
+  it('en falla monofásica la Z0 de la línea participa del denominador', () => {
+    const sin = computeShortCircuit({ fuente: FUENTE, tipoFalla: 'monofasica_tierra' });
+    const con = computeShortCircuit({
+      fuente: FUENTE, tipoFalla: 'monofasica_tierra',
+      lineas: [{ tipo: 'linea_aerea', longitudKm: 8, rOhmKm: 0.3, xOhmKm: 0.42 }],
+    });
+    assert.ok(con.If < sin.If);
+    assert.ok(con.Z0!.Z > sin.Z0!.Z, 'Z0 total debe crecer con el tramo');
+    assert.ok(con.memoria.some(m => m.includes('3×Z1')), 'debe explicitar la hipótesis Z0=3×Z1');
+  });
+
+  it('tramos con longitud 0 se ignoran sin alterar el resultado', () => {
+    const sin = computeShortCircuit({ fuente: FUENTE, tipoFalla: 'trifasica' });
+    const con = computeShortCircuit({ fuente: FUENTE, tipoFalla: 'trifasica', lineas: [{ tipo: 'cable', longitudKm: 0, rOhmKm: 0.1, xOhmKm: 0.1 }] });
+    assertClose(con.If, sin.If, 1e-12, 'If no debe cambiar');
   });
 });

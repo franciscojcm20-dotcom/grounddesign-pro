@@ -9,43 +9,84 @@ import { ExportBar } from '@/components/ui/ExportBar';
 import { SoundingComparisonChart } from '@/components/ui/Charts';
 import { useSoilModel } from '@/context/SoilModelContext';
 import { API_BASE as BASE } from '@/lib/apiBase';
+import { CURVE_FAMILIES, getCurveFamilyInfo } from '@gdp/engines-math';
 
 interface RhoPoint       { a: number; rho: number }
-interface LayerCandidate { nLayers: number; rhos: number[]; hs: number[]; rmsError: number; curve: RhoPoint[] }
+interface LayerCandidate { nLayers: number; rhos: number[]; hs: number[]; rmsError: number; curve: RhoPoint[]; curveType: string }
 interface FitResult       { best: LayerCandidate; candidates: LayerCandidate[]; measured: RhoPoint[]; norm: string }
 
-/* ── Layer cross-section diagram ──────────────────────────────────── */
+/* ── Layer cross-section diagram ──────────────────────────────────────────────
+   Cada estrato ocupa una fila con altura mínima garantizada (los textos nunca
+   se superponen aunque el estrato sea delgado); la altura es proporcional al
+   espesor real solo por encima de ese mínimo, y la profundidad acumulada se
+   marca en el borde derecho de cada interfaz. */
 function LayerDiagram({ rhos, hs }: { rhos: number[]; hs: (number | null)[] }) {
-  const W = 280, PAD = 8;
-  const totalH = hs.reduce<number>((s, h) => s + (h ?? 0), 0) || 40;
-  const displayH = Math.min(totalH + 20, 150);
-  const SCALE = (displayH - PAD * 2) / (totalH + 20);
+  const W = 460, PAD = 10, TOP = 16, MIN_ROW = 40, MAX_ROW = 78;
   const rhoMax = Math.max(...rhos);
+  const hMax = Math.max(...hs.map(h => h ?? 0), 1);
 
-  let y = PAD;
+  // Altura de fila: mínima legible + componente proporcional al espesor real.
+  const rowHeights = rhos.map((_, i) => {
+    const h = hs[i];
+    if (h === null || h === undefined) return MIN_ROW + 8; // semi-espacio
+    return Math.min(MIN_ROW + (h / hMax) * (MAX_ROW - MIN_ROW), MAX_ROW);
+  });
+  const totalH = TOP + rowHeights.reduce((s, r) => s + r, 0) + PAD;
+
+  let y = TOP;
+  let cumDepth = 0;
   return (
-    <svg viewBox={`0 0 ${W} ${displayH}`} style={{ width: '100%', height: displayH, display: 'block' }}>
+    <svg viewBox={`0 0 ${W} ${totalH}`} style={{ width: '100%', maxWidth: W, height: 'auto', display: 'block', margin: '0 auto' }}>
+      <text x={PAD} y={TOP - 5} fill="var(--faint)" fontSize="8">Superficie (0.0 m)</text>
+      <line x1={PAD} y1={TOP} x2={W - PAD} y2={TOP} stroke="var(--dim)" strokeWidth="1" />
       {rhos.map((rho, i) => {
-        const h = hs[i] ?? 20;
-        const barH = h * SCALE;
-        const opacity = 0.15 + 0.6 * (rho / rhoMax);
+        const rowH = rowHeights[i]!;
+        const opacity = 0.15 + 0.55 * (rho / rhoMax);
+        const isHalfSpace = hs[i] === null || hs[i] === undefined;
+        if (!isHalfSpace) cumDepth += hs[i]!;
         const el = (
           <g key={i}>
-            <rect x={PAD} y={y} width={W - PAD * 2} height={barH}
-              fill="var(--copper)" fillOpacity={opacity} rx="1" />
-            <text x={W / 2} y={y + barH / 2 + 3.5} fill="var(--text)" fontSize="8.5" textAnchor="middle" fontFamily="var(--font-mono)">
-              ρ{i + 1} = {rho.toFixed(0)} Ω·m {hs[i] !== null ? `· h${i + 1} = ${hs[i]!.toFixed(1)} m` : '(semi-espacio)'}
+            <rect x={PAD} y={y} width={W - PAD * 2} height={rowH} fill="var(--copper)" fillOpacity={opacity} />
+            <text x={PAD + 12} y={y + rowH / 2 - 4} fill="var(--text)" fontSize="10" fontWeight="700">
+              Estrato {i + 1}{isHalfSpace ? ' — semi-espacio' : ''}
             </text>
-            {i < rhos.length - 1 && (
-              <line x1={PAD} y1={y + barH} x2={W - PAD} y2={y + barH}
-                stroke="var(--line)" strokeWidth="1" strokeDasharray="4,3" />
+            <text x={PAD + 12} y={y + rowH / 2 + 10} fill="var(--text)" fontSize="9.5" fontFamily="var(--font-mono)">
+              ρ{i + 1} = {rho.toFixed(0)} Ω·m{!isHalfSpace ? `  ·  espesor h${i + 1} = ${hs[i]!.toFixed(1)} m` : '  ·  sin límite inferior'}
+            </text>
+            {!isHalfSpace && (
+              <>
+                <line x1={PAD} y1={y + rowH} x2={W - PAD} y2={y + rowH} stroke="var(--line)" strokeWidth="1" strokeDasharray="5,3" />
+                <text x={W - PAD - 4} y={y + rowH - 4} fill="var(--faint)" fontSize="8" textAnchor="end" fontFamily="var(--font-mono)">
+                  {cumDepth.toFixed(1)} m
+                </text>
+              </>
             )}
           </g>
         );
-        y += barH;
+        y += rowH;
         return el;
       })}
-      <text x={PAD + 4} y={PAD - 2} fill="var(--faint)" fontSize="7">Superficie</text>
+    </svg>
+  );
+}
+
+/* ── Miniatura de la forma de cada familia de curva patrón ─────────────────── */
+const CURVE_SHAPES: Record<string, string> = {
+  'Homogéneo':            '2,14 46,14',
+  'Ascendente (2 capas)': '2,20 16,18 32,10 46,5',
+  'Descendente (2 capas)':'2,5 16,7 32,15 46,20',
+  'H': '2,8 14,16 24,20 34,14 46,6',
+  'K': '2,18 14,10 24,5 34,11 46,19',
+  'Q': '2,5 14,8 26,13 36,17 46,21',
+  'A': '2,21 14,17 26,12 36,8 46,4',
+};
+
+function CurveShapeSketch({ code, highlight }: { code: string; highlight: boolean }) {
+  const pts = CURVE_SHAPES[code] ?? '2,14 46,14';
+  return (
+    <svg viewBox="0 0 48 26" style={{ width: 48, height: 26, flexShrink: 0 }}>
+      <rect x="0" y="0" width="48" height="26" fill="var(--bg)" stroke="var(--line)" strokeWidth="0.5" rx="2" />
+      <polyline points={pts} fill="none" stroke={highlight ? 'var(--copper)' : 'var(--dim)'} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -56,6 +97,7 @@ export function NLayerClient() {
   const [error,   setError]   = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showFund, setShowFund] = useState(false);
+  const [showCatalog, setShowCatalog] = useState(false);
 
   const hasReadings = soilModel.schlumbergerReadings.length > 0 || soilModel.wennerReadings.length > 0;
 
@@ -135,6 +177,7 @@ export function NLayerClient() {
           <>
             <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
               <StatCard label="Estratos ajustados" value={String(best.nLayers)} unit="capas" primary />
+              <StatCard label="Curva patrón (O&M)" value={best.curveType} unit="" primary />
               <StatCard label="Error de ajuste (RMS)" value={`${(best.rmsError * 100).toFixed(1)}`} unit="%" ok={best.rmsError <= 0.05} />
               <StatCard label="ρ1 (superior)" value={best.rhos[0]!.toFixed(0)} unit="Ω·m" />
               <StatCard label="ρN (semi-espacio)" value={best.rhos[best.rhos.length - 1]!.toFixed(0)} unit="Ω·m" />
@@ -146,15 +189,11 @@ export function NLayerClient() {
                 ? `El modelo de ${best.nLayers} estrato${best.nLayers !== 1 ? 's' : ''} ajusta las lecturas de campo con ${(best.rmsError * 100).toFixed(1)}% de error RMS — dentro de la precisión habitual de un ensayo VES.`
                 : `El mejor ajuste disponible (${best.nLayers} estratos) tiene ${(best.rmsError * 100).toFixed(1)}% de error RMS, por sobre el 5% esperado — revisa que las lecturas de Mediciones de Campo no tengan errores de escala o ruido de medición.`}
             </ExpertItem>
-            {best.rhos[0]! > best.rhos[best.rhos.length - 1]! ? (
-              <ExpertItem type="info">
-                Perfil tipo H o Q: la capa profunda es más conductiva que la superficial — favorable para reducir Rg si la malla alcanza esa profundidad.
+            {getCurveFamilyInfo(best.curveType).map(fam => (
+              <ExpertItem key={fam.code} type="info">
+                Curva patrón tipo <strong style={{ color: 'var(--copper)' }}>{fam.code}</strong> ({fam.pattern}): {fam.description} {fam.designImplication}
               </ExpertItem>
-            ) : (
-              <ExpertItem type="info">
-                Perfil tipo K o A: la resistividad aumenta en profundidad — conviene diseñar la malla dentro de la capa superior{best.hs[0] ? ` (h≈${best.hs[0].toFixed(1)} m)` : ''}.
-              </ExpertItem>
-            )}
+            ))}
 
             {/* Cross-section */}
             <div style={{ ...panelStyle, marginBottom: 16, padding: '10px 8px' }}>
@@ -177,13 +216,14 @@ export function NLayerClient() {
             <div style={panelStyle}>
               <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 10 }}>Universo de curvas patrón evaluadas (1 a 4 estratos)</div>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead><tr><Th>Estratos</Th><Th>ρ (Ω·m)</Th><Th>h (m)</Th><Th>Error RMS</Th></tr></thead>
+                <thead><tr><Th>Estratos</Th><Th>Curva patrón</Th><Th>ρ (Ω·m)</Th><Th>h (m)</Th><Th>Error RMS</Th></tr></thead>
                 <tbody>
                   {result.candidates.map(c => (
                     <tr key={c.nLayers} style={{ background: c.nLayers === best.nLayers ? 'var(--copper-soft)' : undefined }}>
                       <td style={{ padding: '5px 8px', borderBottom: '1px solid var(--line)', fontSize: 10, color: c.nLayers === best.nLayers ? 'var(--copper)' : 'var(--dim)', fontWeight: c.nLayers === best.nLayers ? 700 : 400 }}>
                         {c.nLayers} {c.nLayers === best.nLayers && '★'}
                       </td>
+                      <TdMono highlight={c.nLayers === best.nLayers}>{c.curveType}</TdMono>
                       <TdMono>{c.rhos.map(r => r.toFixed(0)).join(' / ')}</TdMono>
                       <TdMono>{c.hs.length ? c.hs.map(h => h.toFixed(1)).join(' / ') : '—'}</TdMono>
                       <TdMono highlight={c.nLayers === best.nLayers}>{(c.rmsError * 100).toFixed(1)}%</TdMono>
@@ -193,10 +233,59 @@ export function NLayerClient() {
               </table>
             </div>
 
+            {/* Repositorio de familias de curvas patrón (Orellana & Mooney) */}
+            <div style={panelStyle}>
+              <button
+                onClick={() => setShowCatalog(s => !s)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
+                  background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                  fontSize: 11, fontWeight: 700, color: 'var(--text)',
+                }}
+              >
+                <span style={{ color: 'var(--copper)' }}>{showCatalog ? '▾' : '▸'}</span>
+                📚 Repositorio de curvas patrón — Orellana &amp; Mooney (1966)
+                <span style={{ fontSize: 9, color: 'var(--faint)', fontWeight: 400 }}>
+                  · tu curva ajustada: <strong style={{ color: 'var(--copper)' }}>{best.curveType}</strong>
+                </span>
+              </button>
+              {showCatalog && (
+                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <p style={{ fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.6, margin: 0 }}>
+                    Familias clásicas de sondeo eléctrico vertical, evaluadas aquí de forma exacta vía el kernel de Wait
+                    en vez de leídas de las tablas impresas. La familia de tu curva se determina automáticamente desde las
+                    lecturas de campo; para modelos de 4 estratos el código concatena las ternas sucesivas (ej. HK, QH).
+                  </p>
+                  {CURVE_FAMILIES.map(fam => {
+                    const isMatch = getCurveFamilyInfo(best.curveType).some(f => f.code === fam.code) || fam.code === best.curveType;
+                    return (
+                      <div key={fam.code} style={{
+                        display: 'flex', gap: 10, alignItems: 'flex-start', padding: '8px 10px', borderRadius: 4,
+                        background: isMatch ? 'var(--copper-soft)' : 'var(--bg)',
+                        border: `1px solid ${isMatch ? 'var(--copper)' : 'var(--line)'}`,
+                      }}>
+                        <CurveShapeSketch code={fam.code} highlight={isMatch} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 10.5, fontWeight: 700, color: isMatch ? 'var(--copper)' : 'var(--text)' }}>
+                            Tipo {fam.code} <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--dim)', fontWeight: 400 }}>({fam.pattern} · {fam.nLayers} capa{fam.nLayers !== 1 ? 's' : ''})</span>
+                            {isMatch && <span style={{ marginLeft: 6, fontSize: 8.5 }}>★ tu curva</span>}
+                          </div>
+                          <div style={{ fontSize: 9.5, color: 'var(--dim)', lineHeight: 1.55, marginTop: 2 }}>{fam.description}</div>
+                          <div style={{ fontSize: 9.5, color: 'var(--faint)', lineHeight: 1.55, marginTop: 2 }}>
+                            <strong style={{ color: 'var(--dim)' }}>Diseño:</strong> {fam.designImplication}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             <ExportBar
               module="nlayer"
               inputs={{ measured: result.measured }}
-              outputs={{ nLayers: best.nLayers, rhos: best.rhos, hs: best.hs, rmsError: best.rmsError, curve: best.curve }}
+              outputs={{ nLayers: best.nLayers, curveType: best.curveType, rhos: best.rhos, hs: best.hs, rmsError: best.rmsError, curve: best.curve }}
               norm={result.norm}
             />
 

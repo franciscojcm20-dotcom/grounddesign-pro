@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { api, type FaultAnalysisResult, type SplitFactorMethod, type ShortCircuitResult, type ShortCircuitFaultType, type GroundingConfig } from '@/lib/api';
+import { api, type FaultAnalysisResult, type SplitFactorMethod, type ShortCircuitResult, type ShortCircuitFaultType, type GroundingConfig, type LineImpedanceInput } from '@/lib/api';
 import {
   Field, SectionLabel, StatCard, CompBanner, ExpertItem,
   FundBtn, calcLayout, inputStyle, panelStyle, Th, TdMono,
@@ -18,6 +18,9 @@ const SC_DEFAULTS = {
   zn: 0,
   aterramiento: 'desconocido' as GroundingConfig,
 };
+
+// Tramo nuevo por defecto — valores típicos de una línea aérea de distribución MT.
+const NEW_LINE: LineImpedanceInput = { tipo: 'linea_aerea', longitudKm: 1, rOhmKm: 0.3, xOhmKm: 0.4 };
 
 const GROUNDING_OPTIONS: { id: GroundingConfig; label: string }[] = [
   { id: 'desconocido', label: 'No especificar' },
@@ -54,6 +57,7 @@ export function FaultAnalysisClient() {
 
   const [ifOrigin, setIfOrigin] = usePersistedState<'manual' | 'calculado'>('gdp-form-fault-analysis-ifOrigin', 'manual');
   const [sc, setSc] = usePersistedState('gdp-form-fault-analysis-sc', SC_DEFAULTS);
+  const [lineas, setLineas] = usePersistedState<LineImpedanceInput[]>('gdp-form-fault-analysis-lineas', []);
   const [scResult, setScResult] = useState<ShortCircuitResult | null>(null);
   const [scLoading, setScLoading] = useState(false);
   const [scError, setScError] = useState<string | null>(null);
@@ -64,6 +68,12 @@ export function FaultAnalysisClient() {
   function setSc_<K extends keyof typeof SC_DEFAULTS>(k: K, v: (typeof SC_DEFAULTS)[K]) { setSc(s => ({ ...s, [k]: v })); }
   function scNum(k: keyof typeof SC_DEFAULTS) { return (e: React.ChangeEvent<HTMLInputElement>) => setSc_(k, Number(e.target.value) as (typeof SC_DEFAULTS)[typeof k]); }
 
+  function setLinea<K extends keyof LineImpedanceInput>(i: number, k: K, v: LineImpedanceInput[K]) {
+    setLineas(ls => ls.map((l, j) => j === i ? { ...l, [k]: v } : l));
+  }
+  /** Tramos válidos que se envían al motor (se omiten los de longitud 0). */
+  const lineasActivas = lineas.filter(l => l.longitudKm > 0);
+
   async function calculateShortCircuit() {
     setScLoading(true); setScError(null);
     try {
@@ -72,6 +82,7 @@ export function FaultAnalysisClient() {
         ...(sc.trafoActivo ? {
           transformador: { activo: true, sn: sc.sn, un: sc.un, vcc: sc.vcc, xr: sc.xrTrafo, ...(sc.z0Factor > 0 ? { z0Factor: sc.z0Factor } : {}) },
         } : {}),
+        ...(lineasActivas.length > 0 ? { lineas: lineasActivas } : {}),
         tipoFalla: sc.tipoFalla,
         ...(sc.zn > 0 ? { zn: sc.zn } : {}),
         aterramiento: sc.aterramiento,
@@ -105,6 +116,7 @@ export function FaultAnalysisClient() {
           tipoFalla: sc.tipoFalla,
           fuente: { un: sc.un, ikss3: sc.ikss3, xr: sc.xrRed, ...(sc.ik1 > 0 ? { ik1: sc.ik1 } : {}) },
           ...(sc.trafoActivo ? { transformador: { sn: sc.sn, un: sc.un, vcc: sc.vcc, xr: sc.xrTrafo, ...(sc.z0Factor > 0 ? { z0Factor: sc.z0Factor } : {}) } } : {}),
+          ...(lineasActivas.length > 0 ? { lineas: lineasActivas } : {}),
           ...(sc.zn > 0 ? { zn: sc.zn } : {}),
           aterramiento: sc.aterramiento,
           Z1: scResult.Z1, Z0: scResult.Z0, z0Assumed: scResult.z0Assumed, memoria: scResult.memoria,
@@ -169,7 +181,7 @@ export function FaultAnalysisClient() {
         ) : (
           <div style={{ background: 'var(--panel3)', border: '1px solid var(--line)', borderRadius: 4, padding: '10px 10px 4px', marginBottom: 10 }}>
             <p style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 0, marginBottom: 8, lineHeight: 1.5 }}>
-              Calcula If modelando la red y el transformador por componentes simétricas (IEC 60909), en vez de asumir un valor.
+              Calcula If simulando el sistema de potencia con los elementos disponibles — red aguas arriba, transformador y tramos de línea/cable — por componentes simétricas (IEC 60909), en vez de asumir un valor.
             </p>
             <Field label="Tipo de falla" unit="">
               <div style={{ display: 'flex', gap: 6 }}>
@@ -238,6 +250,84 @@ export function FaultAnalysisClient() {
                 )}
               </>
             )}
+
+            {/* Tramos de línea aérea / cable en serie hasta el punto de falla */}
+            <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--dim)', margin: '10px 0 4px' }}>
+              Líneas y cables hasta el punto de falla
+            </div>
+            <p style={{ fontSize: 8.5, color: 'var(--faint)', margin: '0 0 6px', lineHeight: 1.5 }}>
+              Agrega los tramos del sistema entre la fuente (o el transformador) y el punto en estudio — cada uno suma su impedancia en serie y reduce If.
+            </p>
+            {lineas.map((l, i) => (
+              <div key={i} style={{ background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 4, padding: '8px 8px 2px', marginBottom: 6 }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+                  <select
+                    style={{ ...inputStyle, flex: 1 }}
+                    value={l.tipo}
+                    onChange={e => setLinea(i, 'tipo', e.target.value as LineImpedanceInput['tipo'])}
+                  >
+                    <option value="linea_aerea">Línea aérea</option>
+                    <option value="cable">Cable</option>
+                  </select>
+                  <button onClick={() => setLineas(ls => ls.filter((_, j) => j !== i))} title="Quitar tramo" style={{
+                    background: 'none', border: '1px solid var(--line)', color: 'var(--faint)', fontSize: 10,
+                    padding: '5px 9px', borderRadius: 3, cursor: 'pointer', flexShrink: 0,
+                  }}>✕</button>
+                </div>
+                <input
+                  style={{ ...inputStyle, marginBottom: 6 }}
+                  placeholder={`Nombre (opcional) — ej. Alimentador ${i + 1}`}
+                  value={l.nombre ?? ''}
+                  onChange={e => setLinea(i, 'nombre', e.target.value)}
+                />
+                <Field label="Longitud" unit="km">
+                  <input style={inputStyle} type="number" step="0.1" min="0" value={l.longitudKm}
+                    onChange={e => setLinea(i, 'longitudKm', Number(e.target.value))} />
+                </Field>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <div style={{ flex: 1 }}>
+                    <Field label="R₁" unit="Ω/km">
+                      <input style={inputStyle} type="number" step="0.01" min="0" value={l.rOhmKm}
+                        onChange={e => setLinea(i, 'rOhmKm', Number(e.target.value))} />
+                    </Field>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <Field label="X₁" unit="Ω/km">
+                      <input style={inputStyle} type="number" step="0.01" min="0" value={l.xOhmKm}
+                        onChange={e => setLinea(i, 'xOhmKm', Number(e.target.value))} />
+                    </Field>
+                  </div>
+                </div>
+                {sc.tipoFalla === 'monofasica_tierra' && (
+                  <>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <div style={{ flex: 1 }}>
+                        <Field label="R₀ (opcional)" unit="Ω/km">
+                          <input style={inputStyle} type="number" step="0.01" min="0" value={l.r0OhmKm ?? ''}
+                            onChange={e => setLinea(i, 'r0OhmKm', e.target.value === '' ? undefined : Number(e.target.value))} />
+                        </Field>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <Field label="X₀ (opcional)" unit="Ω/km">
+                          <input style={inputStyle} type="number" step="0.01" min="0" value={l.x0OhmKm ?? ''}
+                            onChange={e => setLinea(i, 'x0OhmKm', e.target.value === '' ? undefined : Number(e.target.value))} />
+                        </Field>
+                      </div>
+                    </div>
+                    <p style={{ fontSize: 8, color: 'var(--faint)', margin: '-2px 0 6px', lineHeight: 1.4 }}>
+                      Sin R₀/X₀ se asume Z₀ ≈ {l.tipo === 'cable' ? '1×Z₁ (cable con retorno por pantalla)' : '3×Z₁ (línea aérea típica)'} — la hipótesis queda registrada en la memoria.
+                    </p>
+                  </>
+                )}
+              </div>
+            ))}
+            <button onClick={() => setLineas(ls => [...ls, { ...NEW_LINE }])} style={{
+              width: '100%', background: 'var(--bg)', border: '1px dashed var(--line)', color: 'var(--dim)',
+              fontSize: 9.5, padding: 7, borderRadius: 3, cursor: 'pointer', marginBottom: 8,
+            }}>
+              + Agregar tramo de línea / cable
+            </button>
+
             {sc.tipoFalla === 'monofasica_tierra' && (
               <Field label="Zn — impedancia de puesta a tierra del neutro" unit="Ω">
                 <input style={inputStyle} type="number" step="0.1" value={sc.zn} onChange={scNum('zn')} />
