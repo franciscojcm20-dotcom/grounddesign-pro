@@ -1,7 +1,7 @@
 'use client';
 import { useMemo, useEffect, type ReactNode } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Text } from '@react-three/drei';
+import { OrbitControls, Text, Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 
 /**
@@ -58,6 +58,115 @@ export function JointMarker({ pos, color = COLOR_ROD }: { pos: [number, number, 
       <sphereGeometry args={[0.12, 12, 12]} />
       <meshStandardMaterial color={color} metalness={0.6} roughness={0.3} />
     </mesh>
+  );
+}
+
+// ─── Cotas dimensionales 3D ─────────────────────────────────────────────────
+//
+// Línea de cota con marcas en los extremos y etiqueta que siempre mira a la
+// cámara (billboard) — agrega la lectura de distancias reales (largo, ancho,
+// profundidad, separaciones) directamente sobre el modelo, sin depender de la
+// tabla de parámetros del panel lateral.
+
+const COLOR_DIM = '#8b94a3';
+
+export function DimensionLine({ start, end, label, scale }: {
+  start: [number, number, number]; end: [number, number, number]; label: string;
+  /** Tamaño de referencia de la escena (m) — dimensiona grosor de línea y fuente. */
+  scale: number;
+}) {
+  const r = Math.max(scale * 0.0035, 0.015);
+  const tickR = r * 3.2;
+  const fontSize = Math.max(scale * 0.032, 0.18);
+  const mid: [number, number, number] = [
+    (start[0] + end[0]) / 2, (start[1] + end[1]) / 2, (start[2] + end[2]) / 2,
+  ];
+  return (
+    <group>
+      <Segment start={start} end={end} radius={r} color={COLOR_DIM} />
+      <mesh position={start}><sphereGeometry args={[tickR, 8, 8]} /><meshBasicMaterial color={COLOR_DIM} /></mesh>
+      <mesh position={end}><sphereGeometry args={[tickR, 8, 8]} /><meshBasicMaterial color={COLOR_DIM} /></mesh>
+      <Billboard position={[mid[0], mid[1] + fontSize * 0.9, mid[2]]}>
+        <Text fontSize={fontSize} color="#c3cad6" anchorX="center" anchorY="bottom" outlineWidth={fontSize * 0.06} outlineColor="#0f1117">
+          {label}
+        </Text>
+      </Billboard>
+    </group>
+  );
+}
+
+// ─── Perfil estratigráfico del suelo (homologado del terreno) ───────────────
+//
+// Interpretación gráfica sutil del modelo de suelo activo del proyecto (VES
+// biestrato: ρ1/ρ2/h): un corte geológico translúcido como telón de fondo en
+// el plano trasero de la escena + un plano de interfaz muy tenue a la
+// profundidad h, para leer de un vistazo en qué capa trabaja cada electrodo
+// (¿las picas cruzan a la capa profunda conductiva?). El protagonista sigue
+// siendo el diseño de la malla — el terreno es contexto, no foco.
+
+export interface SoilProfile3D { rho1: number; rho2: number; h: number }
+
+/** Color de capa según ρ relativa: azulado = conductiva, ámbar = resistiva. */
+function layerColor(rho: number, rhoMin: number, rhoMax: number): string {
+  const lo = new THREE.Color('#3b82f6');
+  const hi = new THREE.Color('#b45309');
+  if (rhoMax <= rhoMin) return '#6b7280';
+  const t = (Math.log(rho) - Math.log(rhoMin)) / (Math.log(rhoMax) - Math.log(rhoMin));
+  return `#${lo.clone().lerp(hi, Math.min(Math.max(t, 0), 1)).getHexString()}`;
+}
+
+export function SoilLayers3D({ soil, size, depthExtent }: {
+  soil: SoilProfile3D; size: number;
+  /** m — profundidad máxima de interés de la escena (electrodo más profundo + margen). */
+  depthExtent: number;
+}) {
+  const bottom = Math.max(depthExtent, soil.h * 1.6, 1);
+  const h1 = Math.min(soil.h, bottom);
+  const rhoMin = Math.min(soil.rho1, soil.rho2);
+  const rhoMax = Math.max(soil.rho1, soil.rho2);
+  const c1 = layerColor(soil.rho1, rhoMin, rhoMax);
+  const c2 = layerColor(soil.rho2, rhoMin, rhoMax);
+  const zBack = -size / 2;
+  const fontSize = Math.max(size * 0.028, 0.16);
+  const labelX = -size / 2 + fontSize * 0.6;
+
+  const fmt = (n: number) => n >= 100 ? n.toFixed(0) : n.toFixed(1);
+
+  return (
+    <group>
+      {/* Corte geológico en el plano trasero — banda por capa, muy translúcida */}
+      <mesh position={[0, -h1 / 2, zBack]}>
+        <planeGeometry args={[size, h1]} />
+        <meshBasicMaterial color={c1} transparent opacity={0.14} side={THREE.DoubleSide} depthWrite={false} />
+      </mesh>
+      {bottom > h1 && (
+        <mesh position={[0, -(h1 + (bottom - h1) / 2), zBack]}>
+          <planeGeometry args={[size, bottom - h1]} />
+          <meshBasicMaterial color={c2} transparent opacity={0.14} side={THREE.DoubleSide} depthWrite={false} />
+        </mesh>
+      )}
+      {/* Línea de interfaz sobre el corte */}
+      <Segment start={[-size / 2, -h1, zBack]} end={[size / 2, -h1, zBack]} radius={Math.max(size * 0.003, 0.012)} color="#8b94a3" />
+
+      {/* Plano de interfaz horizontal (área completa, casi imperceptible) — permite
+          leer contra las varillas si el electrodo alcanza la capa profunda */}
+      {bottom > h1 && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -h1, 0]}>
+          <planeGeometry args={[size, size]} />
+          <meshBasicMaterial color={c2} transparent opacity={0.05} side={THREE.DoubleSide} depthWrite={false} />
+        </mesh>
+      )}
+
+      {/* Etiquetas de capa: ρ y rango de profundidad, ancladas al corte */}
+      <Text position={[labelX, -h1 / 2, zBack + 0.05]} fontSize={fontSize} color="#9aa3b0" anchorX="left" anchorY="middle" outlineWidth={fontSize * 0.06} outlineColor="#0f1117">
+        {`ρ1 = ${fmt(soil.rho1)} Ω·m · 0–${fmt(soil.h)} m`}
+      </Text>
+      {bottom > h1 && (
+        <Text position={[labelX, -(h1 + (bottom - h1) / 2), zBack + 0.05]} fontSize={fontSize} color="#9aa3b0" anchorX="left" anchorY="middle" outlineWidth={fontSize * 0.06} outlineColor="#0f1117">
+          {`ρ2 = ${fmt(soil.rho2)} Ω·m · >${fmt(soil.h)} m (semi-espacio)`}
+        </Text>
+      )}
+    </group>
   );
 }
 

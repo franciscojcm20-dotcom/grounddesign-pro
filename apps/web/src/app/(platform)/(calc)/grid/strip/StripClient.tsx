@@ -10,6 +10,7 @@ import {
 const StripScene3D = dynamic(() => import('@/components/ui/Topology3D').then(m => m.StripScene3D), { ssr: false });
 import { ExportBar } from '@/components/ui/ExportBar';
 import { SoilRhoField } from '@/components/ui/SoilRhoField';
+import { useSoilModel } from '@/context/SoilModelContext';
 import { GelPanel } from '@/components/ui/GelPanel';
 import { ConductorPanel } from '@/components/ui/ConductorPanel';
 import { DiagnosisPanel, type ComplianceCheck } from '@/components/ui/DiagnosisPanel';
@@ -46,6 +47,7 @@ function StripDiagram({ L, h }: { L: number; h: number }) {
 
 export function StripClient() {
   const faultAnalysis = useFaultAnalysis();
+  const soilModel3d = useSoilModel();
   const { profile, relaxedConditionsMet } = useNormativeProfile();
   const [form, setForm] = usePersistedState('gdp-form-strip', DEFAULTS);
   const [gel, setGel] = useState<GelParams | null>(null);
@@ -164,7 +166,7 @@ export function StripClient() {
             ))}
           </div>
           {view3d ? (
-            <StripScene3D L={form.L} h={form.h} />
+            <StripScene3D L={form.L} h={form.h} soil={soilModel3d.model} />
           ) : (
             <StripDiagram L={form.L} h={form.h} />
           )}

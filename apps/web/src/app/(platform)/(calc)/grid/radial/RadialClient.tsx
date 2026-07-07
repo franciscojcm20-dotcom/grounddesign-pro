@@ -10,6 +10,7 @@ import {
 const RadialScene3D = dynamic(() => import('@/components/ui/Topology3D').then(m => m.RadialScene3D), { ssr: false });
 import { ExportBar } from '@/components/ui/ExportBar';
 import { SoilRhoField } from '@/components/ui/SoilRhoField';
+import { useSoilModel } from '@/context/SoilModelContext';
 import { GelPanel } from '@/components/ui/GelPanel';
 import { ConductorPanel } from '@/components/ui/ConductorPanel';
 import { DiagnosisPanel, type ComplianceCheck } from '@/components/ui/DiagnosisPanel';
@@ -51,6 +52,7 @@ function StarDiagram({ n, L }: { n: number; L: number }) {
 
 export function RadialClient() {
   const faultAnalysis = useFaultAnalysis();
+  const soilModel3d = useSoilModel();
   const { profile, relaxedConditionsMet } = useNormativeProfile();
   const [form, setForm] = usePersistedState('gdp-form-radial', DEFAULTS);
   const [gel, setGel] = useState<GelParams | null>(null);
@@ -182,7 +184,7 @@ export function RadialClient() {
             ))}
           </div>
           {view3d ? (
-            <RadialScene3D n={form.n} L={form.L} h={form.h} />
+            <RadialScene3D n={form.n} L={form.L} h={form.h} soil={soilModel3d.model} />
           ) : (
             <StarDiagram n={form.n} L={form.L} />
           )}

@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/CalcShared';
 import { ExportBar } from '@/components/ui/ExportBar';
 import { SoilRhoField } from '@/components/ui/SoilRhoField';
+import { useSoilModel } from '@/context/SoilModelContext';
 import { GelPanel } from '@/components/ui/GelPanel';
 import { ConductorPanel } from '@/components/ui/ConductorPanel';
 import { DiagnosisPanel, type ComplianceCheck } from '@/components/ui/DiagnosisPanel';
@@ -101,6 +102,7 @@ function GridDiagram({ largo, ancho, nL, nW, nVarillas }: {
 
 export function GridClient() {
   const faultAnalysis = useFaultAnalysis();
+  const soilModel3d = useSoilModel();
   const { profile, relaxedConditionsMet } = useNormativeProfile();
   const [form, setForm] = usePersistedState('gdp-form-grid', DEFAULTS);
   const [gel, setGel] = useState<GelParams | null>(null);
@@ -203,6 +205,7 @@ export function GridClient() {
               largo={form.largo} ancho={form.ancho}
               nL={form.nConductoresL} nW={form.nConductoresW}
               profundidad={form.profundidad} nVarillas={form.nVarillas} longVarilla={form.longVarilla}
+              soil={soilModel3d.model}
             />
           ) : (
             <GridDiagram

@@ -10,6 +10,7 @@ import {
 const CombinedScene3D = dynamic(() => import('@/components/ui/Topology3D').then(m => m.CombinedScene3D), { ssr: false });
 import { ExportBar } from '@/components/ui/ExportBar';
 import { SoilRhoField } from '@/components/ui/SoilRhoField';
+import { useSoilModel } from '@/context/SoilModelContext';
 import { GelPanel } from '@/components/ui/GelPanel';
 import { ConductorPanel } from '@/components/ui/ConductorPanel';
 import { DiagnosisPanel, type ComplianceCheck } from '@/components/ui/DiagnosisPanel';
@@ -67,6 +68,7 @@ function CombinedDiagram({ largo, ancho, nL, nW, nRods }: { largo: number; ancho
 
 export function CombinedClient() {
   const faultAnalysis = useFaultAnalysis();
+  const soilModel3d = useSoilModel();
   const { profile, relaxedConditionsMet } = useNormativeProfile();
   const [form, setForm] = usePersistedState('gdp-form-combined', DEFAULTS);
   const [gel, setGel] = useState<GelParams | null>(null);
@@ -211,6 +213,7 @@ export function CombinedClient() {
             <CombinedScene3D
               largo={form.largo} ancho={form.ancho} nL={form.nConductoresL} nW={form.nConductoresW}
               profundidad={form.profundidad} nRods={form.nRods} rodLength={form.rodLength}
+              soil={soilModel3d.model}
             />
           ) : (
             <CombinedDiagram largo={form.largo} ancho={form.ancho} nL={form.nConductoresL} nW={form.nConductoresW} nRods={form.nRods} />

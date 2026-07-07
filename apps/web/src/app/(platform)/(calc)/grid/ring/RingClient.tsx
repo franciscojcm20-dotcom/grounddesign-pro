@@ -10,6 +10,7 @@ import {
 const RingScene3D = dynamic(() => import('@/components/ui/Topology3D').then(m => m.RingScene3D), { ssr: false });
 import { ExportBar } from '@/components/ui/ExportBar';
 import { SoilRhoField } from '@/components/ui/SoilRhoField';
+import { useSoilModel } from '@/context/SoilModelContext';
 import { GelPanel } from '@/components/ui/GelPanel';
 import { ConductorPanel } from '@/components/ui/ConductorPanel';
 import { DiagnosisPanel, type ComplianceCheck } from '@/components/ui/DiagnosisPanel';
@@ -48,6 +49,7 @@ function RingDiagram({ largo, ancho }: { largo: number; ancho: number }) {
 
 export function RingClient() {
   const faultAnalysis = useFaultAnalysis();
+  const soilModel3d = useSoilModel();
   const { profile, relaxedConditionsMet } = useNormativeProfile();
   const [form, setForm] = usePersistedState('gdp-form-ring', DEFAULTS);
   const [gel, setGel] = useState<GelParams | null>(null);
@@ -186,7 +188,7 @@ export function RingClient() {
             ))}
           </div>
           {view3d ? (
-            <RingScene3D largo={form.largo} ancho={form.ancho} h={form.h} />
+            <RingScene3D largo={form.largo} ancho={form.ancho} h={form.h} soil={soilModel3d.model} />
           ) : (
             <RingDiagram largo={form.largo} ancho={form.ancho} />
           )}
