@@ -37,12 +37,12 @@ Monorepo gestionado con pnpm workspaces.
   se dispone de un estudio de cortocircuito existente.
 
 **Diseño de malla** (cada uno con vista 2D y vista 3D interactiva rotable)
-- Resistencia de malla rectangular — ecuación de Sverak, IEEE Std 80-2013 Cl. 14.2
+- Malla + picas combinada — Schwarz (1954), IEEE Std 80-2013 §14.5 — el sistema más utilizado en la práctica (malla rectangular reforzada con electrodos verticales); internamente combina Rg (Sverak) y Rr (Dwight/Sunde)
+- Resistencia de malla rectangular sola — ecuación de Sverak, IEEE Std 80-2013 Cl. 14.2
 - Electrodos verticales (picas) en paralelo — Dwight/Sunde, IEEE 80-2013 Annex B.1
 - Conductor horizontal enterrado — Dwight, IEEE 80-2013 Annex B.3
 - Sistema radial / estrella — Laurent-Niemann
 - Anillo perimetral — Sunde
-- Malla + picas combinada — Schwarz (1954)
 - Aditivo químico gel (mejoramiento de resistividad) — Dwight/Sunde, modelo de cilindros concéntricos
 
 **Verificación**

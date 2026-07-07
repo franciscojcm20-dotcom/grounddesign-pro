@@ -20,12 +20,15 @@ export function ModulesSidebar() {
       { label: t('moduleFaultAnalysis'), href: '/fault-analysis', icon: '⚡' },
     ]},
     { group: t('groupGridDesign'), items: [
+      // Malla + picas (Schwarz) primero: es el sistema más utilizado en la práctica
+      // (malla rectangular reforzada con electrodos verticales); la malla rectangular
+      // sola (Sverak) es el caso particular sin picas, no el método principal.
+      { label: t('moduleGridCombined'),    href: '/grid/combined',     icon: '⊞' },
       { label: t('moduleGridRectangular'), href: '/grid/resistance',   icon: '⬡' },
       { label: t('moduleGridRod'),         href: '/grid/rod',          icon: '⬇' },
       { label: t('moduleGridStrip'),       href: '/grid/strip',        icon: '─' },
       { label: t('moduleGridRadial'),      href: '/grid/radial',       icon: '✦' },
       { label: t('moduleGridRing'),        href: '/grid/ring',         icon: '◯' },
-      { label: t('moduleGridCombined'),    href: '/grid/combined',     icon: '⊞' },
     ]},
     { group: t('groupVerification'), items: [
       { label: t('moduleVoltages'), href: '/voltages', icon: '⚠' },
