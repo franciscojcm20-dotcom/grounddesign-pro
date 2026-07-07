@@ -9,6 +9,17 @@ import type { ValorizacionResult, CubicacionInput, PreciosUnitariosCLP } from '@
 
 // ─── Module adapters — shape raw calc output into ReportSection ───────────────
 
+/**
+ * Recomendación estándar para todo sistema de puesta a tierra proyectado: dejar
+ * al menos un punto de acceso (cámara o cámarilla de registro) sobre el
+ * conductor o electrodo, exigido por la normativa eléctrica de instalación de
+ * la generalidad de los países soportados (ej. NCh Elec. 4/2003 en Chile,
+ * RETIE en Colombia, REBT en España) para poder medir y verificar
+ * periódicamente la resistencia de puesta a tierra sin excavar.
+ */
+const INSPECTION_CHAMBER_RECOMMENDATION =
+  'Recomendación constructiva: dejar al menos una cámara o cámarilla de registro accesible sobre el conductor/electrodo de puesta a tierra (típicamente en el punto de conexión al sistema o en cada electrodo principal), conforme a la normativa eléctrica de instalación aplicable en el país del proyecto — permite medir y verificar periódicamente la resistencia de puesta a tierra sin necesidad de excavar.';
+
 function wennerSection(inputs: Record<string, unknown>, outputs: Record<string, unknown>): ReportSection {
   const pts = (outputs['points'] as Array<{ a: number; r: number; rhoA: number }>) ?? [];
   return {
@@ -78,6 +89,7 @@ function gridSection(inputs: Record<string, unknown>, outputs: Record<string, un
         ? 'Juicio de ingeniería: la geometría propuesta es adecuada para la resistividad del sitio; no se identifican acciones correctivas obligatorias, sin perjuicio de optimizaciones de costo.'
         : 'Juicio de ingeniería: se recomienda aumentar la longitud total de conductor (más conductores o varillas) o ampliar el área de la malla; alternativamente, evaluar tratamiento químico del suelo si la resistividad es el factor limitante.',
       'Limitación normativa: el criterio de Rg por sí solo no garantiza la seguridad de las personas — la verificación definitiva del diseño es el cumplimiento de las tensiones de paso y contacto (IEEE Std 80-2013 Cl. 16), presentadas en la sección correspondiente de este informe.',
+      INSPECTION_CHAMBER_RECOMMENDATION,
     ],
   };
 }
@@ -188,6 +200,7 @@ function rodSection(inputs: Record<string, unknown>, outputs: Record<string, unk
       'Fórmula de Dwight (resistencia de una pica): R1 = (ρ/2πL)·[ln(4L/a) − 1]. Fórmula de Sunde (resistencia mutua entre dos picas): Rm = (ρ/2πL)·[ln(2L/s) − 1]. Combinación en paralelo para n picas: Rn = (R1 + (n−1)·Rm)/n.',
       'Hipótesis del modelo: picas verticales de longitud L y radio a uniformemente distribuidas en línea con separación s constante; el modelo pierde precisión para arreglos no lineales o muy irregulares, donde se recomienda un análisis numérico de campo.',
       'Juicio de ingeniería: para separaciones s ≥ 2L el acoplamiento mutuo es reducido y el beneficio marginal de cada pica adicional es cercano al de una pica aislada; para s < 2L, agregar más picas tiene retornos decrecientes y puede ser más eficiente alargar las picas existentes.',
+      INSPECTION_CHAMBER_RECOMMENDATION,
     ],
   };
 }
@@ -215,6 +228,7 @@ function stripSection(inputs: Record<string, unknown>, outputs: Record<string, u
       'Fórmula de Dwight: R = (ρ/πL)·[ln(2L²/(a·h)) − 1], donde a es el radio del conductor y h la profundidad de enterramiento.',
       'Hipótesis del modelo: conductor recto de longitud L; para trazados curvos o en L el modelo es una aproximación conservadora.',
       'Juicio de ingeniería: dado que R decrece aproximadamente con 1/L, este electrodo requiere mayor longitud de conductor que una malla equivalente para alcanzar la misma resistencia; es más adecuado como complemento de otros electrodos que como solución única en suelos de alta resistividad.',
+      INSPECTION_CHAMBER_RECOMMENDATION,
     ],
   };
 }
@@ -245,6 +259,7 @@ function radialSection(inputs: Record<string, unknown>, outputs: Record<string, 
       'Fórmula de Niemann: R★ = (ρ/(π·n·L))·[ln(2L²/(a·h)) − 1 + (n−1)·(h/L)], que corrige la resistencia de un radial aislado por el número de radiales y su acoplamiento mutuo en el punto de conexión común.',
       'Hipótesis del modelo: radiales de igual longitud L distribuidos con igual separación angular (360°/n); geometrías con radiales de longitud desigual requieren un análisis por superposición.',
       'Juicio de ingeniería: útil en terrenos alargados o con restricciones de espacio donde una malla rectangular no es viable (ej. líneas de transmisión, torres); el beneficio marginal de agregar radiales decrece por el acoplamiento mutuo en el centro.',
+      INSPECTION_CHAMBER_RECOMMENDATION,
     ],
   };
 }
@@ -273,6 +288,7 @@ function ringSection(inputs: Record<string, unknown>, outputs: Record<string, un
       'Fórmula de Sunde: R = (ρ/(2π²·r))·[ln(8r/a) + ln(2r/h) − 2], donde r = P/(2π) es el radio equivalente del anillo (P = perímetro real, sea circular o rectangular).',
       'Hipótesis del modelo: anillo aproximadamente circular o de aspecto cercano al circular; para geometrías muy alargadas (relación largo/ancho alta) el radio equivalente pierde representatividad y se recomienda verificar con el método de malla rectangular.',
       'Juicio de ingeniería: la resistencia depende fuertemente del radio equivalente (por ende, del perímetro) — ampliar la huella del anillo es la acción más efectiva para reducir Rring en suelos de alta resistividad.',
+      INSPECTION_CHAMBER_RECOMMENDATION,
     ],
   };
 }
@@ -306,6 +322,7 @@ function combinedSection(inputs: Record<string, unknown>, outputs: Record<string
       'Fórmula de Schwarz: Rc = (Rg·Rr − Rmr²)/(Rg + Rr − 2·Rmr), donde Rg es la resistencia de la malla sola (Sverak), Rr la resistencia de las picas en paralelo (Dwight/Sunde) y Rmr la resistencia mutua de acoplamiento entre ambos sistemas.',
       'Hipótesis del modelo: picas distribuidas dentro o en el perímetro del área de la malla; el término de acoplamiento Rmr es una aproximación y su precisión disminuye si las picas están muy alejadas del área de la malla.',
       'Juicio de ingeniería: esta topología es especialmente efectiva en suelos estratificados donde la capa profunda tiene menor resistividad que la superficial (perfil tipo K); si el perfil es inverso (capa profunda de mayor resistividad), el beneficio de las picas adicionales es marginal y se debe priorizar la ampliación de la malla.',
+      INSPECTION_CHAMBER_RECOMMENDATION,
     ],
   };
 }

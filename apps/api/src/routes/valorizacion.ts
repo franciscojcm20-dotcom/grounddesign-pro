@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { computeValorizacion, estimateTrenchVolume, DEFAULT_PRECIOS_CLP, type PreciosUnitariosCLP } from '@gdp/engines-math';
+import { computeValorizacion, estimateTrenchVolume, DEFAULT_PRECIOS_CLP, type PreciosUnitariosCLP, type CubicacionInput } from '@gdp/engines-math';
 import { parseBody, pos, nonNeg, intNonNeg } from '../lib/validate.ts';
 
 const preciosSchema = z.object({
@@ -8,10 +8,18 @@ const preciosSchema = z.object({
   gelPorKg: pos(), excavacionPorM3: pos(), manoObraPct: nonNeg(), imprevistosPct: nonNeg(),
 }).partial();
 
+const extraItemSchema = z.object({
+  item: z.string().trim().min(1).max(200),
+  unidad: z.string().trim().min(1).max(20),
+  cantidad: nonNeg(),
+  precioUnitCLP: nonNeg(),
+});
+
 const cubicacionBodySchema = z.object({
   conductorMetros: pos(), conductorSeccionMm2: pos(),
   varillasCantidad: intNonNeg(), varillaLongitudM: nonNeg(),
   conectoresCantidad: intNonNeg(), gelActivo: z.boolean(), gelKg: nonNeg(), zanjaM3: nonNeg(),
+  extraItems: z.array(extraItemSchema).max(30).optional(),
   precios: preciosSchema.optional(),
 });
 
@@ -25,8 +33,9 @@ export async function valorizacionRoutes(app: FastifyInstance): Promise<void> {
   app.post('/', async (req, reply) => {
     const body = parseBody(cubicacionBodySchema, req, reply);
     if (!body) return;
-    const { precios, ...input } = body;
+    const { precios, extraItems, ...rest } = body;
     const fullPrecios = { ...DEFAULT_PRECIOS_CLP, ...precios } as PreciosUnitariosCLP;
+    const input: CubicacionInput = { ...rest, ...(extraItems ? { extraItems } : {}) };
     const result = computeValorizacion(input, fullPrecios);
     return { ...result, precios: fullPrecios, norm: 'Cubicación propia — sin fuente de precios externa' };
   });

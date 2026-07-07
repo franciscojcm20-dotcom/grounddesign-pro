@@ -1300,6 +1300,13 @@ export function computeLightning(p: LightningInput): LightningResult {
 // Los precios unitarios son de referencia y siempre editables por el usuario
 // antes de emitir el entregable — no provienen de ninguna API de precios.
 
+export interface CustomBOQItemInput {
+  item:          string;
+  unidad:        string;
+  cantidad:      number;
+  precioUnitCLP: number;
+}
+
 export interface CubicacionInput {
   conductorMetros:      number;  // m — longitud total de conductor (malla + picas + radiales, etc.)
   conductorSeccionMm2:  number;  // mm² — sección del conductor seleccionado (Onderdonk)
@@ -1309,6 +1316,13 @@ export interface CubicacionInput {
   gelActivo:            boolean;
   gelKg:                number;  // kg — aditivo químico de baja resistividad
   zanjaM3:              number;  // m³ — excavación y relleno de zanja
+  /**
+   * Ítems adicionales agregados manualmente por el usuario (ej. cámaras de
+   * registro, materiales no cubiertos por la cubicación automática). La
+   * cubicación se deriva automáticamente de la geometría calculada, pero el
+   * profesional puede complementarla con cualquier partida adicional.
+   */
+  extraItems?: CustomBOQItemInput[];
 }
 
 export interface PreciosUnitariosCLP {
@@ -1395,6 +1409,14 @@ export function computeValorizacion(
       unidad: 'm³', cantidad: round2(input.zanjaM3),
       precioUnitCLP: precios.excavacionPorM3,
       subtotalCLP: round2(input.zanjaM3 * precios.excavacionPorM3),
+    });
+  }
+  for (const extra of input.extraItems ?? []) {
+    if (extra.cantidad <= 0 || !extra.item.trim()) continue;
+    items.push({
+      item: extra.item.trim(), unidad: extra.unidad || 'un',
+      cantidad: round2(extra.cantidad), precioUnitCLP: round2(extra.precioUnitCLP),
+      subtotalCLP: round2(extra.cantidad * extra.precioUnitCLP),
     });
   }
 

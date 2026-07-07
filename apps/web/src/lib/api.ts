@@ -201,10 +201,13 @@ export async function downloadReport(meta: ReportMeta, sections: ReportSectionIn
 
 // ─── Cubicación y Valorización Económica ───────────────────────────────────────
 
+export interface CustomBOQItemInput { item: string; unidad: string; cantidad: number; precioUnitCLP: number }
 export interface CubicacionInput {
   conductorMetros: number; conductorSeccionMm2: number;
   varillasCantidad: number; varillaLongitudM: number;
   conectoresCantidad: number; gelActivo: boolean; gelKg: number; zanjaM3: number;
+  /** Ítems adicionales agregados manualmente por el usuario (ej. cámaras de registro). */
+  extraItems?: CustomBOQItemInput[];
 }
 export interface PreciosUnitariosCLP {
   conductorPorMetroPorMm2: number; varillaPorUnidad: number; conectorPorUnidad: number;
@@ -216,22 +219,23 @@ export interface ValorizacionResult {
   total: number; moneda: 'CLP'; precios: PreciosUnitariosCLP; norm: string;
 }
 
+/** Genera el PDF de valorización en el servidor y devuelve el blob — base común de la previsualización y la descarga. */
+export async function fetchValorizacionPdfBlob(
+  meta: ReportMeta,
+  cubicacion: CubicacionInput,
+  precios: PreciosUnitariosCLP,
+  valorizacion: ValorizacionResult,
+): Promise<Blob> {
+  return fetchReportBlob(meta, [{ module: 'valorizacion', inputs: { ...cubicacion, precios }, outputs: valorizacion as unknown as Record<string, unknown> }]);
+}
+
 export async function downloadValorizacionPdf(
   meta: ReportMeta,
   cubicacion: CubicacionInput,
   precios: PreciosUnitariosCLP,
   valorizacion: ValorizacionResult,
 ): Promise<void> {
-  const res = await fetch(`${BASE}/api/v1/report`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      meta,
-      sections: [{ module: 'valorizacion', inputs: { ...cubicacion, precios }, outputs: valorizacion }],
-    }),
-  });
-  if (!res.ok) throw new Error('Error al generar la valorización en PDF');
-  const blob = await res.blob();
+  const blob = await fetchValorizacionPdfBlob(meta, cubicacion, precios, valorizacion);
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href     = url;

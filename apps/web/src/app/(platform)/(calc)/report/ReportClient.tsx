@@ -2,9 +2,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import {
-  downloadValorizacionPdf, api, fetchReportBlob,
+  api, fetchReportBlob, fetchValorizacionPdfBlob,
   downloadGridDxf, downloadRodDxf, downloadStripDxf, downloadRadialDxf, downloadRingDxf, downloadCombinedDxf,
-  type ReportMeta, type ReportSectionInput, type CubicacionInput, type PreciosUnitariosCLP, type ValorizacionResult,
+  type ReportMeta, type ReportSectionInput, type CubicacionInput, type CustomBOQItemInput, type PreciosUnitariosCLP, type ValorizacionResult,
 } from '@/lib/api';
 import { useToast } from '@/context/ToastContext';
 import { useAuth } from '@/context/AuthContext';
@@ -52,6 +52,12 @@ function deriveCubicacion(module: string, inputs: Record<string, unknown>, outpu
     conectoresCantidad, gelActivo,
     gelKg: gelActivo ? Math.round(conductorMetros * 0.5 * 10) / 10 : 0,
     zanjaM3: Math.round(conductorMetros * 0.3 * 0.6 * 10) / 10,
+    // Sugerencia por defecto (editable/eliminable): cámara de registro para
+    // verificación y medición periódica del sistema, práctica exigida en la
+    // normativa eléctrica de instalación de la mayoría de los países soportados.
+    extraItems: [
+      { item: 'Cámara de registro de puesta a tierra', unidad: 'un', cantidad: 1, precioUnitCLP: 45000 },
+    ],
   };
 }
 
@@ -201,6 +207,8 @@ export function ReportClient() {
   const [valorizacion, setValorizacion] = useState<ValorizacionResult | null>(null);
   const [valLoading, setValLoading] = useState(false);
   const [valPdfLoading, setValPdfLoading] = useState(false);
+  const [valPreviewUrl, setValPreviewUrl] = useState<string | null>(null);
+  const valPreviewFrameRef = useRef<HTMLIFrameElement | null>(null);
 
   // ── Plano DXF ──
   const [dxfResultId, setDxfResultId] = useState<string | null>(null);
@@ -317,22 +325,59 @@ export function ReportClient() {
     } finally { setValLoading(false); }
   }
 
-  async function exportValorizacionPdf() {
+  function valorizacionMeta(): ReportMeta {
+    return {
+      projectName: project!.name,
+      projectCode: `GDP-${project!.id.slice(0, 8).toUpperCase()}-VAL`,
+      engineer: user?.name ?? 'Ingeniero de proyecto',
+      ...(user?.designerTitle ? { engineerTitle: user.designerTitle } : {}),
+      ...(user?.designerLicense ? { engineerLicense: user.designerLicense } : {}),
+      ...(user?.designerCompany ? { company: user.designerCompany } : {}),
+      ...(user?.designerLogo ? { logoDataUrl: user.designerLogo } : {}),
+      ...(project!.description ? { location: project!.description } : {}),
+      norm: `${normativeProfile.label} — ${normativeProfile.standard}`,
+    };
+  }
+
+  async function openValPreview() {
     if (!project || !cubicacion || !precios || !valorizacion) return;
     setValPdfLoading(true);
     try {
-      const meta: ReportMeta = {
-        projectName: project.name,
-        projectCode: `GDP-${project.id.slice(0, 8).toUpperCase()}-VAL`,
-        engineer: 'Ingeniero de proyecto',
-        location: project.description ?? undefined,
-        norm: `${normativeProfile.label} — ${normativeProfile.standard}`,
-      };
-      await downloadValorizacionPdf(meta, cubicacion, precios, valorizacion);
-      toast.success('Valorización económica exportada en PDF');
+      const blob = await fetchValorizacionPdfBlob(valorizacionMeta(), cubicacion, precios, valorizacion);
+      if (valPreviewUrl) URL.revokeObjectURL(valPreviewUrl);
+      setValPreviewUrl(URL.createObjectURL(blob));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Error al generar el PDF');
+      toast.error(e instanceof Error ? e.message : 'Error al generar la previsualización');
     } finally { setValPdfLoading(false); }
+  }
+
+  function closeValPreview() {
+    if (valPreviewUrl) URL.revokeObjectURL(valPreviewUrl);
+    setValPreviewUrl(null);
+  }
+
+  function downloadValPdf() {
+    if (!valPreviewUrl || !project) return;
+    const a = document.createElement('a');
+    a.href = valPreviewUrl;
+    a.download = `GDP-valorizacion-${project.id.slice(0, 8).toUpperCase()}.pdf`;
+    a.click();
+    toast.success('Valorización económica descargada en PDF');
+  }
+
+  function printValPdf() {
+    valPreviewFrameRef.current?.contentWindow?.print();
+  }
+
+  // ── Ítems adicionales editables de la cubicación (ej. cámaras de registro) ──
+  function addExtraItem() {
+    setCubicacion(c => c && ({ ...c, extraItems: [...(c.extraItems ?? []), { item: '', unidad: 'un', cantidad: 1, precioUnitCLP: 0 }] }));
+  }
+  function updateExtraItem<K extends keyof CustomBOQItemInput>(i: number, k: K, v: CustomBOQItemInput[K]) {
+    setCubicacion(c => c && ({ ...c, extraItems: (c.extraItems ?? []).map((it, j) => j === i ? { ...it, [k]: v } : it) }));
+  }
+  function removeExtraItem(i: number) {
+    setCubicacion(c => c && ({ ...c, extraItems: (c.extraItems ?? []).filter((_, j) => j !== i) }));
   }
 
   async function exportDxf() {
@@ -759,6 +804,45 @@ export function ReportClient() {
                     </div>
 
                     <div style={panelStyle}>
+                      <SectionLabel>Ítems adicionales (editable)</SectionLabel>
+                      <p style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: -6, marginBottom: 10, lineHeight: 1.5 }}>
+                        La cubicación de conductor, varillas, conectores y excavación se lee automáticamente de la geometría
+                        calculada del sistema elegido. Agrega aquí cualquier partida adicional que necesites incluir
+                        (cámaras de registro, señalética, materiales no cubiertos por la cubicación automática, etc.).
+                      </p>
+                      {(cubicacion.extraItems ?? []).map((it, i) => (
+                        <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 0.8fr 0.8fr 1fr auto', gap: 6, marginBottom: 6, alignItems: 'end' }}>
+                          <Field label={i === 0 ? 'Ítem' : ''} unit="">
+                            <input style={inputStyle} value={it.item} placeholder="Nombre del ítem"
+                              onChange={e => updateExtraItem(i, 'item', e.target.value)} />
+                          </Field>
+                          <Field label={i === 0 ? 'Unidad' : ''} unit="">
+                            <input style={inputStyle} value={it.unidad}
+                              onChange={e => updateExtraItem(i, 'unidad', e.target.value)} />
+                          </Field>
+                          <Field label={i === 0 ? 'Cant.' : ''} unit="">
+                            <input style={inputStyle} type="number" value={it.cantidad}
+                              onChange={e => updateExtraItem(i, 'cantidad', Number(e.target.value))} />
+                          </Field>
+                          <Field label={i === 0 ? 'P. Unit. CLP' : ''} unit="">
+                            <input style={inputStyle} type="number" value={it.precioUnitCLP}
+                              onChange={e => updateExtraItem(i, 'precioUnitCLP', Number(e.target.value))} />
+                          </Field>
+                          <button onClick={() => removeExtraItem(i)} title="Quitar ítem" style={{
+                            background: 'none', border: '1px solid var(--line)', color: 'var(--faint)', fontSize: 10,
+                            padding: '8px 10px', borderRadius: 3, cursor: 'pointer', height: 30,
+                          }}>✕</button>
+                        </div>
+                      ))}
+                      <button onClick={addExtraItem} style={{
+                        width: '100%', background: 'var(--bg)', border: '1px dashed var(--line)', color: 'var(--dim)',
+                        fontSize: 9.5, padding: 7, borderRadius: 3, cursor: 'pointer', marginTop: 4,
+                      }}>
+                        + Agregar ítem
+                      </button>
+                    </div>
+
+                    <div style={panelStyle}>
                       <SectionLabel purple>Precios unitarios de referencia (CLP)</SectionLabel>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
                         <Field label="Conductor" unit="CLP/m·mm²">
@@ -823,12 +907,12 @@ export function ReportClient() {
                             </tbody>
                           </table>
                         </div>
-                        <button onClick={exportValorizacionPdf} disabled={valPdfLoading} style={{
+                        <button onClick={openValPreview} disabled={valPdfLoading} style={{
                           background: 'var(--panel)', border: '1px solid var(--copper-soft)', color: 'var(--copper)',
                           fontWeight: 700, fontSize: 11, padding: '9px 16px', borderRadius: 3, cursor: 'pointer',
                           opacity: valPdfLoading ? 0.6 : 1,
                         }}>
-                          {valPdfLoading ? 'Generando…' : '📄 Exportar valorización en PDF (portada + índice)'}
+                          {valPdfLoading ? 'Generando…' : '👁 Previsualizar valorización en PDF'}
                         </button>
                       </>
                     )}
@@ -1134,6 +1218,46 @@ export function ReportClient() {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal de previsualización de la valorización económica ── */}
+      {valPreviewUrl && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.72)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+        }}>
+          <div style={{
+            width: 'min(900px, 96vw)', height: 'min(820px, 92vh)', background: 'var(--panel)',
+            border: '1px solid var(--line)', borderRadius: 6, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid var(--line)', flexShrink: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 700 }}>Vista previa — Cubicación y Valorización</div>
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                <button onClick={downloadValPdf} style={{
+                  background: 'var(--copper)', border: 'none', color: '#fff', fontWeight: 700,
+                  fontSize: 10.5, padding: '7px 14px', borderRadius: 3, cursor: 'pointer',
+                }}>
+                  ↓ Descargar PDF
+                </button>
+                <button onClick={printValPdf} style={{
+                  background: 'var(--panel)', border: '1px solid var(--copper)', color: 'var(--copper)', fontWeight: 700,
+                  fontSize: 10.5, padding: '7px 14px', borderRadius: 3, cursor: 'pointer',
+                }}>
+                  🖨 Imprimir
+                </button>
+                <button onClick={closeValPreview} style={{
+                  background: 'none', border: '1px solid var(--line)', color: 'var(--dim)',
+                  fontSize: 10.5, padding: '7px 12px', borderRadius: 3, cursor: 'pointer',
+                }}>
+                  ✕ Cerrar
+                </button>
+              </div>
+            </div>
+            <div style={{ flex: 1, background: '#333' }}>
+              <iframe ref={valPreviewFrameRef} src={valPreviewUrl} title="Previsualización de la valorización PDF" style={{ width: '100%', height: '100%', border: 'none' }} />
             </div>
           </div>
         </div>

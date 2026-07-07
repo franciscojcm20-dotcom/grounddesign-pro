@@ -36,6 +36,7 @@ import {
   CURVE_FAMILIES,
   computeLineImpedance,
   computeShortCircuit,
+  computeValorizacion,
 } from '../src/index.ts';
 
 // ─── Tolerancia para comparaciones de punto flotante ─────────────────────────
@@ -677,5 +678,56 @@ describe('Cortocircuito — tramos de línea/cable en serie', () => {
     const sin = computeShortCircuit({ fuente: FUENTE, tipoFalla: 'trifasica' });
     const con = computeShortCircuit({ fuente: FUENTE, tipoFalla: 'trifasica', lineas: [{ tipo: 'cable', longitudKm: 0, rOhmKm: 0.1, xOhmKm: 0.1 }] });
     assertClose(con.If, sin.If, 1e-12, 'If no debe cambiar');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CUBICACIÓN Y VALORIZACIÓN — ítems adicionales editables
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('computeValorizacion — ítems adicionales del usuario', () => {
+  const BASE = {
+    conductorMetros: 100, conductorSeccionMm2: 35, varillasCantidad: 4, varillaLongitudM: 3,
+    conectoresCantidad: 6, gelActivo: false, gelKg: 0, zanjaM3: 18,
+  };
+
+  it('sin extraItems, el comportamiento es idéntico al actual', () => {
+    const r = computeValorizacion(BASE);
+    assert.strictEqual(r.items.length, 4); // conductor, varillas, conectores, zanja (sin gel)
+  });
+
+  it('agrega un ítem adicional válido al BOQ y al total', () => {
+    const r = computeValorizacion({
+      ...BASE,
+      extraItems: [{ item: 'Cámara de registro de puesta a tierra', unidad: 'un', cantidad: 1, precioUnitCLP: 45000 }],
+    });
+    const camara = r.items.find(i => i.item.includes('Cámara de registro'));
+    assert.ok(camara, 'debe incluir el ítem adicional');
+    assert.strictEqual(camara!.subtotalCLP, 45000);
+    assert.ok(r.subtotalMateriales >= 45000);
+  });
+
+  it('ignora ítems adicionales con cantidad 0 o sin nombre', () => {
+    const r = computeValorizacion({
+      ...BASE,
+      extraItems: [
+        { item: '', unidad: 'un', cantidad: 5, precioUnitCLP: 1000 },
+        { item: 'Sin cantidad', unidad: 'un', cantidad: 0, precioUnitCLP: 1000 },
+      ],
+    });
+    assert.strictEqual(r.items.length, 4, 'ítems inválidos no deben agregarse');
+  });
+
+  it('múltiples ítems adicionales se suman correctamente al total', () => {
+    const sinExtra = computeValorizacion(BASE);
+    const conExtra = computeValorizacion({
+      ...BASE,
+      extraItems: [
+        { item: 'Cámara de registro', unidad: 'un', cantidad: 2, precioUnitCLP: 45000 },
+        { item: 'Señalética de seguridad', unidad: 'un', cantidad: 3, precioUnitCLP: 8000 },
+      ],
+    });
+    const extraSubtotal = 2 * 45000 + 3 * 8000;
+    assertClose(conExtra.subtotalMateriales - sinExtra.subtotalMateriales, extraSubtotal, 1e-9);
+    assert.ok(conExtra.total > sinExtra.total);
   });
 });
