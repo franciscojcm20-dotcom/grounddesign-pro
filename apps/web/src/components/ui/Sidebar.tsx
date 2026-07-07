@@ -26,15 +26,14 @@ export function Sidebar() {
     {
       group: t('groupGridDesign'),
       items: [
-        // Malla + picas (Schwarz) primero: es el sistema más utilizado en la práctica
-        // (malla rectangular reforzada con electrodos verticales); la malla rectangular
-        // sola (Sverak) es el caso particular sin picas, no el método principal.
-        { href: '/grid/combined',   label: t('moduleGridCombined') },
         { href: '/grid/resistance', label: t('moduleGridRectangular') },
         { href: '/grid/rod',        label: t('moduleGridRod') },
         { href: '/grid/strip',      label: t('moduleGridStrip') },
         { href: '/grid/radial',     label: t('moduleGridRadial') },
         { href: '/grid/ring',       label: t('moduleGridRing') },
+        // Malla + picas combinada (Schwarz) al final — "(Schwarz)" en el nombre
+        // (ver moduleGridCombined en I18nContext) para identificarla fácilmente.
+        { href: '/grid/combined',   label: t('moduleGridCombined') },
       ],
     },
     {
