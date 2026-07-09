@@ -125,6 +125,11 @@ export interface FreeformGridResult {
   Rg: number; term1: number; term2: number; gpr: number; norm: string;
 }
 
+export interface TwoLayerSoilProfile { rho1: number; rho2: number; h: number }
+export interface MomResult {
+  Rg: number; gpr: number; segmentCurrents: number[]; totalLength: number; truncated: boolean; norm: string;
+}
+
 export interface RodOptimizeResult {
   achieved: boolean; steps: OptimizeStep[];
   suggested: { rho: number; L: number; radius: number; n: number; spacing: number; iFalla: number };
@@ -441,11 +446,14 @@ export const api = {
     }) => post<CombinedOptimizeResult>('/api/v1/grid/combined/optimize', body),
     potentialMap: (body: {
       segments: ConductorSegment[]; current: number; rho: number; depth: number; gpr: number;
-      margin?: number; targetSpacing?: number; maxPointsPerSide?: number;
+      margin?: number; targetSpacing?: number; maxPointsPerSide?: number; segmentCurrents?: number[];
     }) => post<PotentialGridResult>('/api/v1/grid/potential-map', body),
     freeform: (body: {
       vertices: Point2D[]; rods: Point2D[]; rodLength: number; rho: number; depth: number; iFalla: number;
     }) => post<FreeformGridResult>('/api/v1/grid/freeform', body),
+    momResistance: (body: {
+      segments: ConductorSegment[]; soil: TwoLayerSoilProfile; depth: number; current: number; maxSegments?: number;
+    }) => post<MomResult>('/api/v1/grid/mom-resistance', body),
   },
   voltages: {
     real: (body: {

@@ -1,14 +1,16 @@
 'use client';
 import { useRef, useState } from 'react';
-import { api, type FreeformGridResult, type Point2D, type PotentialGridResult } from '@/lib/api';
+import { api, type FreeformGridResult, type MomResult, type Point2D, type PotentialGridResult } from '@/lib/api';
 import {
   Field, SectionLabel, StatCard, CompBanner, ExpertItem,
   FundBtn, calcLayout, inputStyle, panelStyle,
 } from '@/components/ui/CalcShared';
 import { polygonSegments } from '@/lib/gridSegments';
 import { PotentialHeatmap } from '@/components/ui/PotentialHeatmap';
+import { SoilRhoField } from '@/components/ui/SoilRhoField';
 import { FaultCurrentField } from '@/components/ui/FaultCurrentField';
 import { useFaultAnalysis } from '@/context/FaultAnalysisContext';
+import { useSoilModel } from '@/context/SoilModelContext';
 import { useNormativeProfile } from '@/context/NormativeProfileContext';
 import { NormativeProfileSelector } from '@/components/ui/NormativeProfileSelector';
 import { evaluateRgCompliance, effectiveRgGeneral } from '@gdp/engines-math';
@@ -102,6 +104,7 @@ function PolygonEditor({ vertices, rods, mode, onVertexAdd, onVertexMove, onVert
 
 export function FreeformClient() {
   const faultAnalysis = useFaultAnalysis();
+  const soilModel3d = useSoilModel();
   const { profile, relaxedConditionsMet } = useNormativeProfile();
   const [form, setForm] = usePersistedState('gdp-form-freeform', DEFAULTS);
   const [mode, setMode] = useState<'vertex' | 'rod'>('vertex');
@@ -112,6 +115,9 @@ export function FreeformClient() {
   const [showPotential, setShowPotential] = useState(false);
   const [potentialResult, setPotentialResult] = useState<PotentialGridResult | null>(null);
   const [potentialLoading, setPotentialLoading] = useState(false);
+  const [momResult, setMomResult] = useState<MomResult | null>(null);
+  const [momLoading, setMomLoading] = useState(false);
+  const [momError, setMomError] = useState('');
 
   function set(k: keyof typeof DEFAULTS, v: number) { setForm(f => ({ ...f, [k]: v })); }
 
@@ -124,7 +130,7 @@ export function FreeformClient() {
 
   async function calculate() {
     if (form.vertices.length < MIN_VERTICES) { setError(`Se necesitan al menos ${MIN_VERTICES} vértices.`); return; }
-    setLoading(true); setError(''); setPotentialResult(null);
+    setLoading(true); setError(''); setPotentialResult(null); setMomResult(null);
     try {
       const res = await api.grid.freeform({
         vertices: form.vertices, rods: form.rods, rodLength: form.rodLength,
@@ -135,13 +141,32 @@ export function FreeformClient() {
     finally { setLoading(false); }
   }
 
+  async function computeMom() {
+    const soil = soilModel3d.model;
+    if (!soil) { setMomError('Se necesita un modelo de suelo N-capas activo (Mediciones de Campo) para el método de momentos.'); return; }
+    setMomLoading(true); setMomError(''); setPotentialResult(null);
+    try {
+      const segments = polygonSegments(form.vertices);
+      const r = await api.grid.momResistance({
+        segments, soil: { rho1: soil.rho1, rho2: soil.rho2, h: soil.h },
+        depth: form.profundidad, current: form.iFalla,
+      });
+      setMomResult(r);
+    } catch (e) { setMomError(e instanceof Error ? e.message : 'Error de conexión'); }
+    finally { setMomLoading(false); }
+  }
+
   async function computePotentialMap() {
     if (!result) return;
     setPotentialLoading(true);
     try {
       const segments = polygonSegments(form.vertices);
+      // Si hay resultado MoM disponible (misma lista de segmentos: perímetro del
+      // polígono), se usa la corriente real por segmento en vez del reparto
+      // proporcional a la longitud — mapa de calor más preciso.
       const r = await api.grid.potentialMap({
         segments, current: form.iFalla, rho: form.rho, depth: form.profundidad, gpr: result.gpr,
+        ...(momResult ? { segmentCurrents: momResult.segmentCurrents } : {}),
       });
       setPotentialResult(r);
     } catch { /* silent — complemento visual */ }
@@ -167,9 +192,7 @@ export function FreeformClient() {
         <div style={panelStyle}>
           <SectionLabel>Suelo y conductor</SectionLabel>
           <NormativeProfileSelector />
-          <Field label="Resistividad del suelo ρ" unit="Ω·m">
-            <input style={inputStyle} type="number" value={form.rho} onChange={e => set('rho', Number(e.target.value))} />
-          </Field>
+          <SoilRhoField value={form.rho} onChange={v => set('rho', v)} depth={form.profundidad} />
           <Field label="Profundidad de enterramiento" unit="m">
             <input style={inputStyle} type="number" step="0.1" value={form.profundidad} onChange={e => set('profundidad', Number(e.target.value))} />
           </Field>
@@ -187,6 +210,31 @@ export function FreeformClient() {
           {loading ? 'Calculando…' : 'Calcular (Sverak, polígono)'}
         </button>
         {error && <div style={{ color: 'var(--danger)', fontSize: 12 }}>{error}</div>}
+
+        <div style={panelStyle}>
+          <SectionLabel purple>Método de momentos (mayor precisión)</SectionLabel>
+          <p style={{ fontSize: 9, color: 'var(--faint)', marginTop: -6, marginBottom: 8, lineHeight: 1.5 }}>
+            Resuelve el sistema real de corrientes por segmento del perímetro (función de Green de dos capas,
+            Sunde) en vez de la fórmula empírica de Sverak — requiere el modelo de suelo N-capas activo
+            (Mediciones de Campo). Las picas no se incluyen en este cálculo comparativo.
+          </p>
+          <button onClick={computeMom} disabled={momLoading || !soilModel3d.model}
+            title={!soilModel3d.model ? 'Calcula un modelo de suelo N-capas en Mediciones de Campo primero' : undefined}
+            style={{
+              width: '100%', padding: '8px 0', background: 'var(--panel)', border: '1px solid var(--copper-soft)', color: 'var(--copper)',
+              borderRadius: 4, fontWeight: 700, fontSize: 11, cursor: 'pointer', opacity: (momLoading || !soilModel3d.model) ? .5 : 1,
+            }}>
+            {momLoading ? 'Resolviendo sistema…' : 'Calcular con método de momentos'}
+          </button>
+          {momError && <div style={{ color: 'var(--danger)', fontSize: 10, marginTop: 6 }}>{momError}</div>}
+          {momResult && (
+            <div style={{ marginTop: 8, fontSize: 10, color: 'var(--dim)', lineHeight: 1.7 }}>
+              Rg (MoM) = <strong style={{ color: 'var(--copper)' }}>{momResult.Rg.toFixed(3)} Ω</strong>
+              {result && <> · Rg (Sverak) = {result.Rg.toFixed(3)} Ω</>}
+              {momResult.truncated && <div style={{ color: 'var(--warn)' }}>⚠ Geometría recortada al límite de segmentos del solver.</div>}
+            </div>
+          )}
+        </div>
       </aside>
 
       <main style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>

@@ -43,6 +43,9 @@ import {
   polygonArea,
   polygonPerimeter,
   computeFreeformGrid,
+  twoLayerPointPotential,
+  gaussSolve,
+  computeMomResistance,
 } from '../src/index.ts';
 
 // ─── Tolerancia para comparaciones de punto flotante ─────────────────────────
@@ -914,5 +917,112 @@ describe('computeFreeformGrid — equivalencia con computeMalla en el caso recta
     });
     const r = computeFreeformGrid({ vertices: verts, rods: [], rodLength: 0, rho: 100, depth: 0.6, iFalla: 5000 });
     assert.ok(r.area > 0 && r.perimeter > 0 && r.Rg > 0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MÉTODO DE MOMENTOS (MoM) — suelo de dos capas, geometría arbitraria
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('twoLayerPointPotential — función de Green de dos capas (Sunde, 1949)', () => {
+  it('con ρ1=ρ2 (suelo uniforme), colapsa exactamente a la fórmula de fuente puntual', () => {
+    const soil = { rho1: 100, rho2: 100, h: 5 };
+    const r = 8, depth = 0.6, current = 1000;
+    const v = twoLayerPointPotential(r, depth, soil, current);
+    const expected = (soil.rho1 * current) / (2 * Math.PI * Math.hypot(r, depth));
+    assertClose(v, expected, 1e-9);
+  });
+
+  it('el potencial decrece monótonamente con la distancia horizontal', () => {
+    const soil = { rho1: 80, rho2: 600, h: 3 };
+    const distances = [0, 2, 5, 10, 20, 40];
+    const values = distances.map(d => twoLayerPointPotential(d, 0.6, soil, 1000));
+    for (let i = 1; i < values.length; i++) assert.ok(values[i]! < values[i - 1]!);
+  });
+
+  it('es lineal en la corriente (superposición)', () => {
+    const soil = { rho1: 80, rho2: 600, h: 3 };
+    const v1 = twoLayerPointPotential(5, 0.6, soil, 500);
+    const v2 = twoLayerPointPotential(5, 0.6, soil, 1000);
+    assertClose(v2 / v1, 2, 1e-9);
+  });
+});
+
+describe('gaussSolve — eliminación gaussiana con pivoteo parcial', () => {
+  it('sistema 2×2 con solución conocida a mano', () => {
+    const x = gaussSolve([[2, 1], [1, 3]], [5, 10]);
+    assertClose(x[0]!, 1, 1e-9);
+    assertClose(x[1]!, 3, 1e-9);
+  });
+
+  it('sistema identidad devuelve el vector b sin cambios', () => {
+    const x = gaussSolve([[1, 0, 0], [0, 1, 0], [0, 0, 1]], [1, 2, 3]);
+    assert.deepStrictEqual(x.map(v => Math.round(v * 1e9) / 1e9), [1, 2, 3]);
+  });
+
+  it('sistema 3×3 con pivoteo necesario (primer elemento 0)', () => {
+    // 0x + 2y + z = 5 ; x + y + z = 6 ; 2x + y = 3  → resolver y verificar por sustitución
+    const A = [[0, 2, 1], [1, 1, 1], [2, 1, 0]];
+    const b = [5, 6, 3];
+    const x = gaussSolve(A, b);
+    for (let i = 0; i < 3; i++) {
+      const lhs = A[i]![0]! * x[0]! + A[i]![1]! * x[1]! + A[i]![2]! * x[2]!;
+      assertClose(lhs, b[i]!, 1e-6, `ecuación ${i}`);
+    }
+  });
+});
+
+describe('computeMomResistance — malla rectangular en suelo uniforme', () => {
+  function squareLoopSegments(side: number, subdivPerSide: number) {
+    const half = side / 2;
+    const corners: [number, number][] = [[-half, -half], [half, -half], [half, half], [-half, half]];
+    const segs: { start: { x: number; y: number }; end: { x: number; y: number } }[] = [];
+    for (let c = 0; c < 4; c++) {
+      const [x1, y1] = corners[c]!;
+      const [x2, y2] = corners[(c + 1) % 4]!;
+      for (let s = 0; s < subdivPerSide; s++) {
+        const t0 = s / subdivPerSide, t1 = (s + 1) / subdivPerSide;
+        segs.push({
+          start: { x: x1 + (x2 - x1) * t0, y: y1 + (y2 - y1) * t0 },
+          end: { x: x1 + (x2 - x1) * t1, y: y1 + (y2 - y1) * t1 },
+        });
+      }
+    }
+    return segs;
+  }
+
+  it('Rg queda en el mismo orden de magnitud que Sverak para geometría equivalente', () => {
+    const side = 20, depth = 0.6, rho = 100, current = 5000;
+    const segments = squareLoopSegments(side, 3);
+    const mom = computeMomResistance({ segments, soil: { rho1: rho, rho2: rho, h: 5 }, depth, current });
+    const sverak = sverakGridResistance({ rho, area: side * side, Ltotal: side * 4, depth });
+    const ratio = mom.Rg / sverak.Rg;
+    assert.ok(ratio > 0.2 && ratio < 5, `Rg MoM (${mom.Rg.toFixed(3)}) y Sverak (${sverak.Rg.toFixed(3)}) deben ser del mismo orden de magnitud`);
+  });
+
+  it('la corriente por segmento no es uniforme — el MoM captura el acoplamiento mutuo real, a diferencia del reparto ciego proporcional a la longitud', () => {
+    const segments = squareLoopSegments(20, 3);
+    const mom = computeMomResistance({ segments, soil: { rho1: 100, rho2: 100, h: 5 }, depth: 0.6, current: 5000 });
+    const densities = segments.map((seg, i) => {
+      const len = Math.hypot(seg.end.x - seg.start.x, seg.end.y - seg.start.y);
+      return mom.segmentCurrents[i]! / len;
+    });
+    const avg = densities.reduce((a, b) => a + b, 0) / densities.length;
+    const spread = Math.max(...densities) - Math.min(...densities);
+    // El reparto "proporcional a la longitud" (Fase 1, sin MoM) da densidad
+    // idéntica en todos los segmentos por construcción — el MoM debe diferir de eso.
+    assert.ok(spread / avg > 1e-6, 'la densidad de corriente debe variar entre segmentos (no todos iguales)');
+    assert.ok(Math.abs(mom.totalLength - segments.reduce((s, seg) => s + Math.hypot(seg.end.x - seg.start.x, seg.end.y - seg.start.y), 0)) < 1e-6);
+  });
+
+  it('respeta maxSegments truncando sin lanzar error', () => {
+    const segments = squareLoopSegments(20, 10); // 40 segmentos
+    const mom = computeMomResistance({ segments, soil: { rho1: 100, rho2: 100, h: 5 }, depth: 0.6, current: 5000, maxSegments: 10 });
+    assert.strictEqual(mom.truncated, true);
+    assert.strictEqual(mom.segmentCurrents.length, 10);
+  });
+
+  it('sin segmentos, devuelve Rg infinito sin lanzar error', () => {
+    const mom = computeMomResistance({ segments: [], soil: { rho1: 100, rho2: 100, h: 5 }, depth: 0.6, current: 5000 });
+    assert.strictEqual(mom.Rg, Infinity);
   });
 });

@@ -849,19 +849,21 @@ export interface ConductorSegment { start: Point2D; end: Point2D }
  */
 export function potentialAtPoint(
   point: Point2D, segments: ConductorSegment[], current: number, rho: number, depth: number,
+  /** Corriente real (A) de cada segmento, ej. de `computeMomResistance` — si se entrega, reemplaza el reparto proporcional a la longitud. */
+  segmentCurrents?: number[],
 ): number {
   const totalLen = segments.reduce((s, seg) => s + Math.hypot(seg.end.x - seg.start.x, seg.end.y - seg.start.y), 0);
   if (totalLen <= 0) return 0;
   let v = 0;
-  for (const seg of segments) {
+  segments.forEach((seg, i) => {
     const len = Math.hypot(seg.end.x - seg.start.x, seg.end.y - seg.start.y);
-    if (len <= 0) continue;
+    if (len <= 0) return;
     const midX = (seg.start.x + seg.end.x) / 2;
     const midY = (seg.start.y + seg.end.y) / 2;
-    const iSeg = current * (len / totalLen);
+    const iSeg = segmentCurrents?.[i] ?? current * (len / totalLen);
     const r = Math.hypot(point.x - midX, point.y - midY, depth);
     v += (rho * iSeg) / (2 * Math.PI * r);
-  }
+  });
   return v;
 }
 
@@ -874,6 +876,8 @@ export interface PotentialGridInput {
   margin?:  number;           // m — margen alrededor del área ocupada (por defecto 20% del mayor lado)
   targetSpacing?: number;     // m — separación deseada entre puntos (por defecto 1 m, la distancia normativa de tensión de paso)
   maxPointsPerSide?: number;  // acota el costo computacional en sitios muy grandes (por defecto 41)
+  /** Corriente real (A) por segmento — de `computeMomResistance`, para un mapa más preciso que el reparto proporcional a la longitud. */
+  segmentCurrents?: number[];
 }
 
 export interface PotentialGridPoint { x: number; y: number; v: number; touch: number }
@@ -909,7 +913,7 @@ export function computePotentialGrid(input: PotentialGridInput): PotentialGridRe
     const row: number[] = [];
     for (let j = 0; j < resolution; j++) {
       const x = x0 + i * dx, y = y0 + j * dy;
-      const v = potentialAtPoint({ x, y }, segments, current, rho, depth);
+      const v = potentialAtPoint({ x, y }, segments, current, rho, depth, input.segmentCurrents);
       row.push(v);
       points.push({ x, y, v, touch: Math.max(gpr - v, 0) });
     }
@@ -1000,6 +1004,129 @@ export function computeFreeformGrid(input: FreeformGridInput): FreeformGridResul
   const Ltotal = perimeter + condRods;
   const { Rg, term1, term2 } = sverakGridResistance({ rho: input.rho, area, Ltotal, depth: input.depth });
   return { area, perimeter, Ltotal, Rg, term1, term2, gpr: Rg * input.iFalla };
+}
+
+// ─── MÉTODO DE MOMENTOS (MoM) — suelo de dos capas, geometría arbitraria ─────
+//
+// Sverak/Dwight/Sunde/Schwarz son fórmulas empíricas cerradas, validadas para
+// arreglos regulares (rectángulos, líneas, anillos) — no resuelven el sistema
+// real de corrientes en una geometría irregular como la de `/grid/freeform`.
+// Esta sección implementa la física de fondo de la que esas fórmulas son
+// casos particulares: en un conductor soldado (todos los segmentos al mismo
+// potencial), la corriente que disipa cada segmento depende de su acoplamiento
+// mutuo con TODOS los demás — los segmentos de esquina y los extremos libres
+// disipan más corriente por unidad de longitud que los segmentos centrales
+// (menor acoplamiento), fenómeno que Sverak no captura para formas arbitrarias.
+//
+// Función de Green de dos capas (Sunde, 1949 — método de imágenes con
+// reflexión): el potencial de una fuente puntual de corriente en un suelo de
+// dos capas (ρ1/h sobre ρ2 semi-infinito) es una serie de imágenes en
+// profundidades d+2nh y −d+2nh, ponderadas por k^|n| con k=(ρ2−ρ1)/(ρ2+ρ1)
+// (|k|<1, la serie siempre converge geométricamente). Con ρ1=ρ2, k=0 y la
+// serie colapsa exactamente al caso de suelo uniforme ya usado en
+// `potentialAtPoint` — mismo caso límite de continuidad que en
+// `effectiveResistivityForDepth` (ver sección de suelo de dos capas arriba).
+
+/**
+ * Potencial en un punto de superficie a distancia horizontal `r` de una
+ * fuente puntual de corriente enterrada a profundidad `depth`, en un suelo
+ * de dos capas — serie de imágenes truncada en `terms` términos (por
+ * defecto 8, más que suficiente dado que k^|n| decae geométricamente).
+ */
+export function twoLayerPointPotential(
+  r: number, depth: number, soil: TwoLayerSoilProfile, current: number, terms = 8,
+): number {
+  const k = (soil.rho2 - soil.rho1) / (soil.rho2 + soil.rho1);
+  let sum = 0;
+  for (let n = -terms; n <= terms; n++) {
+    const kn = Math.pow(k, Math.abs(n)); // k puede ser negativo (ρ1>ρ2) — Math.pow preserva el signo correctamente
+    const d1 = depth + 2 * n * soil.h;
+    const d2 = -depth + 2 * n * soil.h;
+    sum += kn * (1 / Math.hypot(r, d1) + 1 / Math.hypot(r, d2));
+  }
+  return (soil.rho1 * current) / (4 * Math.PI) * sum;
+}
+
+/** Elimina un sistema lineal denso A·x=b por eliminación gaussiana con pivoteo parcial — sin dependencias externas. */
+export function gaussSolve(A: number[][], b: number[]): number[] {
+  const n = b.length;
+  const M = A.map((row, i) => [...row, b[i]!]);
+  for (let col = 0; col < n; col++) {
+    let pivot = col;
+    for (let r = col + 1; r < n; r++) if (Math.abs(M[r]![col]!) > Math.abs(M[pivot]![col]!)) pivot = r;
+    if (pivot !== col) { const tmp = M[col]!; M[col] = M[pivot]!; M[pivot] = tmp; }
+    const pivotVal = M[col]![col]!;
+    if (Math.abs(pivotVal) < 1e-15) continue; // matriz singular/casi singular — se omite la fila (deja 0)
+    for (let r = col + 1; r < n; r++) {
+      const factor = M[r]![col]! / pivotVal;
+      for (let c = col; c <= n; c++) M[r]![c] = M[r]![c]! - factor * M[col]![c]!;
+    }
+  }
+  const x = new Array<number>(n).fill(0);
+  for (let row = n - 1; row >= 0; row--) {
+    let sum = M[row]![n]!;
+    for (let c = row + 1; c < n; c++) sum -= M[row]![c]! * x[c]!;
+    const diag = M[row]![row]!;
+    x[row] = Math.abs(diag) < 1e-15 ? 0 : sum / diag;
+  }
+  return x;
+}
+
+export interface MomInput {
+  segments: ConductorSegment[];
+  soil: TwoLayerSoilProfile;
+  depth: number;   // m — profundidad de enterramiento de los conductores
+  current: number; // A — corriente total de falla (Ig)
+  /** Límite de segmentos para acotar el costo O(n³) del solver denso (por defecto 150). */
+  maxSegments?: number;
+}
+
+export interface MomResult {
+  Rg: number; gpr: number;
+  /** Corriente real (A, no por unidad de longitud) disipada por cada segmento — el índice corresponde a `segments`. */
+  segmentCurrents: number[];
+  totalLength: number;
+  truncated: boolean; // true si se superó maxSegments y se recortó la lista de segmentos
+}
+
+/**
+ * Resistencia de puesta a tierra por método de momentos: resuelve el sistema
+ * real de corrientes por segmento (no la aproximación "proporcional a la
+ * longitud" de `computePotentialGrid`), para cualquier geometría de
+ * conductor — pensado como alternativa de mayor precisión para el módulo de
+ * geometría libre (`/grid/freeform`), donde Sverak es menos confiable.
+ */
+export function computeMomResistance(input: MomInput): MomResult {
+  const maxSegments = input.maxSegments ?? 150;
+  const truncated = input.segments.length > maxSegments;
+  const segments = truncated ? input.segments.slice(0, maxSegments) : input.segments;
+  const n = segments.length;
+  const lengths = segments.map(s => Math.hypot(s.end.x - s.start.x, s.end.y - s.start.y));
+  const totalLength = lengths.reduce((s, l) => s + l, 0);
+
+  if (n === 0 || totalLength <= 0) {
+    return { Rg: Infinity, gpr: 0, segmentCurrents: [], totalLength: 0, truncated };
+  }
+
+  const mid = segments.map(s => ({ x: (s.start.x + s.end.x) / 2, y: (s.start.y + s.end.y) / 2 }));
+  // A[i][j] = potencial en el punto medio de i por una corriente unitaria (1 A) en j, escalado por Lj
+  // (twoLayerPointPotential ya devuelve V para una corriente puntual dada; se evalúa con corriente=1 y se escala por Lj).
+  const A: number[][] = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => {
+    const r = Math.hypot(mid[i]!.x - mid[j]!.x, mid[i]!.y - mid[j]!.y);
+    return twoLayerPointPotential(r, input.depth, input.soil, 1, 8) * lengths[j]!;
+  }));
+
+  const ones = new Array<number>(n).fill(1);
+  const x = gaussSolve(A, ones);
+  const Lx = lengths.reduce((s, L, j) => s + L * x[j]!, 0);
+  if (Math.abs(Lx) < 1e-15) {
+    return { Rg: Infinity, gpr: 0, segmentCurrents: segments.map(() => 0), totalLength, truncated };
+  }
+  const Rg = 1 / Lx;
+  const gpr = Rg * input.current;
+  const segmentCurrents = x.map((xi, j) => gpr * xi * lengths[j]!); // corriente real del segmento j (A) = V·xⱼ·Lⱼ
+
+  return { Rg, gpr, segmentCurrents, totalLength, truncated };
 }
 
 // ─── CONDUCTOR — ONDERDONK (IEEE Std 80-2013, Cl. 11.3) ──────────────────────

@@ -17,6 +17,7 @@ import {
   optimizeCombinedResistance,
   computePotentialGrid,
   computeFreeformGrid,
+  computeMomResistance,
   type GelInput,
 } from '@gdp/engines-math';
 import { getActionOrder, recordOutcomes, stepsToOutcomes } from '../learning/bandit.ts';
@@ -78,12 +79,20 @@ const potentialMapBodySchema = z.object({
   segments: z.array(segmentSchema).min(1).max(2000),
   current: pos(), rho: pos(), depth: nonNeg(), gpr: pos(),
   margin: pos().optional(), targetSpacing: pos().optional(), maxPointsPerSide: intMin1().optional(),
+  segmentCurrents: z.array(num()).max(2000).optional(),
 });
 
 const freeformBodySchema = z.object({
   vertices: z.array(point2DSchema).min(3).max(200),
   rods: z.array(point2DSchema).max(200),
   rodLength: nonNeg(), rho: pos(), depth: pos(), iFalla: pos(),
+});
+
+const soilProfileSchema = z.object({ rho1: pos(), rho2: pos(), h: pos() });
+const momBodySchema = z.object({
+  segments: z.array(segmentSchema).min(1).max(500),
+  soil: soilProfileSchema,
+  depth: pos(), current: pos(), maxSegments: intMin1().optional(),
 });
 
 export async function routesGrid(app: FastifyInstance): Promise<void> {
@@ -260,12 +269,13 @@ export async function routesGrid(app: FastifyInstance): Promise<void> {
   app.post('/potential-map', async (req, reply) => {
     const body = parseBody(potentialMapBodySchema, req, reply);
     if (!body) return;
-    const { margin, targetSpacing, maxPointsPerSide, ...rest } = body;
+    const { margin, targetSpacing, maxPointsPerSide, segmentCurrents, ...rest } = body;
     const result = computePotentialGrid({
       ...rest,
       ...(margin !== undefined ? { margin } : {}),
       ...(targetSpacing !== undefined ? { targetSpacing } : {}),
       ...(maxPointsPerSide !== undefined ? { maxPointsPerSide } : {}),
+      ...(segmentCurrents !== undefined ? { segmentCurrents } : {}),
     });
     return { ...result, norm: 'Superposición de fuentes puntuales (método de imágenes) — motor propio' };
   });
@@ -276,5 +286,14 @@ export async function routesGrid(app: FastifyInstance): Promise<void> {
     if (!body) return;
     const result = computeFreeformGrid(body);
     return { ...result, norm: 'Sverak (área/perímetro de polígono arbitrario) — motor propio' };
+  });
+
+  // POST /api/v1/grid/mom-resistance — método de momentos, suelo de dos capas (Sunde)
+  app.post('/mom-resistance', async (req, reply) => {
+    const body = parseBody(momBodySchema, req, reply);
+    if (!body) return;
+    const { maxSegments, ...rest } = body;
+    const result = computeMomResistance({ ...rest, ...(maxSegments !== undefined ? { maxSegments } : {}) });
+    return { ...result, norm: 'Método de momentos — función de Green de dos capas (Sunde, 1954) — motor propio' };
   });
 }
