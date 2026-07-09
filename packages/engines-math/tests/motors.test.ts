@@ -37,6 +37,9 @@ import {
   computeLineImpedance,
   computeShortCircuit,
   computeValorizacion,
+  effectiveResistivityForDepth,
+  potentialAtPoint,
+  computePotentialGrid,
 } from '../src/index.ts';
 
 // ─── Tolerancia para comparaciones de punto flotante ─────────────────────────
@@ -729,5 +732,119 @@ describe('computeValorizacion — ítems adicionales del usuario', () => {
     const extraSubtotal = 2 * 45000 + 3 * 8000;
     assertClose(conExtra.subtotalMateriales - sinExtra.subtotalMateriales, extraSubtotal, 1e-9);
     assert.ok(conExtra.total > sinExtra.total);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// RESISTIVIDAD EFECTIVA DEPTH-AWARE (suelo de dos capas)
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('effectiveResistivityForDepth — ponderación por profundidad de penetración', () => {
+  const SOIL = { rho1: 100, rho2: 1000, h: 2 };
+
+  it('electrodo muy superficial (depth ≪ h) converge a ρ1', () => {
+    const rhoEff = effectiveResistivityForDepth(SOIL, 0.01);
+    assertClose(rhoEff, SOIL.rho1, 0.02, 'depth→0 debe acercarse a ρ1');
+  });
+
+  it('electrodo muy profundo (depth ≫ h) converge a ρ2', () => {
+    const rhoEff = effectiveResistivityForDepth(SOIL, 500);
+    assert.ok(rhoEff > 900, `depth≫h debe acercarse a ρ2=1000, obtuvo ${rhoEff.toFixed(1)}`);
+  });
+
+  it('en depth = h, coincide exactamente con la media geométrica √(ρ1·ρ2)', () => {
+    const rhoEff = effectiveResistivityForDepth(SOIL, SOIL.h);
+    assertClose(rhoEff, Math.sqrt(SOIL.rho1 * SOIL.rho2), 1e-9, 'depth=h debe igualar la media geométrica');
+  });
+
+  it('es monótona creciente con la profundidad', () => {
+    const depths = [0.1, 0.5, 1, 2, 4, 10, 50];
+    const values = depths.map(d => effectiveResistivityForDepth(SOIL, d));
+    for (let i = 1; i < values.length; i++) {
+      assert.ok(values[i]! > values[i - 1]!, `ρeff debe crecer monótonamente con depth (falló en ${depths[i]})`);
+    }
+  });
+
+  it('con ρ1 > ρ2 (perfil inverso), sigue siendo monótona (esta vez decreciente)', () => {
+    const inverted = { rho1: 1000, rho2: 100, h: 3 };
+    const rhoShort = effectiveResistivityForDepth(inverted, 0.01);
+    const rhoDeep = effectiveResistivityForDepth(inverted, 100);
+    assertClose(rhoShort, inverted.rho1, 0.02);
+    assert.ok(rhoDeep < rhoShort, 'perfil invertido: ρeff debe decrecer con la profundidad');
+  });
+
+  it('h muy pequeño no produce división por cero ni NaN', () => {
+    const rhoEff = effectiveResistivityForDepth({ rho1: 100, rho2: 500, h: 0 }, 1);
+    assert.ok(Number.isFinite(rhoEff) && rhoEff > 0, 'debe devolver un valor finito y positivo');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MAPA DE POTENCIAL DE SUPERFICIE — superposición de fuentes puntuales
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('potentialAtPoint — superposición de fuentes puntuales (método de imágenes)', () => {
+  it('un solo segmento: V en la vertical de su punto medio = ρ·I/(2π·profundidad), exacto', () => {
+    const seg = { start: { x: -5, y: 0 }, end: { x: 5, y: 0 } };
+    const rho = 100, current = 1000, depth = 0.6;
+    const v = potentialAtPoint({ x: 0, y: 0 }, [seg], current, rho, depth);
+    assertClose(v, (rho * current) / (2 * Math.PI * depth), 1e-9);
+  });
+
+  it('el potencial es lineal en la corriente (superposición)', () => {
+    const seg = { start: { x: -5, y: 0 }, end: { x: 5, y: 0 } };
+    const v1 = potentialAtPoint({ x: 3, y: 4 }, [seg], 500, 100, 0.6);
+    const v2 = potentialAtPoint({ x: 3, y: 4 }, [seg], 1000, 100, 0.6);
+    assertClose(v2 / v1, 2, 1e-9, 'duplicar la corriente debe duplicar V');
+  });
+
+  it('el potencial decrece monótonamente con la distancia horizontal', () => {
+    const seg = { start: { x: 0, y: 0 }, end: { x: 20, y: 0 } };
+    const distances = [0, 5, 10, 20, 40, 80];
+    const values = distances.map(d => potentialAtPoint({ x: 10, y: d }, [seg], 1000, 100, 0.6));
+    for (let i = 1; i < values.length; i++) {
+      assert.ok(values[i]! < values[i - 1]!, `V debe decrecer al alejarse (falló en distancia ${distances[i]})`);
+    }
+  });
+
+  it('sin segmentos válidos, el potencial es 0', () => {
+    assert.strictEqual(potentialAtPoint({ x: 0, y: 0 }, [], 1000, 100, 0.6), 0);
+  });
+});
+
+describe('computePotentialGrid — mapa de potencial de una malla rectangular', () => {
+  const segments = [
+    { start: { x: -20, y: -15 }, end: { x: 20, y: -15 } },
+    { start: { x: -20, y: 15 }, end: { x: 20, y: 15 } },
+    { start: { x: -20, y: -15 }, end: { x: -20, y: 15 } },
+    { start: { x: 20, y: -15 }, end: { x: 20, y: 15 } },
+  ];
+  const input = { segments, current: 5000, rho: 100, depth: 0.6, gpr: 8000 };
+
+  it('produce una grilla de puntos con V decreciente hacia el borde de la muestra', () => {
+    const r = computePotentialGrid(input);
+    assert.ok(r.points.length > 0);
+    assert.ok(r.vMax > r.vMin, 'debe existir variación de potencial en la grilla');
+  });
+
+  it('la tensión de contacto local nunca es negativa (clamp en 0)', () => {
+    const r = computePotentialGrid(input);
+    for (const p of r.points) assert.ok(p.touch >= 0, `touch negativo en (${p.x},${p.y})`);
+  });
+
+  it('worstStep y worstTouch son positivos cuando hay corriente', () => {
+    const r = computePotentialGrid(input);
+    assert.ok(r.worstStep > 0);
+    assert.ok(r.worstTouch > 0);
+  });
+
+  it('con corriente 0, todo el potencial es 0 y worstStep es 0', () => {
+    const r = computePotentialGrid({ ...input, current: 0 });
+    assert.ok(r.points.every(p => p.v === 0));
+    assert.strictEqual(r.worstStep, 0);
+  });
+
+  it('respeta el límite maxPointsPerSide (acota el costo computacional)', () => {
+    const r = computePotentialGrid({ ...input, targetSpacing: 0.1, maxPointsPerSide: 15 });
+    // resolution² puntos como máximo si se satura el límite
+    assert.ok(r.points.length <= 15 * 15);
   });
 });

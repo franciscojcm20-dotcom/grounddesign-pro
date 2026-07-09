@@ -135,7 +135,7 @@ export function RingClient() {
         <div style={panelStyle}>
           <SectionLabel>Suelo y conductor</SectionLabel>
           <NormativeProfileSelector />
-          <SoilRhoField value={form.rho} onChange={v => setForm(f => ({ ...f, rho: v }))} />
+          <SoilRhoField value={form.rho} onChange={v => setForm(f => ({ ...f, rho: v }))} depth={form.h} />
           <Field label="Profundidad h (m)">
             <input style={inputStyle} type="number" value={form.h} step="0.1" onChange={set('h')} />
           </Field>

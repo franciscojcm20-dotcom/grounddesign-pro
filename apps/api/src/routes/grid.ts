@@ -15,10 +15,11 @@ import {
   optimizeRadialResistance,
   optimizeRingResistance,
   optimizeCombinedResistance,
+  computePotentialGrid,
   type GelInput,
 } from '@gdp/engines-math';
 import { getActionOrder, recordOutcomes, stepsToOutcomes } from '../learning/bandit.ts';
-import { parseBody, gelInputSchema, pos, nonNeg, intMin1, intNonNeg } from '../lib/validate.ts';
+import { parseBody, gelInputSchema, pos, nonNeg, num, intMin1, intNonNeg } from '../lib/validate.ts';
 
 const ORDER_MALLA    = ['add_rods', 'add_cond_l', 'add_cond_w', 'expand_largo', 'expand_ancho'];
 const ORDER_ROD      = ['add_rod', 'extend_length', 'increase_spacing'];
@@ -69,6 +70,14 @@ const combinedBodySchema = z.object({
   gel: gelInputSchema,
 });
 const combinedOptimizeBodySchema = combinedBodySchema.extend({ targetRg: pos() });
+
+const point2DSchema = z.object({ x: num(), y: num() });
+const segmentSchema = z.object({ start: point2DSchema, end: point2DSchema });
+const potentialMapBodySchema = z.object({
+  segments: z.array(segmentSchema).min(1).max(2000),
+  current: pos(), rho: pos(), depth: nonNeg(), gpr: pos(),
+  margin: pos().optional(), targetSpacing: pos().optional(), maxPointsPerSide: intMin1().optional(),
+});
 
 export async function routesGrid(app: FastifyInstance): Promise<void> {
 
@@ -238,5 +247,19 @@ export async function routesGrid(app: FastifyInstance): Promise<void> {
     const optimization = optimizeCombinedResistance({ ...p, rho: rhoEfectiva, targetRg }, order);
     await recordOutcomes('grid_combined', stepsToOutcomes(optimization.steps, optimization.initialRg));
     return { ...optimization, norm: 'Schwarz — motor de optimización propio (aprendizaje adaptativo activo)' };
+  });
+
+  // POST /api/v1/grid/potential-map — mapa de potencial de superficie (paso/contacto en toda el área)
+  app.post('/potential-map', async (req, reply) => {
+    const body = parseBody(potentialMapBodySchema, req, reply);
+    if (!body) return;
+    const { margin, targetSpacing, maxPointsPerSide, ...rest } = body;
+    const result = computePotentialGrid({
+      ...rest,
+      ...(margin !== undefined ? { margin } : {}),
+      ...(targetSpacing !== undefined ? { targetSpacing } : {}),
+      ...(maxPointsPerSide !== undefined ? { maxPointsPerSide } : {}),
+    });
+    return { ...result, norm: 'Superposición de fuentes puntuales (método de imágenes) — motor propio' };
   });
 }

@@ -112,6 +112,14 @@ export interface CombinedResult {
   compliance: { rg1: boolean; rg5: boolean }; norm: string;
 }
 
+export interface Point2D { x: number; y: number }
+export interface ConductorSegment { start: Point2D; end: Point2D }
+export interface PotentialGridPoint { x: number; y: number; v: number; touch: number }
+export interface PotentialGridResult {
+  points: PotentialGridPoint[];
+  vMax: number; vMin: number; worstTouch: number; worstStep: number; norm: string;
+}
+
 export interface RodOptimizeResult {
   achieved: boolean; steps: OptimizeStep[];
   suggested: { rho: number; L: number; radius: number; n: number; spacing: number; iFalla: number };
@@ -426,6 +434,10 @@ export const api = {
       nRods: number; rodLength: number; rodRadius: number; rodSpacing: number; iFalla: number;
       targetRg: number; gel?: GelParams;
     }) => post<CombinedOptimizeResult>('/api/v1/grid/combined/optimize', body),
+    potentialMap: (body: {
+      segments: ConductorSegment[]; current: number; rho: number; depth: number; gpr: number;
+      margin?: number; targetSpacing?: number; maxPointsPerSide?: number;
+    }) => post<PotentialGridResult>('/api/v1/grid/potential-map', body),
   },
   voltages: {
     real: (body: {

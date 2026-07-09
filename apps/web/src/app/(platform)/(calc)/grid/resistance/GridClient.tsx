@@ -1,7 +1,9 @@
 'use client';
 import { useState, type ReactElement } from 'react';
 import dynamic from 'next/dynamic';
-import { api, type GridResult, type MallaOptimizeResult } from '@/lib/api';
+import { api, type GridResult, type MallaOptimizeResult, type PotentialGridResult } from '@/lib/api';
+import { rectGridSegments } from '@/lib/gridSegments';
+import { PotentialHeatmap } from '@/components/ui/PotentialHeatmap';
 import {
   Field, SectionLabel, StatCard, CompBanner, ExpertItem,
   FundBtn, calcLayout, inputStyle, panelStyle, Th, TdMono,
@@ -112,14 +114,31 @@ export function GridClient() {
   const [loading, setLoading] = useState(false);
   const [showFund, setShowFund] = useState(false);
   const [view3d, setView3d] = useState(false);
+  const [showPotential, setShowPotential] = useState(false);
+  const [potentialResult, setPotentialResult] = useState<PotentialGridResult | null>(null);
+  const [potentialLoading, setPotentialLoading] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
   const [optimizeResult, setOptimizeResult] = useState<MallaOptimizeResult | null>(null);
 
   function set(k: string, v: number) { setForm(f => ({ ...f, [k]: v })); }
   function num(k: keyof typeof DEFAULTS) { return (e: React.ChangeEvent<HTMLInputElement>) => set(k, Number(e.target.value)); }
 
+  async function computePotentialMap() {
+    if (!result) return;
+    setPotentialLoading(true);
+    try {
+      const segments = rectGridSegments(form.largo, form.ancho, form.nConductoresL, form.nConductoresW);
+      const r = await api.grid.potentialMap({
+        segments, current: form.iFalla, rho: result.rhoUsado ?? form.rho,
+        depth: form.profundidad, gpr: result.gpr,
+      });
+      setPotentialResult(r);
+    } catch { /* silent — el mapa es un complemento visual, no bloquea el resultado principal */ }
+    finally { setPotentialLoading(false); }
+  }
+
   async function calculate() {
-    setLoading(true); setError(null); setOptimizeResult(null);
+    setLoading(true); setError(null); setOptimizeResult(null); setPotentialResult(null);
     try {
       setResult(await api.grid.resistance({ ...form, ...(gel ? { gel } : {}) }));
     } catch (e) {
@@ -192,15 +211,33 @@ export function GridClient() {
         <div style={{ ...panelStyle, marginBottom: 16, padding: '10px 8px' }}>
           <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
             {([['2D', false], ['3D', true]] as const).map(([label, is3d]) => (
-              <button key={label} onClick={() => setView3d(is3d)} onMouseEnter={() => { if (is3d) import('@/components/ui/Topology3D'); }} style={{
+              <button key={label} onClick={() => { setView3d(is3d); setShowPotential(false); }} onMouseEnter={() => { if (is3d) import('@/components/ui/Topology3D'); }} style={{
                 flex: 1, padding: '5px 4px', borderRadius: 3, cursor: 'pointer', fontSize: 9.5, fontWeight: 700,
-                background: view3d === is3d ? 'var(--copper-soft)' : 'var(--bg)',
-                border: `1px solid ${view3d === is3d ? 'var(--copper)' : 'var(--line)'}`,
-                color: view3d === is3d ? 'var(--copper)' : 'var(--dim)',
+                background: !showPotential && view3d === is3d ? 'var(--copper-soft)' : 'var(--bg)',
+                border: `1px solid ${!showPotential && view3d === is3d ? 'var(--copper)' : 'var(--line)'}`,
+                color: !showPotential && view3d === is3d ? 'var(--copper)' : 'var(--dim)',
               }}>{label}</button>
             ))}
+            <button
+              onClick={() => { setShowPotential(true); if (!potentialResult) computePotentialMap(); }}
+              disabled={!result}
+              title={!result ? 'Calcula la malla primero' : undefined}
+              style={{
+                flex: 1, padding: '5px 4px', borderRadius: 3, cursor: result ? 'pointer' : 'not-allowed', fontSize: 9.5, fontWeight: 700,
+                background: showPotential ? 'var(--copper-soft)' : 'var(--bg)',
+                border: `1px solid ${showPotential ? 'var(--copper)' : 'var(--line)'}`,
+                color: showPotential ? 'var(--copper)' : 'var(--dim)', opacity: result ? 1 : 0.5,
+              }}>🌡 Potencial</button>
           </div>
-          {view3d ? (
+          {showPotential ? (
+            potentialLoading ? (
+              <div style={{ padding: 30, textAlign: 'center', fontSize: 10, color: 'var(--faint)' }}>Calculando mapa de potencial…</div>
+            ) : potentialResult ? (
+              <PotentialHeatmap result={potentialResult} largo={form.largo} ancho={form.ancho} />
+            ) : (
+              <div style={{ padding: 30, textAlign: 'center', fontSize: 10, color: 'var(--faint)' }}>Calcula la malla para ver el mapa de potencial.</div>
+            )
+          ) : view3d ? (
             <GridScene3D
               largo={form.largo} ancho={form.ancho}
               nL={form.nConductoresL} nW={form.nConductoresW}
@@ -228,7 +265,7 @@ export function GridClient() {
         </div>
 
         <SectionLabel>Suelo y falla</SectionLabel>
-        <SoilRhoField value={form.rho} onChange={v => set('rho', v)} />
+        <SoilRhoField value={form.rho} onChange={v => set('rho', v)} depth={Math.max(form.profundidad, form.longVarilla)} />
         <FaultCurrentField onSync={v => set('iFalla', v)} />
         <Field label="Tiempo de despeje" unit="s"><input style={inputStyle} type="number" step="0.1" value={form.tFalla} onChange={num('tFalla')} /></Field>
 

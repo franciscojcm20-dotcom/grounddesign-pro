@@ -510,6 +510,44 @@ export function fitLayeredEarthModel(measured: RhoPoint[]): LayerFitResult {
   return { best, candidates };
 }
 
+// ─── RESISTIVIDAD EFECTIVA DEPTH-AWARE (suelo de dos capas) ──────────────────
+//
+// El colapso habitual de un modelo de dos capas (ρ1/h/ρ2) a una única ρ
+// "equivalente" usa la media geométrica ρeq=√(ρ1·ρ2) — ciega a qué tan
+// profundo llega realmente el electrodo. Un electrodo corto que nunca sale de
+// la capa 1 debería ver ρ≈ρ1, no un promedio con ρ2; uno que penetra muy
+// profundo (pica larga) debería acercarse a ρ2. Esta función pondera según la
+// profundidad de penetración real del electrodo (profundidad de enterramiento
+// de la malla o longitud de la pica) relativa al espesor h de la capa
+// superior.
+
+/** Perfil de suelo de dos capas (ρ1 superficial de espesor h, ρ2 semi-espacio). */
+export interface TwoLayerSoilProfile { rho1: number; rho2: number; h: number }
+
+/**
+ * Resistividad efectiva vista por un electrodo cuya profundidad de
+ * penetración es `depth` (profundidad de enterramiento de la malla, o
+ * longitud de la pica) en un suelo de dos capas.
+ *
+ * Ponderación logarítmica: ln(ρeff) = (1−f)·ln(ρ1) + f·ln(ρ2), con
+ * f = depth/(h+depth) ∈ [0,1) — monótona y acotada: depth≪h → ρeff→ρ1;
+ * depth≫h → ρeff→ρ2. En el caso particular depth=h, f=0.5 y ρeff=√(ρ1·ρ2),
+ * exactamente la media geométrica ya usada como aproximación rápida — esta
+ * función la generaliza en vez de reemplazarla.
+ *
+ * Sigue siendo una aproximación de ingeniería, no la solución rigurosa de la
+ * distribución de corriente en un suelo estratificado (ver IEEE Std 80-2013
+ * Annex D y el método de Endrenyi, 1963, para el tratamiento completo de dos
+ * capas) — se documenta como tal en cada capítulo del informe que la usa.
+ */
+export function effectiveResistivityForDepth(soil: TwoLayerSoilProfile, depth: number): number {
+  const d = Math.max(depth, 0);
+  const h = Math.max(soil.h, 1e-6);
+  const f = d / (h + d);
+  const lnRho = (1 - f) * Math.log(soil.rho1) + f * Math.log(soil.rho2);
+  return Math.exp(lnRho);
+}
+
 // ─── GEL QUÍMICO (Dwight / Sunde) ────────────────────────────────────────────
 
 /** Resistencia de varilla vertical: R = (ρ / (2πL)) · (ln(8L/d) − 1) */
@@ -769,6 +807,128 @@ export function optimizeVoltages(input: VoltagesOptimizeInput, actionOrder?: str
   }
   const { maxRhoSuperficial: _a, maxHSuperficial: _b, maxLtotal: _c, maxD: _d, maxH: _e, ...suggested } = current;
   return { achieved: ratio <= 1, steps, suggested, initialRatio, finalRatio: ratio };
+}
+
+// ─── MAPA DE POTENCIAL DE SUPERFICIE — superposición de fuentes puntuales ────
+//
+// meshVoltage/stepVoltageReal (arriba) evalúan Em/Es en un único punto
+// representativo (la malla de esquina, el peor caso analítico de Sverak). Esta
+// sección complementa esa verificación puntual con un mapa continuo del
+// potencial en toda la superficie del terreno, para visualizar dónde se
+// concentra el riesgo — sin recurrir a un solver de elementos finitos: cada
+// segmento de conductor se trata como una fuente puntual de corriente en su
+// punto medio (aproximación estándar cuando no se resuelve el sistema de
+// ecuaciones de corriente real de cada segmento), enterrada a profundidad
+// `depth`, y se superpone el potencial de cada una usando la solución clásica
+// de una fuente puntual de corriente junto a un plano aislante (método de
+// imágenes: el plano aire-suelo duplica el potencial de espacio completo) —
+// la misma física de la que se derivan las fórmulas de Dwight/Sunde ya usadas
+// en el resto del motor, evaluada aquí en un punto de campo arbitrario en vez
+// de solo en la superficie del propio electrodo.
+//
+// V(P) = Σ (ρ · I_segmento) / (2π · r), r = √(Δx² + Δy² + profundidad²)
+//
+// Limitación explícita: es una aproximación de superposición de fuentes
+// puntuales, no una solución rigurosa de la distribución de corriente real
+// (que requeriría resolver un sistema lineal de acoplamientos entre todos los
+// segmentos, o un solver numérico completo tipo CDEGS/XGSLab). El GPR de
+// referencia (`gpr`) se toma del cálculo ya validado (Rg·Ig, Sverak/Dwight/
+// Schwarz) — este mapa no lo recalcula, solo aproxima su forma de decaimiento
+// en la superficie para estimar tensiones de contacto/paso locales en
+// cualquier punto, no solo en el punto crítico analítico.
+
+export interface Point2D { x: number; y: number }
+export interface ConductorSegment { start: Point2D; end: Point2D }
+
+/**
+ * Potencial de superficie en un punto debido a un conjunto de segmentos de
+ * conductor enterrados, por superposición de fuentes puntuales de corriente.
+ * La corriente total `current` se reparte entre segmentos proporcional a su
+ * longitud (aproximación — en la realidad la corriente por segmento depende
+ * del acoplamiento con los vecinos, no solo de la longitud).
+ */
+export function potentialAtPoint(
+  point: Point2D, segments: ConductorSegment[], current: number, rho: number, depth: number,
+): number {
+  const totalLen = segments.reduce((s, seg) => s + Math.hypot(seg.end.x - seg.start.x, seg.end.y - seg.start.y), 0);
+  if (totalLen <= 0) return 0;
+  let v = 0;
+  for (const seg of segments) {
+    const len = Math.hypot(seg.end.x - seg.start.x, seg.end.y - seg.start.y);
+    if (len <= 0) continue;
+    const midX = (seg.start.x + seg.end.x) / 2;
+    const midY = (seg.start.y + seg.end.y) / 2;
+    const iSeg = current * (len / totalLen);
+    const r = Math.hypot(point.x - midX, point.y - midY, depth);
+    v += (rho * iSeg) / (2 * Math.PI * r);
+  }
+  return v;
+}
+
+export interface PotentialGridInput {
+  segments: ConductorSegment[];
+  current:  number;  // A — corriente total disipada (Ig)
+  rho:      number;  // Ω·m
+  depth:    number;  // m — profundidad de enterramiento de los conductores
+  gpr:      number;  // Ω·A (V) — GPR de referencia ya validado (Rg·Ig)
+  margin?:  number;           // m — margen alrededor del área ocupada (por defecto 20% del mayor lado)
+  targetSpacing?: number;     // m — separación deseada entre puntos (por defecto 1 m, la distancia normativa de tensión de paso)
+  maxPointsPerSide?: number;  // acota el costo computacional en sitios muy grandes (por defecto 41)
+}
+
+export interface PotentialGridPoint { x: number; y: number; v: number; touch: number }
+
+export interface PotentialGridResult {
+  points: PotentialGridPoint[];
+  vMax: number; vMin: number;
+  worstTouch: number; // V — mayor tensión de contacto local encontrada en la grilla (gpr − v)
+  worstStep:  number; // V — mayor tensión de paso local encontrada entre puntos vecinos (≈1 m)
+}
+
+/** Genera el mapa de potencial de superficie en una grilla de puntos alrededor del sistema. */
+export function computePotentialGrid(input: PotentialGridInput): PotentialGridResult {
+  const { segments, current, rho, depth, gpr } = input;
+  const xs = segments.flatMap(s => [s.start.x, s.end.x]);
+  const ys = segments.flatMap(s => [s.start.y, s.end.y]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const span = Math.max(maxX - minX, maxY - minY, 1);
+  const margin = input.margin ?? span * 0.2;
+  const targetSpacing = input.targetSpacing ?? 1;
+  const maxPointsPerSide = input.maxPointsPerSide ?? 41;
+  const totalSpanX = (maxX - minX) + 2 * margin;
+  const totalSpanY = (maxY - minY) + 2 * margin;
+  const resolution = Math.min(Math.max(Math.ceil(Math.max(totalSpanX, totalSpanY) / targetSpacing) + 1, 3), maxPointsPerSide);
+  const x0 = minX - margin, x1 = maxX + margin;
+  const y0 = minY - margin, y1 = maxY + margin;
+  const dx = (x1 - x0) / (resolution - 1), dy = (y1 - y0) / (resolution - 1);
+
+  const grid: number[][] = [];
+  const points: PotentialGridPoint[] = [];
+  for (let i = 0; i < resolution; i++) {
+    const row: number[] = [];
+    for (let j = 0; j < resolution; j++) {
+      const x = x0 + i * dx, y = y0 + j * dy;
+      const v = potentialAtPoint({ x, y }, segments, current, rho, depth);
+      row.push(v);
+      points.push({ x, y, v, touch: Math.max(gpr - v, 0) });
+    }
+    grid.push(row);
+  }
+
+  const vMax = Math.max(...points.map(p => p.v));
+  const vMin = Math.min(...points.map(p => p.v));
+  const worstTouch = Math.max(...points.map(p => p.touch));
+
+  let worstStep = 0;
+  for (let i = 0; i < resolution; i++) {
+    for (let j = 0; j < resolution; j++) {
+      if (i + 1 < resolution) worstStep = Math.max(worstStep, Math.abs(grid[i]![j]! - grid[i + 1]![j]!));
+      if (j + 1 < resolution) worstStep = Math.max(worstStep, Math.abs(grid[i]![j]! - grid[i]![j + 1]!));
+    }
+  }
+
+  return { points, vMax, vMin, worstTouch, worstStep };
 }
 
 // ─── CONDUCTOR — ONDERDONK (IEEE Std 80-2013, Cl. 11.3) ──────────────────────

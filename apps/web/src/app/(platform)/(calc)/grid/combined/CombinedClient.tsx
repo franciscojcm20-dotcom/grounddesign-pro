@@ -1,11 +1,13 @@
 'use client';
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
-import { api, type CombinedResult, type CombinedOptimizeResult } from '@/lib/api';
+import { api, type CombinedResult, type CombinedOptimizeResult, type PotentialGridResult } from '@/lib/api';
 import {
   Field, SectionLabel, StatCard, CompBanner, ExpertItem, FundBtn,
   calcLayout, inputStyle, panelStyle, Th, TdMono,
 } from '@/components/ui/CalcShared';
+import { rectGridSegments } from '@/lib/gridSegments';
+import { PotentialHeatmap } from '@/components/ui/PotentialHeatmap';
 
 const CombinedScene3D = dynamic(() => import('@/components/ui/Topology3D').then(m => m.CombinedScene3D), { ssr: false });
 import { ExportBar } from '@/components/ui/ExportBar';
@@ -79,9 +81,26 @@ export function CombinedClient() {
   const [optimizeResult, setOptimizeResult] = useState<CombinedOptimizeResult | null>(null);
   const [showFund, setShowFund] = useState(false);
   const [view3d, setView3d] = useState(false);
+  const [showPotential, setShowPotential] = useState(false);
+  const [potentialResult, setPotentialResult] = useState<PotentialGridResult | null>(null);
+  const [potentialLoading, setPotentialLoading] = useState(false);
 
   const set = (k: keyof typeof DEFAULTS) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [k]: parseFloat(e.target.value) || 0 }));
+
+  async function computePotentialMap() {
+    if (!result) return;
+    setPotentialLoading(true);
+    try {
+      const segments = rectGridSegments(form.largo, form.ancho, form.nConductoresL, form.nConductoresW);
+      const r = await api.grid.potentialMap({
+        segments, current: form.iFalla, rho: result.rhoUsado ?? form.rho,
+        depth: form.profundidad, gpr: result.gpr,
+      });
+      setPotentialResult(r);
+    } catch { /* silent — el mapa es un complemento visual, no bloquea el resultado principal */ }
+    finally { setPotentialLoading(false); }
+  }
 
   const area    = form.largo * form.ancho;
   const condLen = form.nConductoresL * form.ancho + form.nConductoresW * form.largo;
@@ -90,7 +109,7 @@ export function CombinedClient() {
   function rodRadiusOf() { return (form.rodDiamMm / 1000) / 2; }
 
   async function calculate() {
-    setLoading(true); setError(''); setOptimizeResult(null);
+    setLoading(true); setError(''); setOptimizeResult(null); setPotentialResult(null);
     try {
       const res = await api.grid.combined({
         rho: form.rho, area, Ltotal, depth: form.profundidad,
@@ -180,7 +199,7 @@ export function CombinedClient() {
 
         <div style={panelStyle}>
           <SectionLabel>Sistema eléctrico</SectionLabel>
-          <SoilRhoField value={form.rho} onChange={v => setForm(f => ({ ...f, rho: v }))} />
+          <SoilRhoField value={form.rho} onChange={v => setForm(f => ({ ...f, rho: v }))} depth={Math.max(form.profundidad, form.rodLength)} />
           <FaultCurrentField onSync={v => setForm(f => ({ ...f, iFalla: v }))} />
           <Field label="Tiempo de despeje (s)"><input style={inputStyle} type="number" step="0.1" value={form.tFalla} onChange={set('tFalla')} /></Field>
         </div>
@@ -201,15 +220,33 @@ export function CombinedClient() {
         <div style={panelStyle}>
           <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
             {([['2D', false], ['3D', true]] as const).map(([label, is3d]) => (
-              <button key={label} onClick={() => setView3d(is3d)} onMouseEnter={() => { if (is3d) import('@/components/ui/Topology3D'); }} style={{
+              <button key={label} onClick={() => { setView3d(is3d); setShowPotential(false); }} onMouseEnter={() => { if (is3d) import('@/components/ui/Topology3D'); }} style={{
                 flex: 1, padding: '5px 4px', borderRadius: 3, cursor: 'pointer', fontSize: 9.5, fontWeight: 700,
-                background: view3d === is3d ? 'var(--copper-soft)' : 'var(--bg)',
-                border: `1px solid ${view3d === is3d ? 'var(--copper)' : 'var(--line)'}`,
-                color: view3d === is3d ? 'var(--copper)' : 'var(--dim)',
+                background: !showPotential && view3d === is3d ? 'var(--copper-soft)' : 'var(--bg)',
+                border: `1px solid ${!showPotential && view3d === is3d ? 'var(--copper)' : 'var(--line)'}`,
+                color: !showPotential && view3d === is3d ? 'var(--copper)' : 'var(--dim)',
               }}>{label}</button>
             ))}
+            <button
+              onClick={() => { setShowPotential(true); if (!potentialResult) computePotentialMap(); }}
+              disabled={!result}
+              title={!result ? 'Calcula el sistema primero' : undefined}
+              style={{
+                flex: 1, padding: '5px 4px', borderRadius: 3, cursor: result ? 'pointer' : 'not-allowed', fontSize: 9.5, fontWeight: 700,
+                background: showPotential ? 'var(--copper-soft)' : 'var(--bg)',
+                border: `1px solid ${showPotential ? 'var(--copper)' : 'var(--line)'}`,
+                color: showPotential ? 'var(--copper)' : 'var(--dim)', opacity: result ? 1 : 0.5,
+              }}>🌡 Potencial</button>
           </div>
-          {view3d ? (
+          {showPotential ? (
+            potentialLoading ? (
+              <div style={{ padding: 30, textAlign: 'center', fontSize: 10, color: 'var(--faint)' }}>Calculando mapa de potencial…</div>
+            ) : potentialResult ? (
+              <PotentialHeatmap result={potentialResult} largo={form.largo} ancho={form.ancho} />
+            ) : (
+              <div style={{ padding: 30, textAlign: 'center', fontSize: 10, color: 'var(--faint)' }}>Calcula el sistema para ver el mapa de potencial.</div>
+            )
+          ) : view3d ? (
             <CombinedScene3D
               largo={form.largo} ancho={form.ancho} nL={form.nConductoresL} nW={form.nConductoresW}
               profundidad={form.profundidad} nRods={form.nRods} rodLength={form.rodLength}

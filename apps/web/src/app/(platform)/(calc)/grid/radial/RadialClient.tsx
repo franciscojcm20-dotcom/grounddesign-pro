@@ -131,7 +131,7 @@ export function RadialClient() {
         <div style={panelStyle}>
           <SectionLabel>Conductor radial</SectionLabel>
           <NormativeProfileSelector />
-          <SoilRhoField value={form.rho} onChange={v => setForm(f => ({ ...f, rho: v }))} />
+          <SoilRhoField value={form.rho} onChange={v => setForm(f => ({ ...f, rho: v }))} depth={form.h} />
           <Field label="Longitud de cada radial L (m)">
             <input style={inputStyle} type="number" value={form.L} step="5" onChange={set('L')} />
           </Field>
