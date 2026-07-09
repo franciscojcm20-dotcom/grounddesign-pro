@@ -9,6 +9,7 @@ import {
 import { ChartRho } from '@/components/ui/ChartRho';
 import { SoundingComparisonChart } from '@/components/ui/Charts';
 import { useSoilModel } from '@/context/SoilModelContext';
+import { parseWennerReadings, parseSchlumbergerReadings } from '@/lib/parseFieldReadings';
 
 /** Diagrama genérico de disposición de electrodos Wenner: C1-P1-P2-C2 equidistantes (a). Independiente del instrumento/telurómetro usado. */
 function WennerLayoutDiagram() {
@@ -99,6 +100,33 @@ const DEFAULT_WENNER = [
 type SchlumRow  = { L: string; l: string; r: string };
 type WennerRow  = { a: string; r: string };
 
+/** Panel para pegar/importar lecturas de campo (CSV/TSV/espacios) — reemplaza las filas del método al confirmar. */
+function ImportPanel({ format, value, onChange, onImport, info }: {
+  format: 'a,R' | 'L,l,R'; value: string; onChange: (v: string) => void; onImport: () => void; info: string | null;
+}) {
+  return (
+    <div style={{ ...panelStyle, padding: 10, marginBottom: 10 }}>
+      <div style={{ fontSize: 9, color: 'var(--faint)', marginBottom: 6, lineHeight: 1.5 }}>
+        Pega lecturas exportadas de tu teluómetro — una por línea, formato <strong style={{ color: 'var(--dim)' }}>{format}</strong> (CSV, TSV o separado por espacios; encabezados se descartan automáticamente).
+      </div>
+      <textarea
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        rows={5}
+        placeholder={format === 'a,R' ? '1,196.99\n2,101.37\n4,53.18' : '1,0.5,525.30\n1.5,0.5,199.91'}
+        style={{ ...inputStyle, width: '100%', fontFamily: 'var(--font-mono)', resize: 'vertical', marginBottom: 6 }}
+      />
+      <button onClick={onImport} disabled={!value.trim()} style={{
+        width: '100%', background: 'var(--copper)', border: 'none', color: '#fff', fontWeight: 700,
+        fontSize: 10, padding: 7, borderRadius: 3, cursor: 'pointer', opacity: value.trim() ? 1 : 0.5,
+      }}>
+        Importar y reemplazar lecturas
+      </button>
+      {info && <div style={{ fontSize: 9, color: info.startsWith('✓') ? 'var(--safe)' : 'var(--danger)', marginTop: 6, lineHeight: 1.4 }}>{info}</div>}
+    </div>
+  );
+}
+
 export function FieldMeasurementsClient() {
   const soilModel = useSoilModel();
 
@@ -107,6 +135,9 @@ export function FieldMeasurementsClient() {
   const [schlumRows, setSchlumRows] = useState<SchlumRow[]>(DEFAULT_SCHLUM.map(v => ({ L: String(v.L), l: String(v.l), r: String(v.r) })));
   const [wennerRows, setWennerRows] = useState<WennerRow[]>(DEFAULT_WENNER.map(v => ({ a: String(v.a), r: String(v.r) })));
   const [loadedFromContext, setLoadedFromContext] = useState(false);
+  const [importOpen, setImportOpen] = useState<'schlum' | 'wenner' | null>(null);
+  const [importText, setImportText] = useState('');
+  const [importInfo, setImportInfo] = useState<string | null>(null);
 
   const [schlumResult, setSchlumResult] = useState<SchlumbergerResult | null>(null);
   const [wennerResult, setWennerResult] = useState<WennerResult | null>(null);
@@ -137,6 +168,22 @@ export function FieldMeasurementsClient() {
   }
   function updateWenner(i: number, field: 'a' | 'r', val: string) {
     setWennerRows(prev => prev.map((row, idx) => idx === i ? { ...row, [field]: val } : row));
+  }
+
+  /** Reemplaza las filas del método activo por las lecturas pegadas (CSV/TSV/espacios) — no depende de ningún formato propietario de teluómetro. */
+  function applyImport() {
+    if (importOpen === 'wenner') {
+      const { rows, skipped } = parseWennerReadings(importText);
+      if (rows.length === 0) { setImportInfo('No se encontraron lecturas válidas (formato esperado: a,R por línea).'); return; }
+      setWennerRows(rows.map(r => ({ a: String(r.a), r: String(r.r) })));
+      setImportInfo(`✓ ${rows.length} lectura(s) importada(s)${skipped > 0 ? ` — ${skipped} línea(s) descartada(s) (encabezado o formato inválido)` : ''}.`);
+    } else if (importOpen === 'schlum') {
+      const { rows, skipped } = parseSchlumbergerReadings(importText);
+      if (rows.length === 0) { setImportInfo('No se encontraron lecturas válidas (formato esperado: L,l,R por línea).'); return; }
+      setSchlumRows(rows.map(r => ({ L: String(r.L), l: String(r.l), r: String(r.r) })));
+      setImportInfo(`✓ ${rows.length} lectura(s) importada(s)${skipped > 0 ? ` — ${skipped} línea(s) descartada(s) (encabezado o formato inválido)` : ''}.`);
+    }
+    setImportText('');
   }
 
   async function calculate() {
@@ -210,6 +257,19 @@ export function FieldMeasurementsClient() {
             <div style={{ ...panelStyle, padding: '8px', marginBottom: 10 }}>
               <SchlumbergerLayoutDiagram />
             </div>
+            <button
+              onClick={() => { setImportOpen(o => o === 'schlum' ? null : 'schlum'); setImportText(''); setImportInfo(null); }}
+              style={{
+                width: '100%', background: importOpen === 'schlum' ? 'var(--copper-soft)' : 'var(--bg)',
+                border: `1px dashed ${importOpen === 'schlum' ? 'var(--copper)' : 'var(--line)'}`,
+                color: importOpen === 'schlum' ? 'var(--copper)' : 'var(--dim)',
+                fontSize: 9.5, padding: 7, borderRadius: 3, cursor: 'pointer', marginBottom: 8,
+              }}>
+              📋 {importOpen === 'schlum' ? 'Cancelar importación' : 'Pegar/importar lecturas'}
+            </button>
+            {importOpen === 'schlum' && (
+              <ImportPanel format="L,l,R" value={importText} onChange={setImportText} onImport={applyImport} info={importInfo} />
+            )}
             {maxLlRatio > 5 && (
               <div style={{
                 fontSize: 8.5, color: 'var(--warn)', background: 'var(--warn-soft)', border: '1px solid var(--warn)',
@@ -255,6 +315,19 @@ export function FieldMeasurementsClient() {
             <div style={{ ...panelStyle, padding: '8px', marginBottom: 10 }}>
               <WennerLayoutDiagram />
             </div>
+            <button
+              onClick={() => { setImportOpen(o => o === 'wenner' ? null : 'wenner'); setImportText(''); setImportInfo(null); }}
+              style={{
+                width: '100%', background: importOpen === 'wenner' ? 'var(--panel3)' : 'var(--bg)',
+                border: `1px dashed ${importOpen === 'wenner' ? 'var(--blue)' : 'var(--line)'}`,
+                color: importOpen === 'wenner' ? 'var(--blue)' : 'var(--dim)',
+                fontSize: 9.5, padding: 7, borderRadius: 3, cursor: 'pointer', marginBottom: 8,
+              }}>
+              📋 {importOpen === 'wenner' ? 'Cancelar importación' : 'Pegar/importar lecturas'}
+            </button>
+            {importOpen === 'wenner' && (
+              <ImportPanel format="a,R" value={importText} onChange={setImportText} onImport={applyImport} info={importInfo} />
+            )}
             <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 8 }}>
               <thead><tr><Th>a (m)</Th><Th>R (Ω)</Th><Th></Th></tr></thead>
               <tbody>
