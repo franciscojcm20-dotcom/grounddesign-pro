@@ -328,6 +328,49 @@ function combinedSection(inputs: Record<string, unknown>, outputs: Record<string
 }
 
 
+function freeformSection(inputs: Record<string, unknown>, outputs: Record<string, unknown>): ReportSection {
+  const Rg = Number(outputs['Rg']);
+  const vertices = (inputs['vertices'] as { x: number; y: number }[] | undefined) ?? [];
+  const rods = (inputs['rods'] as { x: number; y: number }[] | undefined) ?? [];
+  const rg1 = Rg <= 1, rg5 = Rg <= 5;
+  const momRg = outputs['momRg'] as number | undefined;
+  const momTruncated = Boolean(outputs['momTruncated']);
+
+  const results = [
+    { label: 'Rg (Sverak, polígono)', value: Rg.toFixed(3), unit: 'Ω', highlight: true },
+    { label: 'Área del polígono', value: Number(inputs['area'] ?? outputs['area']).toFixed(1), unit: 'm²' },
+    { label: 'Perímetro', value: Number(inputs['perimeter'] ?? outputs['perimeter']).toFixed(1), unit: 'm' },
+    { label: 'GPR', value: (Number(outputs['gpr']) / 1000).toFixed(2), unit: 'kV' },
+  ];
+  if (momRg !== undefined) {
+    results.push({ label: 'Rg (Método de Momentos, perímetro)', value: momRg.toFixed(3), unit: 'Ω', highlight: true });
+  }
+
+  return {
+    title: 'Malla de geometría libre — Sverak generalizado a polígono arbitrario',
+    norm: 'Sverak (área/perímetro de polígono) — IEEE Std 80-2013 Cl. 14.2',
+    inputs: [
+      { label: 'Vértices del polígono', value: vertices.length, unit: '' },
+      { label: 'Picas', value: rods.length, unit: '' },
+      { label: 'Longitud de pica', value: Number(inputs['rodLength']).toFixed(1), unit: 'm' },
+      { label: 'Profundidad de enterramiento', value: Number(inputs['depth'] ?? inputs['profundidad']).toFixed(2), unit: 'm' },
+      { label: 'ρ suelo (aplicada)', value: Number(inputs['rho']).toFixed(1), unit: 'Ω·m' },
+    ],
+    results,
+    pass: rg1 || rg5,
+    passLabel: (rg1 || rg5) ? `Rg = ${Rg.toFixed(3)} Ω — CUMPLE` : `Rg = ${Rg.toFixed(3)} Ω — NO CUMPLE`,
+    observations: [
+      'Fenómeno físico: idéntico al de una malla rectangular (Sverak) — la resistencia depende del área encerrada y la longitud total de conductor, sin exigir una huella rectangular; se calcula el área y el perímetro reales del polígono dibujado (fórmula del shoelace) en vez de largo×ancho.',
+      'Fórmula: Rg = ρ·[1/Lt + (1/√(20A))·(1 + 1/(1+h√(20/A)))], con A y P calculados sobre los vértices del polígono.',
+      'Hipótesis del modelo: sigue siendo la aproximación empírica de Sverak, validada para geometrías cuasi-rectangulares; en huellas muy irregulares o con concavidades pronunciadas, la aproximación pierde precisión.',
+      ...(momRg !== undefined ? [
+        `Verificación cruzada — Método de Momentos: se resolvió además el sistema real de corrientes por segmento del perímetro (función de Green de dos capas, Sunde), obteniendo Rg = ${momRg.toFixed(3)} Ω. A diferencia de Sverak (fórmula empírica basada en área/perímetro), el MoM resuelve directamente el acoplamiento mutuo entre segmentos — es más riguroso para geometría irregular, pero en este cálculo no incluye las picas (solo el perímetro).${momTruncated ? ' La geometría se recortó al límite de segmentos del solver.' : ''}`,
+      ] : []),
+      INSPECTION_CHAMBER_RECOMMENDATION,
+    ],
+  };
+}
+
 function lightningSection(inputs: Record<string, unknown>, outputs: Record<string, unknown>): ReportSection {
   const pReq = Boolean(outputs['protectionRequired']);
   return {
@@ -657,6 +700,7 @@ const ADAPTERS: Record<string, (i: Record<string, unknown>, o: Record<string, un
   radial:       radialSection,
   ring:         ringSection,
   combined:     combinedSection,
+  freeform:     freeformSection,
   conductor:    conductorSection,
   voltages:     voltagesSection,
   lightning:    lightningSection,

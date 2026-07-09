@@ -15,7 +15,7 @@ import { useNormativeProfile } from '@/context/NormativeProfileContext';
 import { SectionLabel, StatCard, CompBanner, panelStyle, calcLayout, Field, inputStyle, Th, TdMono } from '@/components/ui/CalcShared';
 import { API_BASE as BASE } from '@/lib/apiBase';
 
-const GEOMETRY_MODULES = new Set(['grid', 'rod', 'strip', 'radial', 'ring', 'combined']);
+const GEOMETRY_MODULES = new Set(['grid', 'rod', 'strip', 'radial', 'ring', 'combined', 'freeform']);
 
 /** Deriva una cubicación inicial (editable) a partir del resultado guardado de un módulo de malla. */
 function deriveCubicacion(module: string, inputs: Record<string, unknown>, outputs: Record<string, unknown>): CubicacionInput {
@@ -75,6 +75,7 @@ const MODULE_META: Record<string, { label: string; icon: string; group: string }
   radial:       { label: 'Sistema radial / estrella',    icon: '✦', group: 'Malla' },
   ring:         { label: 'Anillo perimetral',            icon: '◯', group: 'Malla' },
   combined:     { label: 'Malla + picas combinada (Schwarz)', icon: '⊞', group: 'Malla' },
+  freeform:     { label: 'Malla de geometría libre (polígono)', icon: '⬠', group: 'Malla' },
   gel:          { label: 'Aditivo gel químico',          icon: '🧪', group: 'Malla' },
   conductor:    { label: 'Conductor IEEE 80',            icon: '〰', group: 'Sistema' },
   voltages:     { label: 'Tensiones paso/contacto',      icon: '⚠', group: 'Sistema' },
@@ -97,7 +98,7 @@ const MODULE_ORDER: Record<string, number> = {
   field: 10, schlumberger: 11, wenner: 12, nlayer: 13, soilModel: 14,
   faultAnalysis: 20,
   gel: 29,
-  grid: 30, rod: 31, strip: 32, radial: 33, ring: 34, combined: 35,
+  grid: 30, rod: 31, strip: 32, radial: 33, ring: 34, combined: 35, freeform: 36,
   conductor: 40,
   voltages: 41,
   gpr: 42,
@@ -254,7 +255,9 @@ export function ReportClient() {
   }, [project?.id]);
 
   const geometryResults = results.filter(r => GEOMETRY_MODULES.has(r.module));
-  const dxfResults = results.filter(r => GEOMETRY_MODULES.has(r.module));
+  // 'freeform' no tiene generador DXF todavía (geometría de polígono arbitrario) —
+  // se excluye de la lista exportable en vez de fallar silenciosamente en exportDxf().
+  const dxfResults = results.filter(r => GEOMETRY_MODULES.has(r.module) && r.module !== 'freeform');
   const chosenValid = Boolean(chosenId) && geometryResults.some(r => r.id === chosenId);
   const needsChoice = geometryResults.length > 1 && !chosenValid;
   const suggestedId = geometryResults.length > 1 ? suggestBestId(geometryResults) : null;

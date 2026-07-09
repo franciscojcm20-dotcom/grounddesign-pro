@@ -19,6 +19,7 @@ const MODULE_NAMES_ES: Record<string, string> = {
   conductor: 'Conductor IEEE 80', voltages: 'Tensiones paso/contacto',
   gel: 'Gel químico', gpr: 'Potencial de tierra GPR',
   lightning: 'Protección contra Rayos',
+  freeform: 'Malla de geometría libre',
 };
 const MODULE_NAMES_EN: Record<string, string> = {
   wenner: 'Wenner Resistivity', schlumberger: 'Schlumberger Resistivity',
@@ -26,6 +27,7 @@ const MODULE_NAMES_EN: Record<string, string> = {
   conductor: 'Conductor IEEE 80', voltages: 'Step / Touch Voltages',
   gel: 'Chemical Ground Gel', gpr: 'Ground Potential Rise',
   lightning: 'Lightning Protection',
+  freeform: 'Free-form Grid',
 };
 
 export function ExportBar({ module, inputs, outputs, norm, projectName }: ExportBarProps) {

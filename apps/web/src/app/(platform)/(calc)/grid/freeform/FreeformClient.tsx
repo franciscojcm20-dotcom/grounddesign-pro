@@ -8,6 +8,7 @@ import {
 import { polygonSegments } from '@/lib/gridSegments';
 import { PotentialHeatmap } from '@/components/ui/PotentialHeatmap';
 import { SoilRhoField } from '@/components/ui/SoilRhoField';
+import { ExportBar } from '@/components/ui/ExportBar';
 import { FaultCurrentField } from '@/components/ui/FaultCurrentField';
 import { useFaultAnalysis } from '@/context/FaultAnalysisContext';
 import { useSoilModel } from '@/context/SoilModelContext';
@@ -180,6 +181,19 @@ export function FreeformClient() {
   return (
     <div style={calcLayout}>
       <aside style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <ExportBar
+          module="freeform"
+          inputs={{
+            vertices: form.vertices, rods: form.rods, rodLength: form.rodLength,
+            depth: form.profundidad, rho: form.rho, iFalla: form.iFalla,
+          }}
+          outputs={{
+            ...(result ?? {}),
+            ...(momResult ? { momRg: momResult.Rg, momGpr: momResult.gpr, momTruncated: momResult.truncated } : {}),
+          } as unknown as Record<string, unknown>}
+          norm="Sverak (polígono arbitrario) — IEEE Std 80-2013 Cl. 14.2"
+        />
+
         <div>
           <h2 style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Malla de geometría libre</h2>
           <p style={{ fontSize: 10, color: 'var(--faint)', lineHeight: 1.5 }}>
