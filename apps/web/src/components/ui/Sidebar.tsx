@@ -34,6 +34,7 @@ export function Sidebar() {
         // Malla + picas combinada (Schwarz) al final — "(Schwarz)" en el nombre
         // (ver moduleGridCombined en I18nContext) para identificarla fácilmente.
         { href: '/grid/combined',   label: t('moduleGridCombined') },
+        { href: '/grid/freeform',   label: t('moduleGridFreeform') },
       ],
     },
     {

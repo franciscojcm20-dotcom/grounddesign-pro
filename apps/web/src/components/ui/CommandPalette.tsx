@@ -18,6 +18,7 @@ const COMMANDS = [
   { id: 'grid-radial',  label: 'Sistema radial / estrella ★',  icon: '✦', href: '/grid/radial',   group: 'Módulos' },
   { id: 'grid-ring',    label: 'Anillo perimetral (Sunde)',     icon: '◯', href: '/grid/ring',     group: 'Módulos' },
   { id: 'grid-combined',label: 'Malla + picas combinada (Schwarz)', icon: '⊞', href: '/grid/combined', group: 'Módulos' },
+  { id: 'grid-freeform',label: 'Malla de geometría libre (polígono)', icon: '⬠', href: '/grid/freeform', group: 'Módulos' },
   { id: 'voltages',     label: 'Tensiones paso/contacto',   icon: '⚠', href: '/voltages',           group: 'Módulos' },
   { id: 'gpr',          label: 'GPR — Potencial de tierra', icon: '⚡', href: '/gpr',               group: 'Módulos' },
   { id: 'report',       label: 'Entregables del Proyecto', icon: '📋', href: '/report',            group: 'Módulos' },

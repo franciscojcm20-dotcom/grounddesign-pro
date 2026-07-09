@@ -40,6 +40,9 @@ import {
   effectiveResistivityForDepth,
   potentialAtPoint,
   computePotentialGrid,
+  polygonArea,
+  polygonPerimeter,
+  computeFreeformGrid,
 } from '../src/index.ts';
 
 // ─── Tolerancia para comparaciones de punto flotante ─────────────────────────
@@ -846,5 +849,70 @@ describe('computePotentialGrid — mapa de potencial de una malla rectangular', 
     const r = computePotentialGrid({ ...input, targetSpacing: 0.1, maxPointsPerSide: 15 });
     // resolution² puntos como máximo si se satura el límite
     assert.ok(r.points.length <= 15 * 15);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GEOMETRÍA DE MALLA SEMI-LIBRE — polígono + picas en posiciones arbitrarias
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('polygonArea / polygonPerimeter — fórmula del shoelace', () => {
+  it('rectángulo 40×30: área y perímetro exactos', () => {
+    const verts = [{ x: -20, y: -15 }, { x: 20, y: -15 }, { x: 20, y: 15 }, { x: -20, y: 15 }];
+    assertClose(polygonArea(verts), 40 * 30, 1e-9);
+    assertClose(polygonPerimeter(verts), 2 * (40 + 30), 1e-9);
+  });
+
+  it('triángulo rectángulo de catetos 3 y 4: área = 6, perímetro = 3+4+5', () => {
+    const verts = [{ x: 0, y: 0 }, { x: 4, y: 0 }, { x: 0, y: 3 }];
+    assertClose(polygonArea(verts), 6, 1e-9);
+    assertClose(polygonPerimeter(verts), 12, 1e-9);
+  });
+
+  it('el orden de los vértices (horario vs antihorario) no cambia el área (valor absoluto)', () => {
+    const cw = [{ x: 0, y: 0 }, { x: 0, y: 10 }, { x: 10, y: 10 }, { x: 10, y: 0 }];
+    const ccw = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }];
+    assertClose(polygonArea(cw), polygonArea(ccw), 1e-9);
+  });
+
+  it('menos de 3 vértices: área 0', () => {
+    assert.strictEqual(polygonArea([{ x: 0, y: 0 }, { x: 1, y: 1 }]), 0);
+  });
+});
+
+describe('computeFreeformGrid — equivalencia con computeMalla en el caso rectangular mínimo', () => {
+  it('rectángulo sin picas produce el mismo Rg que computeMalla con nConductoresL=nConductoresW=2', () => {
+    const largo = 40, ancho = 30, rho = 100, depth = 0.6, iFalla = 8500;
+    const verts = [
+      { x: -largo / 2, y: -ancho / 2 }, { x: largo / 2, y: -ancho / 2 },
+      { x: largo / 2, y: ancho / 2 }, { x: -largo / 2, y: ancho / 2 },
+    ];
+    const freeform = computeFreeformGrid({ vertices: verts, rods: [], rodLength: 0, rho, depth, iFalla });
+    const malla = computeMalla({
+      largo, ancho, profundidad: depth, nConductoresL: 2, nConductoresW: 2,
+      nVarillas: 0, longVarilla: 0, rho, iFalla,
+    });
+    assertClose(freeform.Rg, malla.Rg, 1e-9, 'Rg debe coincidir exactamente');
+    assertClose(freeform.area, malla.area, 1e-9);
+  });
+
+  it('agregar picas reduce Ltotal→Rg (más conductor total, menor resistencia)', () => {
+    const verts = [{ x: -10, y: -10 }, { x: 10, y: -10 }, { x: 10, y: 10 }, { x: -10, y: 10 }];
+    const sinPicas = computeFreeformGrid({ vertices: verts, rods: [], rodLength: 3, rho: 100, depth: 0.5, iFalla: 5000 });
+    const conPicas = computeFreeformGrid({
+      vertices: verts, rods: [{ x: 0, y: 0 }, { x: 5, y: 5 }, { x: -5, y: -5 }],
+      rodLength: 3, rho: 100, depth: 0.5, iFalla: 5000,
+    });
+    assert.ok(conPicas.Ltotal > sinPicas.Ltotal);
+    assert.ok(conPicas.Rg < sinPicas.Rg, 'más picas debe reducir Rg');
+  });
+
+  it('un pentágono regular produce área/perímetro positivos y coherentes con Sverak', () => {
+    const R = 15;
+    const verts = Array.from({ length: 5 }, (_, i) => {
+      const a = (i / 5) * 2 * Math.PI;
+      return { x: R * Math.cos(a), y: R * Math.sin(a) };
+    });
+    const r = computeFreeformGrid({ vertices: verts, rods: [], rodLength: 0, rho: 100, depth: 0.6, iFalla: 5000 });
+    assert.ok(r.area > 0 && r.perimeter > 0 && r.Rg > 0);
   });
 });

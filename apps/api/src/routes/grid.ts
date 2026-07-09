@@ -16,6 +16,7 @@ import {
   optimizeRingResistance,
   optimizeCombinedResistance,
   computePotentialGrid,
+  computeFreeformGrid,
   type GelInput,
 } from '@gdp/engines-math';
 import { getActionOrder, recordOutcomes, stepsToOutcomes } from '../learning/bandit.ts';
@@ -77,6 +78,12 @@ const potentialMapBodySchema = z.object({
   segments: z.array(segmentSchema).min(1).max(2000),
   current: pos(), rho: pos(), depth: nonNeg(), gpr: pos(),
   margin: pos().optional(), targetSpacing: pos().optional(), maxPointsPerSide: intMin1().optional(),
+});
+
+const freeformBodySchema = z.object({
+  vertices: z.array(point2DSchema).min(3).max(200),
+  rods: z.array(point2DSchema).max(200),
+  rodLength: nonNeg(), rho: pos(), depth: pos(), iFalla: pos(),
 });
 
 export async function routesGrid(app: FastifyInstance): Promise<void> {
@@ -261,5 +268,13 @@ export async function routesGrid(app: FastifyInstance): Promise<void> {
       ...(maxPointsPerSide !== undefined ? { maxPointsPerSide } : {}),
     });
     return { ...result, norm: 'Superposición de fuentes puntuales (método de imágenes) — motor propio' };
+  });
+
+  // POST /api/v1/grid/freeform — geometría de malla semi-libre (polígono + picas arbitrarias)
+  app.post('/freeform', async (req, reply) => {
+    const body = parseBody(freeformBodySchema, req, reply);
+    if (!body) return;
+    const result = computeFreeformGrid(body);
+    return { ...result, norm: 'Sverak (área/perímetro de polígono arbitrario) — motor propio' };
   });
 }

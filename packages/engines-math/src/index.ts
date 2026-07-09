@@ -931,6 +931,77 @@ export function computePotentialGrid(input: PotentialGridInput): PotentialGridRe
   return { points, vMax, vMin, worstTouch, worstStep };
 }
 
+// ─── GEOMETRÍA DE MALLA SEMI-LIBRE — polígono + picas en posiciones arbitrarias ──
+//
+// Las 6 topologías anteriores (rectangular, picas, radial, anillo, combinada)
+// cubren la mayoría de los sitios, pero no un predio de forma irregular. Sverak
+// (`sverakGridResistance`, ya validado arriba) solo necesita el área A y la
+// longitud total de conductor Lt — no exige que la huella sea un rectángulo.
+// Esta sección generaliza la entrada geométrica a un polígono arbitrario (área
+// y perímetro por la fórmula del shoelace) con picas en cualquier posición,
+// sin tocar la física ya validada. No reemplaza un solver de elementos finitos
+// para geometrías muy irregulares — sigue siendo la misma aproximación empírica
+// de Sverak, ahora alimentada con área/perímetro reales en vez de largo×ancho.
+
+/** Área de un polígono simple (no auto-intersectante) por la fórmula del shoelace (Gauss). */
+export function polygonArea(vertices: Point2D[]): number {
+  if (vertices.length < 3) return 0;
+  let sum = 0;
+  const n = vertices.length;
+  for (let i = 0; i < n; i++) {
+    const a = vertices[i]!;
+    const b = vertices[(i + 1) % n]!;
+    sum += a.x * b.y - b.x * a.y;
+  }
+  return Math.abs(sum) / 2;
+}
+
+/** Perímetro de un polígono cerrado (suma de la longitud de cada lado). */
+export function polygonPerimeter(vertices: Point2D[]): number {
+  if (vertices.length < 2) return 0;
+  let perim = 0;
+  const n = vertices.length;
+  for (let i = 0; i < n; i++) {
+    const a = vertices[i]!;
+    const b = vertices[(i + 1) % n]!;
+    perim += Math.hypot(b.x - a.x, b.y - a.y);
+  }
+  return perim;
+}
+
+export interface FreeformGridInput {
+  /** Vértices del polígono perimetral de la malla, en orden (m). Mínimo 3. */
+  vertices: Point2D[];
+  /** Posiciones (x,y) de las picas adicionales, dentro o en el borde del polígono. */
+  rods: Point2D[];
+  rodLength: number; // m
+  rho: number;        // Ω·m
+  depth: number;      // m — profundidad de enterramiento del conductor perimetral
+  iFalla: number;     // A
+}
+
+export interface FreeformGridResult {
+  area: number; perimeter: number; Ltotal: number;
+  Rg: number; term1: number; term2: number; gpr: number;
+}
+
+/**
+ * Resistencia de una malla de huella arbitraria (polígono) + picas en
+ * posiciones libres — misma fórmula de Sverak que `computeMalla`, alimentada
+ * con área/perímetro del polígono en vez de largo×ancho. Para un rectángulo de
+ * 4 vértices sin picas, produce exactamente el mismo Rg que `computeMalla` con
+ * nConductoresL=nConductoresW=2 (el caso mínimo, solo el perímetro) — la
+ * generalización no altera el resultado ya validado en ese caso particular.
+ */
+export function computeFreeformGrid(input: FreeformGridInput): FreeformGridResult {
+  const area = polygonArea(input.vertices);
+  const perimeter = polygonPerimeter(input.vertices);
+  const condRods = input.rods.length * input.rodLength;
+  const Ltotal = perimeter + condRods;
+  const { Rg, term1, term2 } = sverakGridResistance({ rho: input.rho, area, Ltotal, depth: input.depth });
+  return { area, perimeter, Ltotal, Rg, term1, term2, gpr: Rg * input.iFalla };
+}
+
 // ─── CONDUCTOR — ONDERDONK (IEEE Std 80-2013, Cl. 11.3) ──────────────────────
 
 export const CONDUCTOR_TABLE: readonly ConductorEntry[] = [

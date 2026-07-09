@@ -1,5 +1,5 @@
 'use client';
-import type { PotentialGridResult } from '@/lib/api';
+import type { PotentialGridResult, Point2D } from '@/lib/api';
 
 const W = 320, H = 320, PAD = 24;
 
@@ -19,8 +19,13 @@ function colorForRatio(ratio: number): string {
  * — muestra cómo se distribuye el riesgo en toda el área, no solo en el peor
  * punto. Ver computePotentialGrid en @gdp/engines-math para el fundamento.
  */
-export function PotentialHeatmap({ result, largo, ancho, admissibleTouch }: {
-  result: PotentialGridResult; largo: number; ancho: number; admissibleTouch?: number;
+export function PotentialHeatmap({ result, largo, ancho, outline, admissibleTouch }: {
+  result: PotentialGridResult;
+  /** Contorno rectangular (mallas paramétricas) — omitir si se entrega `outline`. */
+  largo?: number; ancho?: number;
+  /** Contorno de polígono arbitrario (malla de geometría libre) — tiene prioridad sobre largo/ancho. */
+  outline?: Point2D[];
+  admissibleTouch?: number;
 }) {
   if (result.points.length === 0) return null;
   const xs = result.points.map(p => p.x);
@@ -48,11 +53,18 @@ export function PotentialHeatmap({ result, largo, ancho, admissibleTouch }: {
               fill={colorForRatio(ratio)} opacity={0.85} />
           );
         })}
-        <rect
-          x={ox - (largo / 2) * scale} y={oy - (ancho / 2) * scale}
-          width={largo * scale} height={ancho * scale}
-          fill="none" stroke="var(--copper)" strokeWidth="1.5" opacity={0.95}
-        />
+        {outline && outline.length >= 3 ? (
+          <path
+            d={outline.map((v, i) => `${i === 0 ? 'M' : 'L'} ${ox + v.x * scale} ${oy - v.y * scale}`).join(' ') + ' Z'}
+            fill="none" stroke="var(--copper)" strokeWidth="1.5" opacity={0.95}
+          />
+        ) : largo !== undefined && ancho !== undefined ? (
+          <rect
+            x={ox - (largo / 2) * scale} y={oy - (ancho / 2) * scale}
+            width={largo * scale} height={ancho * scale}
+            fill="none" stroke="var(--copper)" strokeWidth="1.5" opacity={0.95}
+          />
+        ) : null}
       </svg>
       <p style={{ fontSize: 8.5, color: 'var(--faint)', textAlign: 'center', marginTop: 6, lineHeight: 1.5 }}>
         {admissibleTouch !== undefined

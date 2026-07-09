@@ -43,6 +43,8 @@ Monorepo gestionado con pnpm workspaces.
 - Sistema radial / estrella — Laurent-Niemann
 - Anillo perimetral — Sunde
 - Malla + picas combinada (Schwarz) — IEEE Std 80-2013 §14.5, el sistema más utilizado en la práctica (malla rectangular reforzada con electrodos verticales); internamente combina Rg (Sverak) y Rr (Dwight/Sunde)
+- Malla de geometría libre (polígono + picas en posiciones arbitrarias) — misma ecuación de Sverak generalizada a área/perímetro de un polígono real, para predios de forma irregular donde las topologías paramétricas no calzan
+- Mapa de potencial de superficie (mallas rectangular y combinada) — superposición de fuentes puntuales de corriente para visualizar la tensión de contacto local en toda el área, no solo en el punto crítico analítico
 - Aditivo químico gel (mejoramiento de resistividad) — Dwight/Sunde, modelo de cilindros concéntricos
 
 **Verificación**

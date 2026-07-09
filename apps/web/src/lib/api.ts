@@ -120,6 +120,11 @@ export interface PotentialGridResult {
   vMax: number; vMin: number; worstTouch: number; worstStep: number; norm: string;
 }
 
+export interface FreeformGridResult {
+  area: number; perimeter: number; Ltotal: number;
+  Rg: number; term1: number; term2: number; gpr: number; norm: string;
+}
+
 export interface RodOptimizeResult {
   achieved: boolean; steps: OptimizeStep[];
   suggested: { rho: number; L: number; radius: number; n: number; spacing: number; iFalla: number };
@@ -438,6 +443,9 @@ export const api = {
       segments: ConductorSegment[]; current: number; rho: number; depth: number; gpr: number;
       margin?: number; targetSpacing?: number; maxPointsPerSide?: number;
     }) => post<PotentialGridResult>('/api/v1/grid/potential-map', body),
+    freeform: (body: {
+      vertices: Point2D[]; rods: Point2D[]; rodLength: number; rho: number; depth: number; iFalla: number;
+    }) => post<FreeformGridResult>('/api/v1/grid/freeform', body),
   },
   voltages: {
     real: (body: {

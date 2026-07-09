@@ -28,6 +28,7 @@ export function ModulesSidebar() {
       // Malla + picas combinada (Schwarz) al final — "(Schwarz)" en el nombre
       // (ver moduleGridCombined en I18nContext) para identificarla fácilmente.
       { label: t('moduleGridCombined'),    href: '/grid/combined',     icon: '⊞' },
+      { label: t('moduleGridFreeform'),    href: '/grid/freeform',     icon: '⬠' },
     ]},
     { group: t('groupVerification'), items: [
       { label: t('moduleVoltages'), href: '/voltages', icon: '⚠' },

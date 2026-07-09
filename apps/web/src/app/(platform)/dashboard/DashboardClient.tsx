@@ -18,6 +18,7 @@ const MODULES = [
   { href: '/grid/radial',       icon: '✦', label: 'Sistema radial / estrella', norm: 'Laurent-Niemann (1952)' },
   { href: '/grid/ring',         icon: '◯', label: 'Anillo perimetral',         norm: 'Sunde (1949)' },
   { href: '/grid/combined',     icon: '⊞', label: 'Malla + picas combinada (Schwarz)', norm: 'Schwarz (1954)' },
+  { href: '/grid/freeform',     icon: '⬠', label: 'Malla de geometría libre',  norm: 'Sverak (polígono arbitrario)' },
   { href: '/voltages',          icon: '⚠',  label: 'Tensiones paso/contacto',   norm: 'IEEE 80-2013 · Cl. 16' },
   { href: '/gpr',               icon: '⏚', label: 'GPR — Potencial de tierra', norm: 'IEEE 80-2013 · Cl. 15' },
   { href: '/report',            icon: '📋', label: 'Entregables del Proyecto', norm: 'Vista consolidada' },
